@@ -1,0 +1,3 @@
+[submodule "supermarket_scene"]
+	path = supermarket_scene
+	url = https://github.com/2252031668/supermarket_scene.git
