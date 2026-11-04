@@ -167,7 +167,7 @@ class MujocoBridgeNode(Node):
             "max_angular_rps": 0.80,
             "object_id": "thesis_item_01",
             "initial_base_pose": [0.0, 0.0, 0.0],
-            "inactive_arm_park_positions": [0.0, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "inactive_arm_park_positions": [0.2, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0],
             "inactive_gripper_open_position": 0.04,
             "object_nominal_pose": [1.12, 0.0, 0.84, math.pi],
             "object_randomization_xy_m": [0.08, 0.18],

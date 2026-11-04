@@ -12,10 +12,10 @@ openflex_thesis_mujoco_bridge:
     max_angular_rps: 0.80
     object_id: thesis_item_01
     initial_base_pose: [0.0, 0.0, 0.0]
-    # Joint margin maximizer validated on 2026-11-04 against six real
-    # right-arm candidates and lift targets -0.15, 0.00 and +0.15 m.
+    # Joint margin maximizer validated on 2026-11-04 against ten real
+    # right-arm candidate lift solutions plus -0.15, 0.00 and +0.15 m.
     # Evidence: migration_records/2026-11-04/G3_LEFT_PARK_SEARCH.json
-    inactive_arm_park_positions: [0.0, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0]
+    inactive_arm_park_positions: [0.2, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0]
     inactive_gripper_open_position: 0.04
     # [x, y, z, yaw], object +x points from the shelf toward free space.
     object_nominal_pose: [1.12, 0.0, 0.84, 3.141592653589793]

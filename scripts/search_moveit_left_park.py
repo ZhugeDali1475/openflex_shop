@@ -140,7 +140,6 @@ class LeftParkSearch(Node):
             if not (
                 candidate.evaluated
                 and candidate.ik_valid
-                and candidate.collision_free
             ):
                 continue
             if float(candidate.total_score) < minimum_score:
@@ -380,13 +379,20 @@ def main() -> int:
                 args.q4_values,
             )
         ]
+        lift_values = sorted(
+            {
+                float(value)
+                for value in args.lift_values
+            }
+            | {float(candidate.lift_position) for candidate in candidates}
+        )
         feasible = list(left_spaces)
         coverage = {}
         contact_counts = Counter()
         started = time.monotonic()
         for candidate in candidates:
             node.apply_scene(candidate.base_pose, args.service_timeout_sec)
-            for lift_position in args.lift_values:
+            for lift_position in lift_values:
                 survivors = []
                 for left_positions in feasible:
                     valid, contacts = node.query(
@@ -435,7 +441,8 @@ def main() -> int:
             ),
             "group": args.group,
             "shelf_scene_file": args.shelf_scene_file,
-            "lift_values": args.lift_values,
+            "required_lift_values": args.lift_values,
+            "tested_lift_values": lift_values,
             "candidate_count": len(candidates),
             "candidates": [
                 {
@@ -443,6 +450,7 @@ def main() -> int:
                     "grasp_id": int(candidate.grasp_id),
                     "score": float(candidate.total_score),
                     "lift_position": float(candidate.lift_position),
+                    "input_collision_free": bool(candidate.collision_free),
                 }
                 for candidate in candidates
             ],

@@ -2,7 +2,7 @@
 
 日期：2026-11-04  
 阶段：P0 环境复现、P1 固定抓放基线  
-总体结论：G0-G3 已通过，下一道验收门是 G4 单次抓取与附着验证。
+总体结论：G0-G4 已通过，下一道验收门是 G5 运输姿态与附着保持。
 
 ## 1. 一句话状态
 
@@ -11,16 +11,15 @@
 ```text
 MuJoCo/ROS/MoveIt 环境可复现
 -> TC-WAM 生成并评价真实抓取候选
--> 左臂停姿在真实候选和三个升降高度下无碰撞
--> MoveIt IK 和短轨迹实际驱动 MuJoCo
+-> 左臂停姿在真实候选、实际 lift 和三个验收高度下无碰撞
+-> MoveIt 完成预抓取、抓取和夹爪闭合
+-> 独立 GraspStatus 验证物体附着
 ```
 
 尚未完成：
 
 ```text
-无碰撞抓取
--> 夹爪闭合与附着验证
--> 安全运输
+安全运输姿态
 -> 固定放置与放置验证
 -> 10 次重复和正式实验
 ```
@@ -63,28 +62,28 @@ group=right_arm_with_lift valid=True contacts=0
 选定停姿：
 
 ```text
-[0.0, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0]
+[0.2, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0]
 ```
 
 验证条件：
 
-- 6 个有效的真实右臂 TC-WAM 候选；
-- 升降高度 `-0.15/0/+0.15 m`；
+- 10 个右臂 IK 可行的真实 TC-WAM 候选；
+- 每个候选自身的 lift 解以及 `-0.15/0/+0.15 m`；
 - 机器人自身碰撞和仿真货架碰撞；
-- 1680 个左臂姿态中 718 个在全测试集上可行；
-- 最优姿态最小归一化关节余量约 0.942。
+- 1680 个左臂姿态中 560 个在全测试集上可行；
+- 最优姿态最小归一化关节余量约 0.936。
 
 重启后的实际状态：
 
 ```text
 left_arm_positions=[
-  0.001519,
-  -0.129203,
-  0.000268,
-  -0.000187,
-  0.000297,
-  -0.001735,
-  0.002317
+  0.216418,
+  -0.158572,
+  0.000857,
+  -0.000899,
+  0.000675,
+  0.006410,
+  0.013065
 ]
 group=right_arm_with_lift valid=True contacts=0
 ```
@@ -94,30 +93,54 @@ group=right_arm_with_lift valid=True contacts=0
 - [G3 验收记录](openflex_ws/migration_records/2026-11-04/G3_LEFT_PARK_ACCEPTANCE_CN.md)
 - [G3 机器可读结果](openflex_ws/migration_records/2026-11-04/G3_LEFT_PARK_SEARCH.json)
 
+### G4：固定底盘抓取与附着
+
+mission 完成预抓取、抓取和夹爪闭合：
+
+```text
+selected grasp: 100102
+MoveIt pregrasp trajectory: SUCCEEDED
+MoveIt grasp trajectory: SUCCEEDED
+simulated grasp attached thesis_item_01 to right TCP at distance 0.082 m
+```
+
+独立 `/thesis/grasp_status`：
+
+```text
+contact_detected=true
+gripper_closed=true
+object_retained=true
+transport_safe=true
+verified=true
+failure_code=0
+```
+
+证据：
+
+- [G4 抓取验收](openflex_ws/migration_records/2026-11-04/G4_GRASP_ACCEPTANCE_CN.md)
+
 ## 3. 当前代码变化
 
 - `scripts/search_moveit_left_park.py` 已从任意参考 IK 搜索改为真实 TC-WAM
   候选搜索；
 - 搜索时应用匹配候选底盘的货架碰撞体；
-- 同时验证三个升降高度；
+- 同时验证每个候选自身的 lift 解和三个验收升降高度；
+- G4 首次运行暴露问题后，将最终停姿修正为 `[0.2, -0.15, 0, 0, 0, 0, 0]`；
 - `mujoco.yaml` 和 MuJoCo bridge 默认参数已写入新左臂停姿；
 - `openflex_thesis_mujoco` 已重新构建并通过重启复验。
 
 ## 4. 仍存在的工程问题
 
-### 4.1 G4 抓取附着尚未通过
+### 4.1 G5 运输姿态失败
 
-下一步必须验证：
+抓取成功后，运输姿态规划失败：
 
 ```text
-contact_detected
-gripper_closed
-object_retained
-transport_safe
-verified
+openarmx_right_link7 <-> thesis_grasped_thesis_item_01
+Motion planning start tree could not be initialized
 ```
 
-不能用“动作返回 success”代替独立 `GraspStatus` 证据。
+独立 G4 验证已经通过，但附着物体作为刚体与 `right_link7` 的碰撞仍需修复。
 
 ### 4.2 MoveIt 退出不稳定
 
@@ -158,7 +181,7 @@ launch and YAML configuration
 
 准确表述：
 
-> CARE-Agent 决策内核和 MuJoCo 技能平台已验证到 G3，尚未完成 Agent ROS 闭环。
+> CARE-Agent 决策内核和 MuJoCo 技能平台已验证到 G4，尚未完成 Agent ROS 闭环。
 
 ## 6. 下一步验收顺序
 
@@ -168,8 +191,8 @@ launch and YAML configuration
 | G1 | 时钟、关节、里程计和 TF 正常 | 通过 |
 | G2 | IK、实际轨迹和初始状态无碰撞 | 通过 |
 | G3 | 真实候选和升降范围内的左臂停姿 | 通过 |
-| G4 | 单次抓取、夹持和附着证据成立 | 下一项 |
-| G5 | 运输姿态下仍保持附着 | 待完成 |
+| G4 | 单次抓取、夹持和附着证据成立 | 通过 |
+| G5 | 运输姿态下仍保持附着 | 下一项 |
 | G6 | 固定放置、释放和验证成功 | 待完成 |
 | G7 | 导航、抓取、运输、放置端到端成功 | 待完成 |
 | G8 | 10 次固定条件重复 | 待完成 |
@@ -183,7 +206,7 @@ launch and YAML configuration
 - MuJoCo/MoveIt 模块化实验平台；
 - 基于真实候选的升降-左臂联合碰撞筛选；
 - 技能前置条件和确定性安全约束；
-- G0-G3 的数字实验过程和证据。
+- G0-G4 的数字实验过程和证据。
 
 当前不能写：
 
@@ -191,4 +214,5 @@ launch and YAML configuration
 - 已证明真实抓取成功；
 - CARE-Agent 已在 ROS 中闭环；
 - Oracle 候选代表真实视觉感知；
-- 左臂停姿代表完整运输过程安全。
+- 数字确定附着代表真实摩擦抓取；
+- 运输姿态已经通过。
