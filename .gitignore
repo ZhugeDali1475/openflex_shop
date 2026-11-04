@@ -13,6 +13,10 @@
 /local_dependencies/
 /openflex_ws/local_dependencies/
 
+# Independently hosted repositories kept outside the thesis source history
+/openflex_drivers/
+/openflex_vr_apk/
+
 # Large model weights and datasets
 /openflex_models/
 
