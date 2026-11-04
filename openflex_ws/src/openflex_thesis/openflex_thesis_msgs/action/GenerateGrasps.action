@@ -1,0 +1,18 @@
+uint8 COARSE=1
+uint8 REFINED=2
+
+ObjectMemory target
+uint8 stage
+uint8 active_arm
+uint16 top_k
+bool require_physical_perception
+float32 timeout_sec
+---
+bool success
+GraspCandidateArray grasps
+uint16 error_code
+string message
+---
+string phase
+uint32 raw_candidates
+uint32 returned_candidates

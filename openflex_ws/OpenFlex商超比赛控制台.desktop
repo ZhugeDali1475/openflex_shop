@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenFlex 商超比赛控制台
+Comment=启动整机控制、场景配准、场景管理和商超比赛任务接口
+Exec=/home/openflex/openflex_shop/openflex_ws/start_supermarket_fullbody_competition_gui.sh
+Path=/home/openflex/openflex_shop/openflex_ws
+Icon=applications-system
+Terminal=true
+Categories=Science;Robotics;
+StartupNotify=true

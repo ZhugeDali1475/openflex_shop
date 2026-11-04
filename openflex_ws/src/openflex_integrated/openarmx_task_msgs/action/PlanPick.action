@@ -1,0 +1,34 @@
+# Build and cache one real-robot pick plan without moving hardware.
+string object_id
+string detection_id
+string arm_name
+string grasp_strategy
+# Legacy uniform world-Z offset. Used only when all staged offsets are zero.
+float64 height_offset_m
+# Vertical lift from the current photo pose before moving toward pregrasp.
+float64 initial_raise_m
+# Independent world-Z offsets for the outbound pregrasp, grasp, and retreat endpoint.
+float64 pregrasp_height_offset_m
+float64 grasp_height_offset_m
+float64 retreat_height_offset_m
+# Exact pregrasp-to-grasp TCP distance. Zero keeps the GraspNet distance.
+float64 approach_distance_m
+uint8 ARM_ONLY=7
+uint8 ARM_WITH_LIFT=8
+uint8 max_dof
+float64 velocity_scale
+float64 acceleration_scale
+float32 timeout_sec
+---
+bool success
+string plan_id
+geometry_msgs/PoseStamped pregrasp_pose
+geometry_msgs/PoseStamped grasp_pose
+float32 required_width_m
+float32 score
+uint32 candidate_count
+uint16 error_code
+string message
+---
+string phase
+float32 progress

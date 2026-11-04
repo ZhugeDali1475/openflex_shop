@@ -1,0 +1,105 @@
+velocity_arbiter:
+  ros__parameters:
+    nav_input_topic: /thesis/nav_cmd_vel
+    act_input_topic: /thesis/act_cmd_vel
+    recovery_input_topic: /thesis/recovery_cmd_vel
+    output_topic: /thesis/cmd_vel_selected
+    measured_velocity_topic: /swerve_drive_controller/odom
+    affordance_topic: /thesis/tc_wam/state
+    memory_topic: /thesis/object_memory
+    set_mode_service: /thesis/set_control_mode
+    input_timeout_sec: 0.20
+    measured_timeout_sec: 0.25
+    memory_stream_timeout_sec: 0.25
+    stop_confirm_sec: 0.50
+    stopped_linear_mps: 0.02
+    stopped_angular_rps: 0.03
+    max_linear_mps: 0.25
+    max_angular_rps: 0.40
+    require_physical_affordance: true
+    publish_rate_hz: 50.0
+
+local_alignment_supervisor:
+  ros__parameters:
+    action_name: /thesis/execute_local_alignment
+    policy_control_topic: /thesis/act/policy_control
+    affordance_topic: /thesis/tc_wam/state
+    memory_topic: /thesis/object_memory
+    control_mode_topic: /thesis/control_mode
+    measured_velocity_topic: /swerve_drive_controller/odom
+    base_frame: base_link
+    require_physical_affordance: true
+    stream_timeout_sec: 0.50
+    measured_timeout_sec: 0.25
+    ready_confirm_sec: 0.40
+    ready_linear_mps: 0.03
+    ready_angular_rps: 0.04
+    default_timeout_sec: 30.0
+
+moveit_grasp_executor:
+  ros__parameters:
+    action_name: /thesis/execute_moveit_grasp
+    move_group_action: /move_action
+    ik_service: /compute_ik
+    state_validity_service: /check_state_validity
+    apply_planning_scene_service: /apply_planning_scene
+    left_gripper_action: /left_gripper_controller/gripper_cmd
+    right_gripper_action: /right_gripper_controller/gripper_cmd
+    joint_state_topic: /joint_states
+    grasp_status_topic: /thesis/grasp_status
+    memory_topic: /thesis/object_memory
+    control_mode_topic: /thesis/control_mode
+    measured_velocity_topic: /swerve_drive_controller/odom
+    base_frame: base_link
+    joint_state_timeout_sec: 0.50
+    measured_timeout_sec: 0.25
+    memory_timeout_sec: 0.50
+    stopped_linear_mps: 0.02
+    stopped_angular_rps: 0.03
+    planning_time_sec: 5.0
+    planning_attempts: 3
+    velocity_scaling: 0.10
+    acceleration_scaling: 0.10
+    verification_timeout_sec: 8.0
+    require_calibrated_object_geometry: true
+    require_physical_plan: true
+    object_geometry_calibrated: false
+
+fixed_place_supervisor:
+  ros__parameters:
+    action_name: /thesis/execute_fixed_place
+    place_control_topic: /thesis/place/control
+    place_status_topic: /thesis/place/status
+    control_mode_topic: /thesis/control_mode
+    status_timeout_sec: 0.50
+    initial_status_grace_sec: 1.0
+    default_timeout_sec: 30.0
+
+mission_orchestrator:
+  ros__parameters:
+    mission_action: /thesis/run_pick_deliver
+    nav2_action: /navigate_to_pose
+    anygrasp_action: /thesis/generate_grasps
+    tc_wam_action: /thesis/compute_tc_wam
+    local_alignment_action: /thesis/execute_local_alignment
+    moveit_grasp_action: /thesis/execute_moveit_grasp
+    fixed_place_action: /thesis/execute_fixed_place
+    set_mode_service: /thesis/set_control_mode
+    memory_topic: /thesis/object_memory
+    measured_velocity_topic: /swerve_drive_controller/odom
+    mission_state_topic: /thesis/mission_state
+    require_physical_affordance: true
+    require_physical_perception: true
+    observation_timeout_sec: 5.0
+    memory_stream_timeout_sec: 0.50
+    stop_timeout_sec: 3.0
+    stopped_linear_mps: 0.02
+    stopped_angular_rps: 0.03
+    measured_timeout_sec: 0.25
+    stop_confirm_sec: 0.50
+    server_wait_timeout_sec: 5.0
+    anygrasp_timeout_sec: 10.0
+    tc_wam_timeout_sec: 120.0
+    local_alignment_timeout_sec: 30.0
+    moveit_grasp_timeout_sec: 45.0
+    fixed_place_timeout_sec: 30.0

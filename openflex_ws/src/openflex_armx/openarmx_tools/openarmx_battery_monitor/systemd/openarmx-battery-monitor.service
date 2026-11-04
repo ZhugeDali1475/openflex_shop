@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenArmX JD Battery Monitor (RS485)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@OPENFLEX_USER@
+Group=@OPENFLEX_GROUP@
+SupplementaryGroups=dialout
+EnvironmentFile=-/etc/default/openarmx-battery-monitor
+WorkingDirectory=@OPENFLEX_WORKSPACE@
+ExecStart=@OPENFLEX_RUN_SCRIPT@
+Restart=always
+RestartSec=1
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

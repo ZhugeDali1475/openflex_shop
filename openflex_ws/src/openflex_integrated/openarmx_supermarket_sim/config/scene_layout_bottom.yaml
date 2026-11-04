@@ -1,0 +1,64 @@
+schema_version: 1
+frame_id: map
+team_side: bottom
+source_model: supermarket_scene_from_db.xml
+
+map:
+  resolution: 0.05
+  bounds: [-3.15, 3.15, -4.15, 0.05]
+  obstacle_min_height: 0.04
+  obstacle_max_height: 1.80
+  geometry_padding: 0.02
+
+# Only these static MJCF body trees become Nav2 obstacles. Products stay dynamic.
+obstacle_roots:
+  - wall_bottom
+  - wall_left
+  - wall_right
+  - shelf_group_3
+  - shelf_group_4
+  - counter_bottom_left
+  - counter_bottom_right
+
+# The painted Y=0 divider is not a physical wall, but crossing it leaves our lane.
+virtual_obstacles:
+  - {name: team_divider, x: 0.0, y: 0.0, half_x: 3.05, half_y: 0.025}
+
+robot_footprint:
+  half_length: 0.46
+  half_width: 0.45
+
+entities:
+  start_zone:
+    model_body: start_zone_bottom
+    pose: {frame_id: map, x: 0.0, y: -3.50, z: 0.0, yaw: 1.57079632679}
+  delivery_counter:
+    model_body: counter_bottom_left
+    pose: {frame_id: map, x: -2.4, y: -3.6, z: 0.375, yaw: 0.0}
+    footprint: {half_x: 0.60, half_y: 0.40}
+  replenishment_counter:
+    model_body: counter_bottom_right
+    pose: {frame_id: map, x: 2.4, y: -3.6, z: 0.375, yaw: 0.0}
+    footprint: {half_x: 0.60, half_y: 0.40}
+  shelf_group_3:
+    database_id: 3
+    model_body: shelf_group_3
+    pose: {frame_id: map, x: -1.1, y: -1.18, z: 0.0, yaw: 0.0}
+    footprint: {half_x: 0.4025, half_y: 0.93}
+    faces:
+      shelf_a: {side: negative_x, surface_x: -1.5025, yaw_toward_shelf: 0.0}
+      shelf_b: {side: positive_x, surface_x: -0.6975, yaw_toward_shelf: 3.14159265359}
+  shelf_group_4:
+    database_id: 4
+    model_body: shelf_group_4
+    pose: {frame_id: map, x: 1.1, y: -1.18, z: 0.0, yaw: 0.0}
+    footprint: {half_x: 0.4025, half_y: 0.93}
+    faces:
+      shelf_c: {side: negative_x, surface_x: 0.6975, yaw_toward_shelf: 0.0}
+      shelf_d: {side: positive_x, surface_x: 1.5025, yaw_toward_shelf: 3.14159265359}
+
+semantic_contract:
+  shelf_levels_z: [0.05, 0.45, 0.85, 1.25, 1.65]
+  shelf_y_range: [-2.11, -0.25]
+  bin_width: 0.10
+  slot_id_format: "{shelf_database_id}-{face}-{level}-{y_cm}-{z_offset_cm}"

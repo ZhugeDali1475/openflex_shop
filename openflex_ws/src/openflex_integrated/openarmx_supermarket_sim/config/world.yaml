@@ -1,0 +1,55 @@
+world:
+  order_count: 2
+  restock_count: 2
+  misplaced_count: 2
+  map_bounds: [-3.0, 3.0, -2.0, 4.0]
+
+  order_catalog:
+    milk:
+      display_name: 牛奶
+      specification: 250ml
+      source_station: shelf_a_pick
+      destination_station: delivery_counter
+    chips:
+      display_name: 薯片
+      specification: 90g
+      source_station: shelf_b_pick
+      destination_station: delivery_counter
+    juice:
+      display_name: 果汁
+      specification: 300ml
+      source_station: shelf_c_pick
+      destination_station: delivery_counter
+    bottled_water:
+      display_name: 矿泉水
+      specification: 550ml
+      source_station: shelf_d_pick
+      destination_station: delivery_counter
+
+  restock_cases:
+    - {sku: milk, object_id: restock_milk, source_station: replenishment_box,
+       destination_station: shelf_a_place, destination_slot: S01-A-L2-05,
+       visible_from: shelf_a_scan}
+    - {sku: chips, object_id: restock_chips, source_station: replenishment_box,
+       destination_station: shelf_b_place, destination_slot: S02-A-L3-08,
+       visible_from: shelf_b_scan}
+    - {sku: juice, object_id: restock_juice, source_station: replenishment_box,
+       destination_station: shelf_c_place, destination_slot: S03-B-L2-06,
+       visible_from: shelf_c_scan}
+    - {sku: bottled_water, object_id: restock_water,
+       source_station: replenishment_box, destination_station: shelf_d_place,
+       destination_slot: S04-B-L1-04, visible_from: shelf_d_scan}
+
+  misplaced_cases:
+    - {sku: milk, object_id: misplaced_milk, source_station: delivery_scan,
+       destination_station: shelf_a_place, destination_slot: S01-A-L2-05,
+       visible_from: delivery_scan}
+    - {sku: chips, object_id: misplaced_chips, source_station: aisle_1_scan,
+       destination_station: shelf_b_place, destination_slot: S02-A-L3-08,
+       visible_from: aisle_1_scan}
+    - {sku: juice, object_id: misplaced_juice, source_station: aisle_2_scan,
+       destination_station: shelf_c_place, destination_slot: S03-B-L2-06,
+       visible_from: aisle_2_scan}
+    - {sku: bottled_water, object_id: misplaced_water,
+       source_station: replenishment_scan, destination_station: shelf_d_place,
+       destination_slot: S04-B-L1-04, visible_from: replenishment_scan}

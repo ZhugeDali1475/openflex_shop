@@ -1,0 +1,55 @@
+# A collision-checked Cartesian TCP segment from an expected current pose to a final pose.
+uint8 LEFT=0
+uint8 RIGHT=1
+uint8 arm
+
+geometry_msgs/PoseStamped start_pose
+geometry_msgs/PoseStamped end_pose
+
+# Plan-only callers may provide the predicted state at start_pose. This lets a
+# later Cartesian segment be planned before the robot moves to start_pose.
+bool use_start_joint_state
+sensor_msgs/JointState start_joint_state
+
+float64 eef_step
+float64 jump_threshold
+float64 min_fraction
+float64 start_position_tolerance
+float64 start_orientation_tolerance_deg
+float64 velocity_scale
+float64 acceleration_scale
+# Keep TCP position on the requested line while controlling when orientation changes.
+uint8 INTERPOLATE=0
+uint8 ROTATE_BEFORE_TRANSLATION=1
+uint8 TRANSLATE_BEFORE_ROTATION=2
+uint8 orientation_mode
+# STRICT_CARTESIAN uses computeCartesianPath for the entire segment.
+# BOUNDED_CORRIDOR allows joint-space planning while constraining and validating
+# the TCP inside a finite corridor around the requested start/end segment.
+# UNCONSTRAINED_MOVEIT uses the selected arm group's standard pose planner with
+# MoveIt's normal collision and joint-limit checking and no custom path constraint.
+uint8 STRICT_CARTESIAN=0
+uint8 BOUNDED_CORRIDOR=1
+uint8 UNCONSTRAINED_MOVEIT=2
+uint8 path_mode
+float64 corridor_radius
+float64 corridor_max_path_length
+float64 corridor_max_backtracking
+float64 corridor_planning_timeout
+# Optional odom-frame TCP height floor. Planning succeeds only when every
+# sampled trajectory state stays at or above minimum_tcp_z.
+bool use_minimum_tcp_z
+float64 minimum_tcp_z
+# Optional standard MoveIt joint target. Empty uses end_pose; otherwise this
+# must contain lift_joint plus the selected arm's seven joint positions in
+# *_arm_with_lift group order.
+float64[] end_joint_positions
+bool execute
+---
+moveit_msgs/MoveItErrorCodes error_code
+float64 path_fraction
+moveit_msgs/RobotTrajectory trajectory
+string message
+---
+string phase
+float64 path_fraction

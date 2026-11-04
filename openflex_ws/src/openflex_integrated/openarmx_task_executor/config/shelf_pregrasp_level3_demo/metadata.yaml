@@ -1,0 +1,49 @@
+station_id: SHELF_TABLE_APPROACH
+shelf_id: null
+face: null
+level: 3
+purpose: 第三层准备姿态
+pose_type: preparation
+planning_group: right_arm_with_lift
+base_motion_included: false
+
+topics:
+  joint_states: /joint_states
+  odometry: /odom_safe
+  right_color_image: /camera/right_camera/color/image_raw
+  right_color_compressed_image: /camera/right_camera/color/image_raw/compressed
+  right_color_camera_info: /camera/right_camera/color/camera_info
+
+frames:
+  base: base_link
+  camera_optical: right_camera_color_optical_frame
+
+joint_position_rad_or_m:
+  lift_joint: 0.29981
+  openarmx_right_joint1: -0.7114080786705017
+  openarmx_right_joint2: 0.4018333852291107
+  openarmx_right_joint3: -0.24301807582378387
+  openarmx_right_joint4: 1.7709438800811768
+  openarmx_right_joint5: 0.21539802849292755
+  openarmx_right_joint6: -0.01745433732867241
+  openarmx_right_joint7: 0.7056539058685303
+
+lift_limit:
+  configured_software_max_m: 0.300
+  reported_additional_mechanical_upward_travel_m_approx: 0.050
+  reported_mechanical_upper_position_m_approx: 0.350
+  calibration_status: 机械仍可上升约5厘米，但精确机械上限与上限开关坐标尚待标定。
+  caution: 当前软件模型和控制器仍可能在0.300米处限幅；修改前需统一核对URDF、ros2_control、任务执行器及上限开关参数。
+
+base_to_camera_optical:
+  translation_xyz_m: [0.302, -0.206, 1.011]
+  quaternion_xyzw: [0.654, -0.542, 0.338, -0.406]
+
+capture:
+  captured_at_local: "2026-08-05T22:11:54+08:00"
+  joint_states_ros_stamp: 1785939114.573961259
+  odom_ros_stamp: 1785939116.331623789
+  camera_info_ros_stamp: 1785939117.769038818
+  image_ros_stamp: 1785939222.575427490
+  image_size: 480x270
+  image_encoding: jpeg

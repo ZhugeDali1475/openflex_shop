@@ -1,0 +1,32 @@
+openarmx_teleop_vr_node:
+  ros__parameters:
+    # URDF path is injected by launch by default; leave empty for portable deployments.
+    urdf_path: ""
+
+    # Relative VR control parameters
+    control_rate: 100.0
+    grip_threshold: 0.5
+    resync_threshold_deg: 5.0
+    ik_iterations: 3
+    sync_joint_states_each_cycle: true
+
+    # Pico relative input topics from pico_pose_bridge.
+    left_pose_topic: "/pico_left_controller/pose"
+    right_pose_topic: "/pico_right_controller/pose"
+    left_grip_topic: "/pico_left_controller/grip"
+    right_grip_topic: "/pico_right_controller/grip"
+    left_trigger_topic: "/pico_left_controller/trigger"
+    right_trigger_topic: "/pico_right_controller/trigger"
+    joint_states_topic: "/joint_states"
+
+    # Command output topics
+    left_cmd_topic: "/left_forward_position_controller/commands"
+    right_cmd_topic: "/right_forward_position_controller/commands"
+
+    # Calibration parameters
+    body_anchor_offset: [0.0, -0.18, 0.08]
+    position_scale_xyz: [1.0, 1.0, 0.9]
+    left_axis_matrix: [0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    right_axis_matrix: [0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    left_orientation_matrix: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    right_orientation_matrix: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]

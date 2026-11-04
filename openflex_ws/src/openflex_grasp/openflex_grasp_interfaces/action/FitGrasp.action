@@ -1,0 +1,20 @@
+# Internal single-worker GraspNet request. It never contains Qwen or SAM data.
+string detection_id
+string arm_name
+string grasp_strategy
+sensor_msgs/PointCloud2 product_points
+sensor_msgs/PointCloud2 scene_points
+float32 timeout_sec
+---
+bool success
+geometry_msgs/PoseStamped grasp_pose
+geometry_msgs/PoseStamped pregrasp_pose
+float32 required_width_m
+float32 score
+int32 candidate_count
+int32 constrained_candidate_count
+uint16 error_code
+string message
+---
+string phase
+float32 progress

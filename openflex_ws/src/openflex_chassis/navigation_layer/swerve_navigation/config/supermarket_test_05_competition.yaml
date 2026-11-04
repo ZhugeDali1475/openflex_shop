@@ -1,0 +1,49 @@
+schema_version: 1
+profile:
+  id: supermarket_test_05_competition
+  display_name: "supermarket_test_05 商超标注点精度测试"
+  purpose: "按 map.pgm 红框起点和三条红线外侧安全中心测试底盘导航精度"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_05"
+  launch_file: "supermarket_test_05_benchmark.launch.py"
+  # 红框中心，朝向场地内部（东向）。这是导航初始定位种子，不替代 /initialpose 校准。
+  initial_pose: {x: -2.434, y: -1.172, yaw: 0.0}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+  # GUI 红区使用实体 footprint（base_link 位于中心）再外扩 5cm。
+  # 车头朝向障碍时，边界对应障碍外缘到 base_link 约 0.46+0.05=0.51m。
+  goal_obstacle_clearance_m: 0.05
+
+acceptance:
+  goal_position_m: 0.05
+  goal_yaw_rad: 0.052
+  max_goal_position_m: 0.10
+  max_goal_yaw_rad: 0.087
+  path_cross_track_m: 0.12
+  max_icp_step_m: 0.08
+  max_icp_step_yaw_rad: 0.06
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.80
+  minimum_success_rate: 0.95
+  required_zero_collision_tours: 10
+
+# 旧 START/SHELF1/SHELF2/SHELF3/RETURN 均不满足“完整车体足迹外再留
+# 5cm”的规则重新校验。下面仅保留通过当前 map.pgm 安全掩膜校验的站点。
+waypoints:
+  SHELF4:
+    label: "货架接近点4"
+    pose: {x: -2.04, y: -2.286, yaw: 0.0}
+    clearance_m: 0.05
+    role: "delivery_table"
+
+  '0':
+    label: "0"
+    pose: {x: -1.024, y: -1.484, yaw: 0.8115781021773633}
+    clearance_m: 0.05
+    role: "waypoint"
+
+tours:
+  safe_stations:
+    label: "当前合格站点"
+    sequence: [SHELF4, '0']
+    settle_sec: 1.0

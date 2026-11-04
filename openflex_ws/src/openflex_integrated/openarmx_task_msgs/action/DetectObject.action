@@ -1,0 +1,23 @@
+# Return the object pose after the base has stopped at a station.
+string object_id
+string sku_name
+string qwen_grounding_prompt
+string station_id
+string slot_id
+string arm_name
+bool use_shelf_level
+int32 shelf_level
+bool use_nominal_object_pose
+geometry_msgs/PoseStamped nominal_object_pose
+float32 min_confidence
+float32 timeout_sec
+---
+bool found
+geometry_msgs/PoseStamped object_pose
+float32 confidence
+string detection_id
+uint16 error_code
+string message
+---
+string phase
+float32 confidence

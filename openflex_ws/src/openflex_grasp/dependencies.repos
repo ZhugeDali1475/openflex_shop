@@ -1,0 +1,5 @@
+repositories:
+  supermarket_scene:
+    type: git
+    url: file:///home/openflex/openflex_shop/supermarket_scene
+    version: WORKTREE-2026-08-12

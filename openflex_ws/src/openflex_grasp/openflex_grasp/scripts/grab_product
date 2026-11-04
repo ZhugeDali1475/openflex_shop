@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+openflex_root="${OPENFLEX_ROOT:-/home/openflex/openflex_shop}"
+workspace_dir="${OPENFLEX_WORKSPACE:-${openflex_root}/openflex_ws}"
+robot_env="${OPENFLEX_ROBOT_ENV:-${openflex_root}/openflex_robot.env}"
+if [[ -f "$robot_env" ]]; then
+    # Robot-specific camera and hardware selection stays outside this package.
+    source "$robot_env"
+fi
+
+# The ROS setup files read optional variables without nounset guards. Preserve
+# the caller's shell option while allowing those setup files to be sourced.
+nounset_enabled=false
+case $- in
+    *u*) nounset_enabled=true; set +u ;;
+esac
+
+execute=true
+grasp_mode="${OPENFLEX_GRASP_MODE:-shelf}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --plan)
+            execute=false
+            shift
+            ;;
+        --basket)
+            grasp_mode=basket
+            shift
+            ;;
+        --shelf)
+            grasp_mode=shelf
+            shift
+            ;;
+        --help|-h)
+            printf 'Usage: %s [--plan] [--shelf|--basket] PRODUCT_NAME\n' "$0"
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            printf 'Unknown option: %s\n' "$1" >&2
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ "$grasp_mode" != "shelf" && "$grasp_mode" != "basket" ]]; then
+    printf 'OPENFLEX_GRASP_MODE must be shelf or basket; got %s\n' "$grasp_mode" >&2
+    exit 2
+fi
+
+if [[ $# -eq 0 ]]; then
+    printf 'Usage: %s [--plan] [--shelf|--basket] PRODUCT_NAME\n' "$0" >&2
+    printf 'Examples:\n  %s water bottle\n  %s --plan --basket water bottle\n' "$0" "$0" >&2
+    exit 2
+fi
+
+# Join unquoted words so both `water bottle` and `"water bottle"` work.
+product="$*"
+payload_mass_kg="${OPENFLEX_PAYLOAD_MASS_KG:-0.55}"
+payload_com_z_m="${OPENFLEX_PAYLOAD_COM_Z_M:-0.05}"
+pregrasp_distance_m="${OPENFLEX_PREGRASP_DISTANCE_M:-0.08}"
+postgrasp_lift_m="${OPENFLEX_POSTGRASP_LIFT_M:-0.01}"
+trajectory_velocity_scale="${OPENFLEX_TRAJECTORY_VELOCITY_SCALE:-0.40}"
+trajectory_acceleration_scale="${OPENFLEX_TRAJECTORY_ACCELERATION_SCALE:-0.20}"
+camera_serial="${OPENFLEX_RIGHT_CAMERA_SERIAL:-}"
+
+export OPENFLEX_MODEL_ROOT="${OPENFLEX_MODEL_ROOT:-${openflex_root}/openflex_models}"
+export OPENFLEX_PERCEPTION_PYTHON="${OPENFLEX_PERCEPTION_PYTHON:-${openflex_root}/.venvs/openflex_perception/bin/python}"
+export OPENFLEX_GRASPNET_PYTHON="${OPENFLEX_GRASPNET_PYTHON:-${openflex_root}/.venvs/openflex_graspnet/bin/python}"
+source /opt/ros/humble/setup.bash
+source "${workspace_dir}/install/setup.bash"
+if [[ "$nounset_enabled" == true ]]; then
+    set -u
+fi
+
+set_moveit_parameter() {
+    local name="$1"
+    local value="$2"
+    if ! timeout 5 ros2 param set /move_group "$name" "$value" >/dev/null; then
+        printf 'MoveIt is unavailable or rejected parameter %s. Start the integrated robot stack first.\n' "$name" >&2
+        exit 1
+    fi
+}
+
+# Let the controller action own execution completion. Do not add MoveIt's
+# independent start-state or expected-duration rejection to this grasp path.
+set_moveit_parameter trajectory_execution.allowed_execution_duration_scaling 1.2
+set_moveit_parameter trajectory_execution.allowed_goal_duration_margin 8.0
+set_moveit_parameter trajectory_execution.allowed_start_tolerance 0.0
+set_moveit_parameter trajectory_execution.execution_duration_monitoring false
+
+if [[ "$execute" == true ]] &&
+   ! timeout 5 ros2 param get /moveit_command_bridge \
+       trajectory_distal_goal_tolerance_rad >/dev/null 2>&1; then
+    printf 'The running MoveIt command bridge is outdated or unavailable. Restart the integrated robot stack before executing a grasp.\n' >&2
+    exit 1
+fi
+
+if [[ "$execute" == true ]] &&
+   ! timeout 5 ros2 param get /moveit_command_bridge \
+       lift_goal_tolerance_m >/dev/null 2>&1; then
+    printf 'The running MoveIt command bridge does not validate lift endpoints. Restart the integrated robot stack before executing a basket grasp.\n' >&2
+    exit 1
+fi
+
+exec ros2 launch openflex_grasp grab_product.launch.py \
+    "product:=${product}" \
+    "camera_serial:=${camera_serial}" \
+    "execute:=${execute}" \
+    "grasp_mode:=${grasp_mode}" \
+    "pregrasp_distance_m:=${pregrasp_distance_m}" \
+    "postgrasp_lift_m:=${postgrasp_lift_m}" \
+    "trajectory_velocity_scale:=${trajectory_velocity_scale}" \
+    "trajectory_acceleration_scale:=${trajectory_acceleration_scale}" \
+    "payload_mass_kg:=${payload_mass_kg}" \
+    "payload_com_z_m:=${payload_com_z_m}" \
+    "visualize:=true"

@@ -1,0 +1,80 @@
+schema_version: 1
+map_name: supermarket_test_08
+stations:
+- id: SHELF_A
+  label: A
+  role: shelf_approach
+  pose:
+    x: 1.946
+    y: 2.61
+    yaw: 3.141592653589793
+- id: SHELF_B
+  label: B
+  role: shelf_approach
+  pose:
+    x: 1.946
+    y: 1.741
+    yaw: 3.141592653589793
+- id: SHELF_C
+  label: C
+  role: shelf_approach
+  pose:
+    x: -0.081
+    y: 2.613
+    yaw: 0.0
+- id: SHELF_D
+  label: D
+  role: shelf_approach
+  pose:
+    x: -0.082
+    y: 1.689
+    yaw: 0.0
+- id: SHELF_E
+  label: E
+  role: shelf_approach
+  pose:
+    x: -0.158
+    y: 2.615
+    yaw: 3.141592653589793
+- id: SHELF_F
+  label: F
+  role: shelf_approach
+  pose:
+    x: -0.15
+    y: 1.688
+    yaw: 3.141592653589793
+- id: SHELF_G
+  label: G
+  role: shelf_approach
+  pose:
+    x: -2.169
+    y: 2.547
+    yaw: 0.0
+- id: SHELF_H
+  label: H
+  role: shelf_approach
+  pose:
+    x: -2.206
+    y: 1.625
+    yaw: 0.0
+- id: START_CORRIDOR
+  label: 比赛起点（中间走廊入口）
+  role: start_position
+  pose:
+    x: -0.1
+    y: 0.7
+    yaw: 1.5708
+- id: delivery_counter
+  label: 交付台（东侧方台）
+  role: delivery_table
+  pose:
+    x: 2.081
+    y: 0.777
+    yaw: -1.5707963267948966
+- id: restock_counter
+  label: 补货台（西侧方台）
+  role: replenishment
+  pose:
+    x: -2.294
+    y: 0.777
+    yaw: -1.5707963267948966

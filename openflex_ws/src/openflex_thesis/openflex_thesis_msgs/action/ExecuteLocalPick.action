@@ -1,0 +1,19 @@
+# DEPRECATED compatibility interface. No node in the final architecture serves
+# this action. Use ExecuteLocalAlignment followed by ExecuteMoveItGrasp.
+ObjectMemory target
+AffordanceState affordance
+string policy_variant
+float32 timeout_sec
+---
+bool success
+bool grasp_verified
+bool transport_safe
+bool recoverable
+uint32 final_map_version
+uint16 error_code
+string message
+---
+string phase
+float32 current_score
+bool ready
+float32 elapsed_sec

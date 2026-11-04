@@ -1,0 +1,19 @@
+# Inspect one stopped observation station. Navigation is owned by the caller.
+uint8 MISSING_STOCK=1
+uint8 MISPLACED_ITEMS=2
+uint8 mode
+string station_id
+uint16 max_results
+bool use_dream_memory
+float32 min_confidence
+float32 timeout_sec
+---
+bool success
+openarmx_task_msgs/CompetitionWorkItem[] work_items
+uint16 error_code
+string message
+---
+string phase
+string station_id
+uint32 observations_processed
+uint16 candidates_found

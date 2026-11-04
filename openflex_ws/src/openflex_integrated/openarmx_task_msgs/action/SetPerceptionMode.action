@@ -1,0 +1,16 @@
+# Serialize GPU-heavy perception workloads on the shared RTX 3090.
+uint8 IDLE=0
+uint8 DREAM_OBSERVE=1
+uint8 TARGET_REFINE=2
+uint8 LOCAL_GRASP=3
+uint8 mode
+string reason
+float32 timeout_sec
+---
+bool success
+uint8 active_mode
+uint16 error_code
+string message
+---
+string phase
+uint8 active_mode

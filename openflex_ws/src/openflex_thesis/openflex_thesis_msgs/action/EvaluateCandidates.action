@@ -1,0 +1,16 @@
+# Pluggable feasibility boundary. A physical evaluator may query MoveIt but must never execute motion.
+ObjectMemory target
+GraspCandidateArray grasps
+AffordanceCandidateArray candidates
+uint8 active_arm
+bool evaluate_robustness
+float32 timeout_sec
+---
+bool success
+AffordanceCandidateArray evaluated_candidates
+uint16 error_code
+string message
+---
+string phase
+uint32 evaluated_candidates
+uint32 total_candidates

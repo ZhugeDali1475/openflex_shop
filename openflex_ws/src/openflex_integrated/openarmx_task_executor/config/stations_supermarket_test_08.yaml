@@ -1,0 +1,179 @@
+# Navigation stations saved with the supermarket_test_08 map
+# (openflex_maps/2d/supermarket_test_08/competition_mission.yaml).
+# Right-arm teaching poses are inherited from test_07. Left-arm perception and
+# grasp software is configured, but left-arm joint teaching remains a required
+# on-site step before execute=true.
+_shelf_defaults: &shelf_defaults
+  alignment:
+    enabled: true
+    mode: shelf_scan
+    target_clearance: 0.05
+    clearance_tolerance: 0.01
+    yaw_tolerance: 0.0174533
+    timeout_sec: 20.0
+  retreat:
+    after_pick: true
+    after_place: true
+    distance: 0.15
+  # Measured MoveIt teaching targets. Level 2 is also the validated transport
+  # posture used before chassis retreat and the next navigation segment.
+  level_lift_positions:
+    2: 0.1066645
+    3: 0.29981
+  level_arm_positions:
+    2:
+      right:
+        openarmx_right_joint1: -1.0466848611831665
+        openarmx_right_joint2: 0.33853742480278015
+        openarmx_right_joint3: -0.34889495372772217
+        openarmx_right_joint4: 1.770176649093628
+        openarmx_right_joint5: 0.12601648271083832
+        openarmx_right_joint6: -0.216932475566864
+        openarmx_right_joint7: 0.8778956532478333
+    3:
+      right:
+        openarmx_right_joint1: -0.7114080786705017
+        openarmx_right_joint2: 0.4018333852291107
+        openarmx_right_joint3: -0.24301807582378387
+        openarmx_right_joint4: 1.7709438800811768
+        openarmx_right_joint5: 0.21539802849292755
+        openarmx_right_joint6: -0.01745433732867241
+        openarmx_right_joint7: 0.7056539058685303
+  slots:
+    "*":
+      # Dynamic scene slots inherit this explicit arm and GraspNet strategy.
+      pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+      arm_name: right
+      grasp_strategy: graspnet_shelf
+
+# 交付台/补货台：贴南墙的两个方形台子，北面朝走廊，北面边界均为 y=+0.127。
+# 尺寸取自 supermarket_scene/scene_geometry.py：1.20x0.80m，台面高 0.75m。
+# 台面 0.75m 高于底盘激光扫描平面，shelf_scan 量不到台面立面，故 mode=none，
+# 仅靠 Nav2 的 5cm/3deg 停位，放置精度由手臂补偿。
+# nav_pose 的 y=0.777 = 台面 0.127 + 车体半长 0.45 + 20cm 间隙；20cm 是余量拐点
+# （15cm 时余量 0.165m，20cm 起升到 0.2m 后被走廊北侧货架排限制不再增长）。
+_counter_defaults: &counter_defaults
+  alignment:
+    enabled: false
+    mode: none
+  retreat:
+    after_pick: true
+    after_place: true
+    distance: 0.15
+  # 台面 0.75m 不在货架层高表内，交付/补货需要单独示教举升位。
+  level_lift_positions: {}
+  level_arm_positions: {}
+  slots:
+    "*":
+      pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+      arm_name: right
+      grasp_strategy: mock
+
+stations:
+  SHELF_A:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: 1.946
+      y: 2.610
+      z: 0.0
+      yaw: 3.141592653589793
+  SHELF_B:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: 1.946
+      y: 1.741
+      z: 0.0
+      yaw: 3.141592653589793
+  SHELF_C:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -0.081
+      y: 2.613
+      z: 0.0
+      yaw: 0.0
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: graspnet_shelf
+  SHELF_D:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -0.082
+      y: 1.689
+      z: 0.0
+      yaw: 0.0
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: graspnet_shelf
+  SHELF_E:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -0.158
+      y: 2.615
+      z: 0.0
+      yaw: 3.141592653589793
+  SHELF_F:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -0.150
+      y: 1.688
+      z: 0.0
+      yaw: 3.141592653589793
+  SHELF_G:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -2.169
+      y: 2.547
+      z: 0.0
+      yaw: 0.0
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: graspnet_shelf
+  SHELF_H:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: -2.206
+      y: 1.625
+      z: 0.0
+      yaw: 0.0
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: graspnet_shelf
+
+  # 右台（原点东侧），地图实测 x[+1.581,+2.581] 宽 1.00m，余量 0.215m。
+  delivery_counter:
+    <<: *counter_defaults
+    nav_pose:
+      frame_id: map
+      x: 2.081
+      y: 0.777
+      z: 0.0
+      yaw: -1.5707963267948966
+    place_pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+
+  # 左台（原点西侧），地图实测 x[-3.169,-1.719] 宽 1.45m。x 不取几何中心 -2.444：
+  # x=-2.94 有一道竖墙，取中心只剩 5cm 余量；-2.294 是余量最大处（0.200m）且仍在台面正前方。
+  restock_counter:
+    <<: *counter_defaults
+    nav_pose:
+      frame_id: map
+      x: -2.294
+      y: 0.777
+      z: 0.0
+      yaw: -1.5707963267948966
+    place_pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}

@@ -1,0 +1,137 @@
+schema_version: 1
+profile:
+  id: supermarket_competition_precision
+  display_name: "商超比赛精度测试 - 模拟货架抓取"
+  purpose: "模拟比赛环境，测试起点到三个货架位置的导航精度"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_03"
+  launch_file: "supermarket_test_03_benchmark.launch.py"
+  # 自动全局定位的中性搜索种子，不代表机器人已经位于比赛起点。
+  # START 是独立导航目标；机器人可从地图内任意已定位位置返回 START。
+  initial_pose: {x: 0.0, y: 0.0, yaw: 0.0}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+
+acceptance:
+  # 比赛要求的精度目标
+  # 根据PDF: 需要精准停位以便机械臂抓取，建议±5cm位置，±3度朝向
+  goal_position_m: 0.05      # ±5cm 位置精度目标
+  goal_yaw_rad: 0.052        # ±3度 朝向精度目标
+  max_goal_position_m: 0.10  # 最大允许±10cm
+  max_goal_yaw_rad: 0.087    # 最大允许±5度
+  path_cross_track_m: 0.12   # 路径跟踪误差 ±12cm
+  max_icp_step_m: 0.08       # ICP单步跳变 <8cm
+  max_icp_step_yaw_rad: 0.06 # ICP角度跳变 <3.4度
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.80     # 停稳0.8秒再判定，模拟机械臂准备时间
+  minimum_success_rate: 0.95 # 95%成功率
+  required_zero_collision_tours: 10
+
+# 测试航点 - 模拟比赛场景
+# START: 起点（红色框）
+# SHELF1/2/3: 三个货架位置（红色斜线）
+waypoints:
+  START:
+    label: "起点-出发区"
+    pose: {x: 0.20, y: 1.30, yaw: -1.57}  # 朝南
+    clearance_m: 1.50
+    role: "start_position"
+    comment: "模拟比赛起点，对应地图上部红色框"
+
+  SHELF1:
+    label: "货架1-左侧"
+    pose: {x: -1.70, y: -0.60, yaw: 0.0}  # 朝东，面向货架
+    clearance_m: 0.80
+    role: "shelf_approach"
+    comment: "左侧货架抓取点，需要精准停位"
+
+  SHELF2:
+    label: "货架2-中上"
+    pose: {x: 0.20, y: 0.40, yaw: 3.14}  # 朝西，面向货架
+    clearance_m: 0.85
+    role: "shelf_approach"
+    comment: "中上货架抓取点"
+
+  SHELF3:
+    label: "货架3-中下"
+    pose: {x: 0.20, y: -1.60, yaw: 3.14}  # 朝西，面向货架
+    clearance_m: 0.85
+    role: "shelf_approach"
+    comment: "中下货架抓取点"
+
+  RETURN:
+    label: "返回起点"
+    pose: {x: 0.20, y: 1.30, yaw: -1.57}
+    clearance_m: 1.50
+    role: "return_position"
+    comment: "完成任务后返回起点"
+
+# 测试巡游序列
+tours:
+  # 单次完整任务: 起点 -> 货架1 -> 货架2 -> 货架3 -> 返回
+  full_mission:
+    label: "完整任务-三货架巡游"
+    sequence: [START, SHELF1, SHELF2, SHELF3, RETURN]
+    settle_sec: 1.5  # 每个货架停留1.5秒，模拟机械臂抓取
+
+  # 精度测试: 重复访问同一货架
+  precision_shelf1:
+    label: "货架1精度重复测试"
+    sequence: [START, SHELF1, START, SHELF1, START]
+    settle_sec: 1.5
+
+  precision_shelf2:
+    label: "货架2精度重复测试"
+    sequence: [START, SHELF2, START, SHELF2, START]
+    settle_sec: 1.5
+
+  precision_shelf3:
+    label: "货架3精度重复测试"
+    sequence: [START, SHELF3, START, SHELF3, START]
+    settle_sec: 1.5
+
+  # 快速验证: 起点往返一个货架
+  quick_test_shelf1:
+    label: "快速测试-货架1往返"
+    sequence: [START, SHELF1, RETURN]
+    settle_sec: 1.0
+
+  quick_test_shelf2:
+    label: "快速测试-货架2往返"
+    sequence: [START, SHELF2, RETURN]
+    settle_sec: 1.0
+
+  quick_test_shelf3:
+    label: "快速测试-货架3往返"
+    sequence: [START, SHELF3, RETURN]
+    settle_sec: 1.0
+
+# 比赛场景说明
+competition_notes: |
+  这个配置文件模拟世界人形机器人运动会商超场景赛的导航需求：
+
+  场地规格:
+    - 6m x 8m 比赛场地
+    - 4个货架 (0.80m x 1.85m)
+    - 比赛时间: 2分钟
+
+  精度要求:
+    - 位置精度: ±5cm (目标), ±10cm (最大)
+    - 朝向精度: ±3度 (目标), ±5度 (最大)
+    - 每个货架需要精准停位以便机械臂抓取
+
+  测试策略:
+    1. 使用 quick_test_* 验证单个货架的可达性
+    2. 使用 precision_* 测试单个货架的重复精度
+    3. 使用 full_mission 测试完整任务流程
+
+  调优重点:
+    - 定位稳定性 (运动中不能漂移)
+    - 终点精停精度 (±5cm/±3度)
+    - 路径跟踪平滑度
+    - 任务完成时间 (目标<2分钟)
+
+  坐标说明:
+    - START: 地图上部红色框位置
+    - SHELF1/2/3: 三个红色斜线位置
+    - 坐标已根据 map.yaml (origin: [-3.927, -5.124], resolution: 0.05m) 计算

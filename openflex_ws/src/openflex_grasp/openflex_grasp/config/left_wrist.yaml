@@ -1,0 +1,14 @@
+product_pointcloud:
+  ros__parameters:
+    device: cuda
+    target: water bottle
+    rgb_topic: /cam_left/color/image
+    depth_topic: /cam_left/depth/image
+    camera_info_topic: /cam_left/depth/camera_info
+    depth_scale: 0.001
+    min_depth_m: 0.07
+    max_depth_m: 1.0
+    max_depth_spread_m: 0.25
+    point_stride: 1
+    scene_point_stride: 2
+    sync_slop_s: 0.12

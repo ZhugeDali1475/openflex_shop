@@ -1,0 +1,53 @@
+# Measured navigation station currently stored with supermarket_test_07.
+# Add delivery, judging and additional shelf stations only after validating them
+# with the GUI safety mask. Manipulation poses remain nominal until DREAM /
+# The real GraspNet PickObject adapter is integrated.
+stations:
+  SHELF_TABLE_APPROACH:
+    nav_pose:
+      frame_id: map
+      x: -1.83284
+      y: -2.14956
+      z: 0.0
+      yaw: -1.5707963267948966
+    alignment:
+      enabled: true
+      mode: shelf_scan
+      target_clearance: 0.05
+      clearance_tolerance: 0.01
+      yaw_tolerance: 0.0174533
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: true
+      distance: 0.15
+    # Measured MoveIt teaching targets. Level 2 is also the validated transport
+    # posture used before chassis retreat and the next navigation segment.
+    level_lift_positions:
+      2: 0.1066645
+      3: 0.29981
+    level_arm_positions:
+      2:
+        right:
+          openarmx_right_joint1: -1.0466848611831665
+          openarmx_right_joint2: 0.33853742480278015
+          openarmx_right_joint3: -0.34889495372772217
+          openarmx_right_joint4: 1.770176649093628
+          openarmx_right_joint5: 0.12601648271083832
+          openarmx_right_joint6: -0.216932475566864
+          openarmx_right_joint7: 0.8778956532478333
+      3:
+        right:
+          openarmx_right_joint1: -0.7114080786705017
+          openarmx_right_joint2: 0.4018333852291107
+          openarmx_right_joint3: -0.24301807582378387
+          openarmx_right_joint4: 1.7709438800811768
+          openarmx_right_joint5: 0.21539802849292755
+          openarmx_right_joint6: -0.01745433732867241
+          openarmx_right_joint7: 0.7056539058685303
+    slots:
+      "*":
+        # Nominal pose used only by explicit mock/integration tests.
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.80, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: mock

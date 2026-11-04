@@ -1,0 +1,18 @@
+# ACT controls only base twist and terminates after entering the bound ready set.
+ObjectMemory target
+AffordanceState affordance
+ManipulationPlan plan
+string policy_variant
+float32 timeout_sec
+---
+bool success
+bool ready_reached
+bool recoverable
+uint32 final_map_version
+uint16 error_code
+string message
+---
+string phase
+float32 current_score
+bool ready
+float32 elapsed_sec

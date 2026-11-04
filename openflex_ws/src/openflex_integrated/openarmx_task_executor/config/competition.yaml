@@ -1,0 +1,76 @@
+# Replace every station pose and SKU route with competition measurements.
+competition:
+  control_mode: autonomous
+  total_timeout_sec: 1200.0
+  max_transport_retries: 1
+  min_order_confidence: 0.80
+  min_inspection_confidence: 0.65
+
+  # Optional read-only integration with the teammate-owned supermarket_scene
+  # SQLite database.  Keep disabled until every mapped station below has a
+  # physically validated nav_pose.  Layer changes do not change Nav2; this map
+  # selects the approach station for one shelf face.
+  inventory:
+    enabled: false
+    database_path: /home/openflex/openflex_shop/supermarket_scene/shelf_inventory.db
+    default_destination_station: delivery_counter
+    prefer_inventory: true
+    # Fill with only measured registrations, e.g. "1:0": shelf_a_pick.
+    shelf_face_stations: {}
+
+  # Requires a SetPerceptionMode server for competition workflow state. The
+  # Qwen+SAM2 and GraspNetBaseline workers remain resident in separate model
+  # environments; mode changes must not silently switch box providers.
+  perception_mode_control: true
+
+  phases:
+    1:
+      name: picking
+      required_items: 2
+      timeout_sec: 420.0
+      entry_station: delivery_counter
+      judging_station: phase_1_judging
+      use_dream: false
+      verify_placement: true
+    2:
+      name: restocking
+      required_items: 2
+      timeout_sec: 420.0
+      entry_station: phase_1_judging
+      judging_station: phase_2_judging
+      scan_tour: [shelf_a_scan, shelf_b_scan, shelf_c_scan, shelf_d_scan]
+      use_dream: true
+      verify_placement: true
+    3:
+      name: return_misplaced
+      required_items: 2
+      timeout_sec: 360.0
+      entry_station: phase_2_judging
+      judging_station: finish
+      scan_tour: [delivery_scan, aisle_1_scan, aisle_2_scan, replenishment_scan]
+      use_dream: true
+      verify_placement: true
+
+  # OCR output is resolved to deterministic station routes. Use "sku|spec" as
+  # a key when two package specifications share one SKU name.
+  sku_routes:
+    milk:
+      source_station: shelf_a_pick
+      source_slot: milk
+      destination_station: delivery_counter
+      object_id: milk
+    chips:
+      source_station: shelf_b_pick
+      source_slot: chips
+      destination_station: delivery_counter
+      object_id: chips
+    juice:
+      source_station: shelf_c_pick
+      source_slot: juice
+      destination_station: delivery_counter
+      object_id: juice
+    bottled_water:
+      source_station: shelf_d_pick
+      source_slot: bottled_water
+      destination_station: delivery_counter
+      object_id: bottled_water

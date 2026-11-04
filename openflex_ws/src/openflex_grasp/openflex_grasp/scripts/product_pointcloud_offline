@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "${OPENFLEX_PERCEPTION_PYTHON:-/home/openflex/openflex_shop/.venvs/openflex_perception/bin/python}" -m openflex_grasp.offline "$@"

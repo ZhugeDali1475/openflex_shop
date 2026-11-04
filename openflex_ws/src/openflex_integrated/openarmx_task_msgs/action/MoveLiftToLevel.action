@@ -1,0 +1,18 @@
+# Bench/competition integration test for the prismatic lift after the base has
+# already reached and fine-aligned to a shelf station.
+string station_id
+int32 shelf_level
+bool use_explicit_position
+float64 target_position
+float32 timeout_sec
+---
+bool success
+uint16 error_code
+float64 target_position
+float64 final_position
+string message
+---
+string phase
+float64 target_position
+float64 current_position
+float64 base_linear_speed

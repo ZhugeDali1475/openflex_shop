@@ -1,0 +1,43 @@
+schema_version: 1
+profile:
+  id: supermarket_test_09_competition
+  display_name: "supermarket_test_09 商超抓取导航联调"
+  purpose: "test_9 货架/交付台前沿精调、抓取、放置与退避"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_09"
+  launch_file: "supermarket_test_05_benchmark.launch.py"
+  # 比赛初定位以任务文件中的物理 START 为参考；机器人只需放在其附近，
+  # 后续 ICP 仍会利用现场点云修正实际停放误差。
+  initial_pose: {x: -0.1211415352, y: -0.2489835508, yaw: 1.5603243513}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+  goal_obstacle_clearance_m: 0.05
+
+acceptance:
+  goal_position_m: 0.05
+  goal_yaw_rad: 0.052
+  max_goal_position_m: 0.10
+  max_goal_yaw_rad: 0.087
+  path_cross_track_m: 0.12
+  max_icp_step_m: 0.08
+  max_icp_step_yaw_rad: 0.06
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.80
+  minimum_success_rate: 0.95
+  required_zero_collision_tours: 10
+
+# 站点会在 test_9 比赛导航页中重新保存到该地图的
+# 2d/supermarket_test_09/competition_mission.yaml。
+# 这里保留一个可编辑的起点，避免 profile 没有任何航点而无法启动 GUI。
+waypoints:
+  START_TEST9:
+    label: "test_9 建图起点（待现场确认）"
+    pose: {x: 0.0066, y: -0.2869, yaw: 1.5708}
+    clearance_m: 0.10
+    role: "start_position"
+
+tours:
+  test9_station_order:
+    label: "test_9 站点顺序验证"
+    sequence: [START_TEST9]
+    settle_sec: 1.0

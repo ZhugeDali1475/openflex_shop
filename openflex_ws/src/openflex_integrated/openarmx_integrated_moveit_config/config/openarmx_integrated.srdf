@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+
+   Copyright (c) 2026 Chengdu Changshu Robot Co., Ltd.
+   https://www.openarmx.com
+
+   This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+   4.0 International License (CC BY-NC-SA 4.0).
+
+   SRDF for the OpenArmX integrated wheeled-arm robot.
+
+   Key design:
+     * The chassis (base_link) moves in the odom plane via a holonomic planar
+       virtual joint. The active hardware or simulator supplies odom -> base_link.
+     * Both arm IK chains include the lift prismatic DOF (lift_joint), so planning
+       a wrist pose automatically drives the lift column as well.
+     * The chassis, lift column, wheels and head participate as (static) collision
+       geometry: all non-adjacent link pairs are checked; only directly-connected
+       (always-touching) pairs are disabled below.
+-->
+<robot name="openarmx_integrated">
+
+    <!-- =========================================================
+         VIRTUAL JOINT: mobile holonomic chassis pose.
+         The active hardware or simulator publishes odom -> base_link.
+         ========================================================= -->
+    <virtual_joint name="base_planar_joint" type="planar" parent_frame="odom" child_link="base_link" />
+    <joint_property joint_name="base_planar_joint" property_name="motion_model" value="holonomic" />
+
+    <!-- =========================================================
+         GROUPS
+         ========================================================= -->
+    <!-- Holonomic chassis virtual joint used by whole-body planning. -->
+    <group name="mobile_base">
+        <joint name="base_planar_joint"/>
+    </group>
+
+    <!-- Lift-only chain for RViz one-axis Cartesian interaction. -->
+    <group name="lift_only">
+        <chain base_link="lift_base_link" tip_link="lift_carriage_link"/>
+    </group>
+
+    <!-- Left arm IK chain: lift DOF + 7 revolute arm joints -->
+    <group name="left_arm_with_lift">
+        <joint name="lift_joint"/>
+        <joint name="openarmx_left_joint1"/>
+        <joint name="openarmx_left_joint2"/>
+        <joint name="openarmx_left_joint3"/>
+        <joint name="openarmx_left_joint4"/>
+        <joint name="openarmx_left_joint5"/>
+        <joint name="openarmx_left_joint6"/>
+        <joint name="openarmx_left_joint7"/>
+    </group>
+
+    <!-- Right arm IK chain: lift DOF + 7 revolute arm joints -->
+    <group name="right_arm_with_lift">
+        <joint name="lift_joint"/>
+        <joint name="openarmx_right_joint1"/>
+        <joint name="openarmx_right_joint2"/>
+        <joint name="openarmx_right_joint3"/>
+        <joint name="openarmx_right_joint4"/>
+        <joint name="openarmx_right_joint5"/>
+        <joint name="openarmx_right_joint6"/>
+        <joint name="openarmx_right_joint7"/>
+    </group>
+
+    <!-- Left arm 7-DOF only (no lift joint, fixed lift height) -->
+    <group name="left_arm">
+        <joint name="openarmx_left_joint1"/>
+        <joint name="openarmx_left_joint2"/>
+        <joint name="openarmx_left_joint3"/>
+        <joint name="openarmx_left_joint4"/>
+        <joint name="openarmx_left_joint5"/>
+        <joint name="openarmx_left_joint6"/>
+        <joint name="openarmx_left_joint7"/>
+    </group>
+
+    <!-- Right arm 7-DOF only (no lift joint, fixed lift height) -->
+    <group name="right_arm">
+        <joint name="openarmx_right_joint1"/>
+        <joint name="openarmx_right_joint2"/>
+        <joint name="openarmx_right_joint3"/>
+        <joint name="openarmx_right_joint4"/>
+        <joint name="openarmx_right_joint5"/>
+        <joint name="openarmx_right_joint6"/>
+        <joint name="openarmx_right_joint7"/>
+    </group>
+
+    <!-- Whole-body groups: planar base (x, y, theta) + lift + one 7-DOF arm. -->
+    <group name="left_whole_body">
+        <group name="left_arm_with_lift"/>
+        <group name="mobile_base"/>
+        <link name="openarmx_left_hand"/>
+    </group>
+    <group name="right_whole_body">
+        <group name="right_arm_with_lift"/>
+        <group name="mobile_base"/>
+        <link name="openarmx_right_hand"/>
+    </group>
+
+    <!-- Grippers -->
+    <group name="left_gripper">
+        <joint name="openarmx_left_finger_joint1"/>
+    </group>
+    <group name="right_gripper">
+        <joint name="openarmx_right_finger_joint1"/>
+    </group>
+
+    <!-- =========================================================
+         GROUP STATES
+         ========================================================= -->
+    <group_state name="home" group="lift_only">
+        <joint name="lift_joint" value="0"/>
+    </group_state>
+    <group_state name="home" group="left_arm_with_lift">
+        <joint name="lift_joint" value="0"/>
+        <joint name="openarmx_left_joint1" value="0"/>
+        <joint name="openarmx_left_joint2" value="0"/>
+        <joint name="openarmx_left_joint3" value="0"/>
+        <joint name="openarmx_left_joint4" value="0"/>
+        <joint name="openarmx_left_joint5" value="0"/>
+        <joint name="openarmx_left_joint6" value="0"/>
+        <joint name="openarmx_left_joint7" value="0"/>
+    </group_state>
+    <group_state name="home" group="right_arm_with_lift">
+        <joint name="lift_joint" value="0"/>
+        <joint name="openarmx_right_joint1" value="0"/>
+        <joint name="openarmx_right_joint2" value="0"/>
+        <joint name="openarmx_right_joint3" value="0"/>
+        <joint name="openarmx_right_joint4" value="0"/>
+        <joint name="openarmx_right_joint5" value="0"/>
+        <joint name="openarmx_right_joint6" value="0"/>
+        <joint name="openarmx_right_joint7" value="0"/>
+    </group_state>
+    <group_state name="hands_up" group="left_arm_with_lift">
+        <joint name="lift_joint" value="0"/>
+        <joint name="openarmx_left_joint1" value="0"/>
+        <joint name="openarmx_left_joint2" value="0"/>
+        <joint name="openarmx_left_joint3" value="0"/>
+        <joint name="openarmx_left_joint4" value="1.8"/>
+        <joint name="openarmx_left_joint5" value="0"/>
+        <joint name="openarmx_left_joint6" value="0"/>
+        <joint name="openarmx_left_joint7" value="0"/>
+    </group_state>
+    <group_state name="hands_up" group="right_arm_with_lift">
+        <joint name="lift_joint" value="0"/>
+        <joint name="openarmx_right_joint1" value="0"/>
+        <joint name="openarmx_right_joint2" value="0"/>
+        <joint name="openarmx_right_joint3" value="0"/>
+        <joint name="openarmx_right_joint4" value="1.8"/>
+        <joint name="openarmx_right_joint5" value="0"/>
+        <joint name="openarmx_right_joint6" value="0"/>
+        <joint name="openarmx_right_joint7" value="0"/>
+    </group_state>
+    <!-- 7-DOF arm groups (no lift) -->
+    <group_state name="home" group="left_arm">
+        <joint name="openarmx_left_joint1" value="0"/>
+        <joint name="openarmx_left_joint2" value="0"/>
+        <joint name="openarmx_left_joint3" value="0"/>
+        <joint name="openarmx_left_joint4" value="0"/>
+        <joint name="openarmx_left_joint5" value="0"/>
+        <joint name="openarmx_left_joint6" value="0"/>
+        <joint name="openarmx_left_joint7" value="0"/>
+    </group_state>
+    <group_state name="home" group="right_arm">
+        <joint name="openarmx_right_joint1" value="0"/>
+        <joint name="openarmx_right_joint2" value="0"/>
+        <joint name="openarmx_right_joint3" value="0"/>
+        <joint name="openarmx_right_joint4" value="0"/>
+        <joint name="openarmx_right_joint5" value="0"/>
+        <joint name="openarmx_right_joint6" value="0"/>
+        <joint name="openarmx_right_joint7" value="0"/>
+    </group_state>
+    <group_state name="hands_up" group="left_arm">
+        <joint name="openarmx_left_joint1" value="0"/>
+        <joint name="openarmx_left_joint2" value="0"/>
+        <joint name="openarmx_left_joint3" value="0"/>
+        <joint name="openarmx_left_joint4" value="1.8"/>
+        <joint name="openarmx_left_joint5" value="0"/>
+        <joint name="openarmx_left_joint6" value="0"/>
+        <joint name="openarmx_left_joint7" value="0"/>
+    </group_state>
+    <group_state name="hands_up" group="right_arm">
+        <joint name="openarmx_right_joint1" value="0"/>
+        <joint name="openarmx_right_joint2" value="0"/>
+        <joint name="openarmx_right_joint3" value="0"/>
+        <joint name="openarmx_right_joint4" value="1.8"/>
+        <joint name="openarmx_right_joint5" value="0"/>
+        <joint name="openarmx_right_joint6" value="0"/>
+        <joint name="openarmx_right_joint7" value="0"/>
+    </group_state>
+    <group_state name="closed" group="left_gripper">
+        <joint name="openarmx_left_finger_joint1" value="0"/>
+    </group_state>
+    <group_state name="closed" group="right_gripper">
+        <joint name="openarmx_right_finger_joint1" value="0"/>
+    </group_state>
+    <group_state name="half_closed" group="left_gripper">
+        <joint name="openarmx_left_finger_joint1" value="0.022"/>
+    </group_state>
+    <group_state name="half_closed" group="right_gripper">
+        <joint name="openarmx_right_finger_joint1" value="0.022"/>
+    </group_state>
+    <group_state name="open" group="left_gripper">
+        <joint name="openarmx_left_finger_joint1" value="0.044"/>
+    </group_state>
+    <group_state name="open" group="right_gripper">
+        <joint name="openarmx_right_finger_joint1" value="0.044"/>
+    </group_state>
+
+    <!-- =========================================================
+         END EFFECTORS
+         ========================================================= -->
+    <end_effector name="left_ee" parent_link="openarmx_left_hand" group="left_gripper" parent_group="left_whole_body"/>
+    <end_effector name="right_ee" parent_link="openarmx_right_hand" group="right_gripper" parent_group="right_whole_body"/>
+
+    <!-- =========================================================
+         PASSIVE JOINTS (mimic finger, not planned directly)
+         ========================================================= -->
+    <passive_joint name="openarmx_left_finger_joint2"/>
+    <passive_joint name="openarmx_right_finger_joint2"/>
+
+    <!-- =========================================================
+         DISABLE COLLISIONS
+         Only directly-connected (always touching) link pairs are
+         disabled. Everything else (chassis, lift column, wheels,
+         head, cross-arm, arm-vs-chassis) remains checked so that
+         planning respects the full lift and chassis collisions.
+         ========================================================= -->
+
+    <!-- Chassis / swerve base adjacent pairs -->
+    <disable_collisions link1="base_link" link2="base_footprint" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="fl_steering_link" reason="Adjacent"/>
+    <disable_collisions link1="fl_steering_link" link2="fl_wheel_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="fl_wheel_link" reason="Never"/>
+    <disable_collisions link1="base_link" link2="fr_steering_link" reason="Adjacent"/>
+    <disable_collisions link1="fr_steering_link" link2="fr_wheel_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="fr_wheel_link" reason="Never"/>
+    <disable_collisions link1="base_link" link2="bl_steering_link" reason="Adjacent"/>
+    <disable_collisions link1="bl_steering_link" link2="bl_wheel_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="bl_wheel_link" reason="Never"/>
+    <disable_collisions link1="base_link" link2="br_steering_link" reason="Adjacent"/>
+    <disable_collisions link1="br_steering_link" link2="br_wheel_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="br_wheel_link" reason="Never"/>
+    <disable_collisions link1="base_link" link2="mid360_link" reason="Adjacent"/>
+    <disable_collisions link1="mid360_link" link2="livox_frame" reason="Adjacent"/>
+    <disable_collisions link1="mid360_link" link2="imu_link" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="d435_link" reason="Adjacent"/>
+    <disable_collisions link1="d435_link" link2="camera_link" reason="Adjacent"/>
+    <disable_collisions link1="camera_link" link2="camera_depth_frame" reason="Adjacent"/>
+    <disable_collisions link1="camera_depth_frame" link2="camera_depth_optical_frame" reason="Adjacent"/>
+    <disable_collisions link1="camera_link" link2="camera_rgb_frame" reason="Adjacent"/>
+    <disable_collisions link1="camera_rgb_frame" link2="camera_rgb_optical_frame" reason="Adjacent"/>
+    <disable_collisions link1="d435_link" link2="d435_depth_frame" reason="Adjacent"/>
+    <disable_collisions link1="d435_depth_frame" link2="d435_depth_optical_frame" reason="Adjacent"/>
+    <disable_collisions link1="d435_link" link2="d435_color_frame" reason="Adjacent"/>
+    <disable_collisions link1="d435_color_frame" link2="d435_color_optical_frame" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="gps_link" reason="Adjacent"/>
+
+    <!-- Lift column + head adjacent pairs -->
+    <disable_collisions link1="base_link" link2="lift_base_link" reason="Adjacent"/>
+    <disable_collisions link1="lift_base_link" link2="lift_carriage_link" reason="Adjacent"/>
+    <disable_collisions link1="lift_carriage_link" link2="chest_link" reason="Adjacent"/>
+    <disable_collisions link1="lift_carriage_link" link2="left_link0_base" reason="Adjacent"/>
+    <disable_collisions link1="lift_carriage_link" link2="right_link0_base" reason="Adjacent"/>
+    <disable_collisions link1="lift_carriage_link" link2="head_base_link" reason="Adjacent"/>
+    <disable_collisions link1="head_base_link" link2="head_pitch_link" reason="Adjacent"/>
+    <disable_collisions link1="head_pitch_link" link2="head_yaw_link" reason="Adjacent"/>
+    <disable_collisions link1="head_base_link" link2="head_yaw_link" reason="Adjacent"/>
+    <disable_collisions link1="left_link0_base" link2="openarmx_left_link0" reason="Adjacent"/>
+    <disable_collisions link1="right_link0_base" link2="openarmx_right_link0" reason="Adjacent"/>
+
+    <!-- Left arm chain adjacent pairs -->
+    <disable_collisions link1="openarmx_left_link0" link2="openarmx_left_link1" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link1" link2="openarmx_left_link2" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link2" link2="openarmx_left_link3" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link3" link2="openarmx_left_link4" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link4" link2="openarmx_left_link4_ext" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link4" link2="openarmx_left_link5" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link5" link2="openarmx_left_link6" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link6" link2="openarmx_left_link7" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link7" link2="openarmx_left_link7_pico" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_link7" link2="openarmx_left_hand" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_hand_tcp" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_left_finger" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_right_finger" reason="Adjacent"/>
+
+    <!-- Left arm non-adjacent link overlaps (collision meshes inherently
+         intersect between non-adjacent links in the same arm chain). -->
+    <disable_collisions link1="openarmx_left_link0" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link0" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link0" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link1" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link1" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link1" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link1" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link2" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link2" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link2" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link2" link2="openarmx_left_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link3" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link3" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link3" link2="openarmx_left_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link4" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link4" link2="openarmx_left_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link5" link2="openarmx_left_link7" reason="Never"/>
+
+    <!-- Left hand mesh overlaps proximal arm links -->
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_left_link7" reason="Never"/>
+
+    <!-- Left finger mesh overlaps proximal arm links -->
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_left_left_finger" link2="openarmx_left_right_finger" reason="Default"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_left_right_finger" link2="openarmx_left_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_left_link6" link2="openarmx_left_right_finger" reason="Never"/>
+
+    <!-- Left hand overlaps with right right_finger in zero pose (bimanual
+         arms face inward, the mesh intersection is inherent). -->
+    <disable_collisions link1="openarmx_left_hand" link2="openarmx_right_right_finger" reason="Never"/>
+
+    <!-- Right arm chain adjacent pairs -->
+    <disable_collisions link1="openarmx_right_link0" link2="openarmx_right_link1" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link1" link2="openarmx_right_link2" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link2" link2="openarmx_right_link3" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link3" link2="openarmx_right_link4" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link4" link2="openarmx_right_link4_ext" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link4" link2="openarmx_right_link5" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link5" link2="openarmx_right_link6" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link6" link2="openarmx_right_link7" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link7" link2="openarmx_right_link7_pico" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_link7" link2="openarmx_right_hand" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_hand_tcp" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_left_finger" reason="Adjacent"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_right_finger" reason="Adjacent"/>
+
+    <!-- Right arm non-adjacent link overlaps (collision meshes inherently
+         intersect between non-adjacent links in the same arm chain). -->
+    <disable_collisions link1="openarmx_right_link0" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link0" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link0" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link1" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link1" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link1" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link1" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link2" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link2" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link2" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link2" link2="openarmx_right_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link3" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link3" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link3" link2="openarmx_right_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link4" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link4" link2="openarmx_right_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link5" link2="openarmx_right_link7" reason="Never"/>
+
+    <!-- Right hand mesh overlaps proximal arm links -->
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_hand" link2="openarmx_right_link7" reason="Never"/>
+
+    <!-- Right finger mesh overlaps proximal arm links -->
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_right_left_finger" link2="openarmx_right_right_finger" reason="Default"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link4" reason="Never"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link5" reason="Never"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link6" reason="Never"/>
+    <disable_collisions link1="openarmx_right_right_finger" link2="openarmx_right_link7" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link5" link2="openarmx_right_right_finger" reason="Never"/>
+    <disable_collisions link1="openarmx_right_link6" link2="openarmx_right_right_finger" reason="Never"/>
+
+    <!-- Mounts always overlap with their own arm's proximal links (like the
+         bimanual body_link0 vs link0..3). These are inherently in contact and
+         never avoidable, so they are disabled. -->
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_left_link0" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_left_link1" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_left_link0" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_left_link1" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_left_link0" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_left_link1" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_left_link2" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_left_link3" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_right_link0" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_right_link1" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="lift_carriage_link" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_right_link0" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_right_link1" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="chest_link" link2="openarmx_right_link3" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_right_link0" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_right_link1" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_right_link2" reason="Never"/>
+    <disable_collisions link1="head_base_link" link2="openarmx_right_link3" reason="Never"/>
+
+</robot>

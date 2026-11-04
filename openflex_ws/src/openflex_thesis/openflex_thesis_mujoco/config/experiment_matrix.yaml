@@ -1,0 +1,70 @@
+schema_version: 1
+project: AnyGrasp-conditioned_TC-WAM_ACT_local_alignment
+
+# Every result row must retain these labels. Oracle/mock rows are engineering
+# validation and ablations, never substitutes for rendered perception or hardware.
+required_labels:
+  - perception_backend
+  - feasibility_backend
+  - local_policy
+  - object_condition
+  - random_seed
+  - evidence_class
+
+stages:
+  - id: S0_interfaces
+    perception_backend: mujoco_oracle
+    feasibility_backend: synthetic_mock
+    local_policy: scripted_proportional
+    evidence_class: engineering_smoke_only
+    repetitions: 10
+
+  - id: S1_tc_wam_moveit
+    perception_backend: mujoco_oracle
+    feasibility_backend: moveit_ik_collision
+    local_policy: scripted_proportional
+    evidence_class: digital_control_experiment
+    repetitions: 30
+
+  - id: S2_act_nominal
+    perception_backend: mujoco_oracle
+    feasibility_backend: moveit_ik_collision
+    local_policy: act_base_only
+    object_condition: nominal
+    evidence_class: digital_policy_experiment
+    repetitions: 50
+
+  - id: S3_act_relocation
+    perception_backend: mujoco_oracle
+    feasibility_backend: moveit_ik_collision
+    local_policy: act_base_only
+    object_condition: randomized_relocation
+    evidence_class: digital_policy_experiment
+    repetitions: 50
+
+  - id: S4_occlusion
+    perception_backend: rendered_pointcloud_anygrasp
+    feasibility_backend: moveit_ik_collision
+    local_policy: act_base_only
+    object_condition: partial_occlusion
+    evidence_class: digital_perception_experiment
+    repetitions: 50
+
+metrics:
+  primary:
+    - task_success
+    - grasp_success
+    - ready_region_entry_success
+    - local_alignment_time_sec
+    - local_path_length_m
+  tc_wam:
+    - selected_total_score
+    - selected_reachability
+    - selected_joint_margin
+    - selected_robustness
+    - ready_region_area_m2
+  safety:
+    - nav_act_overlap_count
+    - base_moveit_overlap_count
+    - stale_contract_abort_count
+

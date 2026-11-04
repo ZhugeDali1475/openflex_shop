@@ -1,0 +1,23 @@
+frames:
+  global_navigation: map
+  local_continuous: odom
+  robot_body: base_link
+  object_memory: map
+  tc_wam_candidates: map
+  policy_target_and_velocity: base_link
+  left_tcp: openarmx_left_hand_tcp   # VERIFY against the deployed integrated SRDF/URDF
+  right_tcp: openarmx_right_hand_tcp  # VERIFY against the deployed integrated SRDF/URDF
+
+tf_ownership:
+  map_to_odom: localization_or_nav_stack_only
+  odom_to_base_link: safe_odom_mux_only
+  robot_links: robot_state_publisher_only
+  forbidden:
+    - fixed_world_to_base_link_during_navigation
+    - second_odom_to_base_link_publisher
+
+rules:
+  global_map_pose_is_not_direct_act_input: true
+  measured_velocity_source: /swerve_drive_controller/odom
+  commanded_velocity_is_not_observation: true
+  tc_wam_map_version_must_match_object_memory: true

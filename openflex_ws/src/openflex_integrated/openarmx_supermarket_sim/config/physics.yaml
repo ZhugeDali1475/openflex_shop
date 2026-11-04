@@ -1,0 +1,18 @@
+openarmx_supermarket_physics:
+  ros__parameters:
+    combined_model_path: /tmp/openarmx_supermarket_competition.xml
+    timestep_sec: 0.005
+    real_time_factor: 1.0
+    state_rate_hz: 50.0
+    camera_rate_hz: 5.0
+    image_width: 320
+    image_height: 240
+    publish_rgbd: true
+    enable_viewer: false
+    initial_base_pose: [0.0, -3.50, 1.57079632679]
+    cmd_vel_topic: /cmd_vel
+    command_timeout_sec: 0.30
+    max_linear_mps: 0.50
+    max_angular_rps: 0.80
+    grasp_attach_distance_m: 0.14
+    collision_debounce_sec: 0.50

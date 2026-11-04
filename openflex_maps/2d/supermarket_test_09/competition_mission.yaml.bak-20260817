@@ -1,0 +1,103 @@
+schema_version: 2
+map_name: supermarket_test_09
+stations:
+- id: START
+  label: START
+  role: start_position
+  pose:
+    x: -0.118
+    y: 0.051
+    yaw: 1.5603243512829308
+  action:
+    fine_align:
+      enabled: false
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: SHELF-A
+  label: A
+  role: shelf_approach
+  pose:
+    x: 1.945
+    y: 1.323
+    yaw: 3.141592653589793
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.1
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: JIAOFU
+  label: B
+  role: delivery_table
+  pose:
+    x: 2.227
+    y: 0.331
+    yaw: -1.5707963267948966
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: jiaofu2
+  label: C
+  role: delivery_table
+  pose:
+    x: -2.256
+    y: 0.194
+    yaw: -1.603957582582789
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.05
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: jiaofu3
+  label: D
+  role: delivery_table
+  pose:
+    x: -2.232
+    y: 0.005
+    yaw: -1.5533430342749532
+  action:
+    fine_align:
+      enabled: false
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance_m: 0.15
+      speed_mps: 0.04

@@ -1,0 +1,100 @@
+# Target schema for the OpenFlex LeRobot bridge. The bridge must implement the
+# TC-WAM binding and PolicyControl checks before this can be frozen.
+schema_name: openflex_thesis_m2_base_twist_v2
+version: 2
+requires_bridge_patch: true
+
+observations:
+  chassis:
+    lio_pose:
+      enabled: true
+      topic: /fastlio2/lio_odom
+      relative: episode
+      reset_on_policy_control: true
+      fields: {x: true, y: true, theta: true}
+    measured_velocity:
+      enabled: true
+      topic: /swerve_drive_controller/odom
+      frame: base_link
+      fields: {vx: true, vy: true, wz: true}
+    map_pose: {enabled: false}
+    commanded_velocity_as_observation: false
+    imu: {enabled: false}
+  arms:
+    left: {enabled: false, positions: false}
+    right: {enabled: false, positions: false}
+  grippers:
+    left: {enabled: false, position: false}
+    right: {enabled: false, position: false}
+  head: {enabled: false, positions: false}
+  lift: {enabled: false, position: false, velocity: false}
+  cameras:
+    active_wrist: {enabled: true, rgb: true, depth: false}
+    head: {enabled: true, rgb: true, depth: false}
+    base: {enabled: false, rgb: false, depth: false}
+  tc_wam:
+    enabled: true
+    topic: /thesis/tc_wam/state
+    dimension: 18
+    require_valid: true
+    require_physical_evaluation: true
+    require_matching_policy_map_version: true
+    require_exact_ready_binding: true
+    binding_fields:
+      - object_id
+      - map_version
+      - active_arm
+      - selected_grasp_id
+      - selected_lift_position
+      - planning_group
+      - ready_region_id
+    fields:
+      - target_dx
+      - target_dy
+      - target_z
+      - sin_target_dyaw
+      - cos_target_dyaw
+      - preferred_base_dx
+      - preferred_base_dy
+      - sin_preferred_base_dyaw
+      - cos_preferred_base_dyaw
+      - current_score
+      - best_score
+      - reachability
+      - joint_margin
+      - robustness
+      - grasp_quality
+      - selected_lift_position
+      - ready_distance
+      - ready
+  policy_control:
+    topic: /thesis/act/policy_control
+    require_action_space: BASE_TWIST
+    clear_action_chunk_when_disabled: true
+    fail_closed: true
+
+actions:
+  chassis:
+    velocity:
+      enabled: true
+      source_topic: /thesis/teacher_cmd_vel
+      command_topic: /thesis/act_cmd_vel
+      frame: base_link
+      fields: {vx: true, vy: true, wz: true}
+  arms:
+    left: {enabled: false, positions: false}
+    right: {enabled: false, positions: false}
+  grippers:
+    left: {enabled: false, position: false}
+    right: {enabled: false, position: false}
+  head: {enabled: false, positions: false}
+  lift: {enabled: false, position: false, velocity: false}
+
+expected_dimensions:
+  numeric_observation: 24
+  action: 3
+
+hardware_ownership:
+  nav2: base_during_global_navigation
+  act: base_during_local_alignment
+  moveit: lift_active_arm_and_gripper_with_base_locked

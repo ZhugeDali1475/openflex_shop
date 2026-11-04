@@ -1,0 +1,19 @@
+# Contract between the local-pick supervisor and the ACT inference process.
+std_msgs/Header header
+bool enabled
+bool reset_episode
+uint64 episode_id
+string object_id
+string policy_variant
+uint32 map_version
+uint8 action_space
+uint8 BASE_TWIST=1
+uint8 active_arm
+uint32 selected_grasp_id
+float32 selected_lift_position
+string planning_group
+geometry_msgs/PoseStamped episode_origin
+geometry_msgs/PoseStamped target_base_pose
+ReadyRegion ready_region
+float32[] affordance_context
+string reason

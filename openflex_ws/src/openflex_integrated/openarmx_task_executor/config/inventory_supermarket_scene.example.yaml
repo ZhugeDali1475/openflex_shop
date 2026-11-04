@@ -1,0 +1,13 @@
+# Merge this mapping under the `competition:` root of the competition profile
+# used for the current field.  The station IDs below are placeholders: replace
+# them with the Nav2/docking stations measured against the same map frame as
+# supermarket_scene.  Do not enable this fragment before that registration.
+inventory:
+  enabled: true
+  database_path: /home/openflex/openflex_shop/supermarket_scene/shelf_inventory.db
+  default_destination_station: delivery_counter
+  prefer_inventory: true
+  shelf_face_stations:
+    "1:0": REPLACE_WITH_MEASURED_SHELF_1_FACE_0_STATION
+    # "1:1": REPLACE_WITH_MEASURED_SHELF_1_FACE_1_STATION
+    # "2:0": REPLACE_WITH_MEASURED_SHELF_2_FACE_0_STATION

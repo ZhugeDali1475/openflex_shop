@@ -1,0 +1,47 @@
+gates:
+  G0_static_model:
+    requirement: Integrated URDF, joint order, zero position and TCP match the real robot.
+    evidence: [joint_overlay_screenshot, tcp_pose_measurements, calibration_log]
+    pass: false
+
+  G1_fixed_grasp:
+    requirement: Fixed base and target; MoveIt jointly executes lift plus active arm, gripper, attach and transport pose repeatably.
+    suggested_threshold: at_least_8_of_10_without_collision
+    pass: false
+
+  G2_moveit_evaluator:
+    requirement: Physical coarse AnyGrasp and MoveIt return real (base, lift-arm solution, grasp) evaluations with shelf collision objects.
+    evidence: [physical_perception_true_log, physical_evaluation_true_log, planning_scene_screenshot]
+    pass: false
+
+  G3_tcwam_calibration:
+    requirement: Single-(lift solution, grasp)-bound ready sets are valid and high/middle/low score bands show monotonic empirical grasp performance.
+    evidence: [frozen_manifest, real_trial_logs, correlation_report]
+    pass: false
+
+  G4_local_controller:
+    requirement: A proportional teacher reaches the ready region through the same velocity arbiter.
+    pass: false
+
+  G5_act_pilot:
+    requirement: Record, train, replay and real inference work with the frozen 24-D observation and 3-D base-twist schema; ACT has no manipulation command path.
+    evidence: [dataset_manifest, checkpoint_config, ten_consecutive_inference_logs]
+    pass: false
+
+  G6_dynamic_recovery:
+    requirement: Movement, occlusion or refined-grasp unreachability stop safely and trigger bounded local TC-WAM recomputation.
+    pass: false
+
+  G7_end_to_end:
+    requirement: Nav2-coarse AnyGrasp-TC-WAM-ACT-refined AnyGrasp-MoveIt-transport-fixed-place completes with phase evidence.
+    pass: false
+
+ordering:
+  - G0_static_model
+  - G1_fixed_grasp
+  - G2_moveit_evaluator
+  - G3_tcwam_calibration
+  - G4_local_controller
+  - G5_act_pilot
+  - G6_dynamic_recovery
+  - G7_end_to_end

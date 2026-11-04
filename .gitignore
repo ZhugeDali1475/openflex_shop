@@ -1,0 +1,47 @@
+# Task-local environments and caches
+.venvs/
+.local-uv
+.vscode/
+.agents/
+.codex/
+.claude/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+
+# Local runtime dependencies
+/local_dependencies/
+/openflex_ws/local_dependencies/
+
+# Large model weights and datasets
+/openflex_models/
+
+# ROS/colcon build products
+/openflex_ws/build/
+/openflex_ws/build_*/
+/openflex_ws/install/
+/openflex_ws/install_*/
+/openflex_ws/log/
+/openflex_ws/log_*/
+/openflex_ws/src/**/build/
+/openflex_ws/src/**/install/
+/openflex_ws/src/**/log/
+
+# Logs and temporary runtime output
+*.log
+**/MUJOCO_LOG.TXT
+
+# Environment-specific secrets
+.env
+.env.*
+!.env.example
+
+# supermarket_scene local environment and generated data
+supermarket_scene/.venv/
+supermarket_scene/web/node_modules/
+supermarket_scene/web/dist/
+supermarket_scene/web/.vite/
+supermarket_scene/data/
+supermarket_scene/vision/output/
+supermarket_scene/vision/models/
+supermarket_scene/vision/config.local.yaml

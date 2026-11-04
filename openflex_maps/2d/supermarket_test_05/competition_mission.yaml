@@ -1,0 +1,52 @@
+schema_version: 1
+map_name: supermarket_test_05
+stations:
+- id: START
+  label: 起点-红框
+  role: start_position
+  pose:
+    x: -2.236
+    y: -1.138
+    yaw: 0.0
+- id: SHELF1
+  label: 红线1-安全中心
+  role: shelf_approach
+  pose:
+    x: -1.212
+    y: -0.721
+    yaw: 1.5707963267948966
+- id: SHELF2
+  label: 红线2-安全中心
+  role: shelf_approach
+  pose:
+    x: 0.438
+    y: -0.271
+    yaw: 1.571
+- id: SHELF3
+  label: 红线3-下中
+  role: shelf_approach
+  pose:
+    x: -0.501
+    y: -2.158
+    yaw: -1.571
+- id: RETURN
+  label: 返回红框起点
+  role: return_position
+  pose:
+    x: -2.434
+    y: -1.172
+    yaw: 0.0
+- id: SHELF4
+  label: 货架接近点4
+  role: delivery_table
+  pose:
+    x: -2.04
+    y: -2.286
+    yaw: 0.0
+- id: '0'
+  label: '0'
+  role: waypoint
+  pose:
+    x: -1.024
+    y: -1.484
+    yaw: 0.8115781021773633

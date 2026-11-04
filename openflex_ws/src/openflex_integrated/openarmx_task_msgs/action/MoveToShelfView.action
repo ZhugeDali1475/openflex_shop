@@ -1,0 +1,37 @@
+# Competition-level shelf observation request after Nav2 and shelf fine-align.
+uint8 LEFT=0
+uint8 RIGHT=1
+uint8 BOTH=2
+uint8 AUTO=255
+
+string station_id
+int32 shelf_level
+uint8 arm
+
+# Normally false: station_config level_lift_positions supplies the measured
+# lift_joint for this shelf level.  True is for first-time calibration tests.
+bool use_explicit_lift_position
+float64 lift_position
+
+# Optional explicit arm target. Empty uses the station database's calibrated
+# per-level taught posture for the selected arm or arms.
+string[] joint_names
+float64[] joint_positions
+
+float64 velocity_scale
+float64 acceleration_scale
+# Retained for API compatibility. Direct taught-posture execution does not plan.
+float64 planning_timeout_sec
+float32 timeout_sec
+bool execute
+---
+bool success
+uint16 error_code
+float64 lift_position
+string[] joint_names
+float64[] joint_positions
+string message
+---
+string phase
+float64 lift_position
+float64 base_linear_speed

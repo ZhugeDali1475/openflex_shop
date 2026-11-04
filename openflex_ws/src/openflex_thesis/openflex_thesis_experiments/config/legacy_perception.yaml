@@ -1,0 +1,10 @@
+# The former AnyGrasp thesis backend was intentionally removed from this
+# workspace.  Keep this fail-closed marker so historical evidence tooling does
+# not mistake a missing backend for a successful physical perception check.
+perception:
+  backend: unavailable
+  physical_candidates_available: false
+  detail: >-
+    Legacy thesis perception is not installed and is not part of the OpenFlex
+    supermarket competition chain. Use the competition Detect/Pick interfaces
+    after their GraspNetBaseline integration has passed its own gates.

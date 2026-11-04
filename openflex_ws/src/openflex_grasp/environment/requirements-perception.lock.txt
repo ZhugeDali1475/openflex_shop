@@ -1,0 +1,26 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# Shared CUDA runtime. The Qwen+SAM2 worker runs both models in BF16.
+torch==2.7.1+cu126
+torchvision==0.22.1+cu126
+
+# Qwen3.5 support first appears after the model's 4.57.0.dev0 export.
+# 5.15.0 is the verified stable release containing both qwen3_5 and sam2.
+transformers==5.15.0
+accelerate==1.14.0
+huggingface-hub==1.27.0
+tokenizers==0.22.2
+safetensors==0.8.0
+
+# Keep NumPy 1.x for ROS/OpenCV and migrated scientific-code compatibility.
+numpy==1.26.4
+Pillow==12.3.0
+PyYAML==6.0.3
+opencv-python-headless==4.11.0.86
+packaging==26.3
+regex==2026.7.19
+tqdm==4.70.0
+
+# Required by ROS Humble generate-parameter-library-py exposed through the
+# system-site bridge used by the perception worker. Match Ubuntu 22.04.
+typeguard==2.2.2

@@ -1,0 +1,37 @@
+station_id: SHELF_TABLE_APPROACH
+shelf_id: null
+face: null
+level: 2
+purpose: 第二层预抓取姿态
+pose_type: pregrasp
+planning_group: right_arm_with_lift
+base_motion_included: false
+
+topics:
+  joint_states: /joint_states
+  odometry: /odom_safe
+  right_color_image: /camera/right_camera/color/image_raw
+  right_color_compressed_image: /camera/right_camera/color/image_raw/compressed
+  right_color_camera_info: /camera/right_camera/color/camera_info
+
+frames:
+  base: base_link
+  camera_optical: right_camera_color_optical_frame
+
+joint_position_rad_or_m:
+  lift_joint: 0.1066645
+  openarmx_right_joint1: -1.0466848611831665
+  openarmx_right_joint2: 0.33853742480278015
+  openarmx_right_joint3: -0.34889495372772217
+  openarmx_right_joint4: 1.770176649093628
+  openarmx_right_joint5: 0.12601648271083832
+  openarmx_right_joint6: -0.216932475566864
+  openarmx_right_joint7: 0.8778956532478333
+
+capture:
+  joint_states_ros_stamp: 1785937687.690341888
+  odom_ros_stamp: 1785937690.131411198
+  camera_info_ros_stamp: 1785937691.546357178
+  image_ros_stamp: 1785937826.566243896
+  image_size: 480x270
+  image_encoding: jpeg

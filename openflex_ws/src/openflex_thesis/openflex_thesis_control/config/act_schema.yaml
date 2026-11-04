@@ -1,0 +1,77 @@
+schema_name: openflex_thesis_anygrasp_tcwam_base_act_v2
+schema_version: 2
+frozen: false  # Freeze only after pilot record -> train -> replay -> robot inference succeeds.
+
+scope:
+  task: local_base_alignment_to_grasp_conditioned_ready_region
+  base_frame_for_velocity: base_link
+  local_episode_frame: reset_at_nav2_act_handover
+  active_arm: selected_by_mission
+  lift_arm_gripper_owner: moveit_only
+  act_may_command_lift_arm_or_gripper: false
+
+# The policy receives only state needed for local base alignment. The selected
+# grasp/lift/group/ready identifiers below are fail-closed metadata and are not
+# normalized as numeric policy features.
+numeric_observation:
+  dimension: 24
+  blocks:
+    - name: episode_base_state
+      dimension: 6
+      order: [x_e, y_e, yaw_e, vx_measured, vy_measured, wz_measured]
+    - name: grasp_conditioned_tc_wam_state
+      dimension: 18
+      order:
+        - target_dx
+        - target_dy
+        - target_z
+        - sin_target_dyaw
+        - cos_target_dyaw
+        - preferred_base_dx
+        - preferred_base_dy
+        - sin_preferred_base_dyaw
+        - cos_preferred_base_dyaw
+        - current_score
+        - best_score
+        - reachability
+        - joint_margin
+        - robustness
+        - grasp_quality
+        - selected_lift_position
+        - ready_distance
+        - ready
+
+binding_metadata:
+  required:
+    - object_id
+    - map_version
+    - active_arm
+    - selected_grasp_id
+    - selected_lift_position
+    - planning_group
+    - ready_region_id
+  invariant: ready_region_contains_only_one_grasp_lift_planning_group_binding
+
+images:
+  required: [head_rgb, active_wrist_rgb]
+  optional: []
+
+action:
+  dimension: 3
+  semantics: body_twist_only
+  frame_id: base_link
+  order: [base_vx, base_vy, base_wz]
+  policy_output_topic: /thesis/act_cmd_vel
+
+compatibility:
+  old_14_state_32_action_checkpoint: false
+  old_29_state_11_action_checkpoint: false
+  reason: Historical policies command arm/gripper or base paths; the final policy commands only instantaneous base twist.
+
+safety:
+  nav2_and_act_may_own_base_simultaneously: false
+  moveit_requires_base_lock_and_measured_stop: true
+  act_and_moveit_action_chunks_may_overlap: false
+  act_may_publish_arm_lift_or_gripper_commands: false
+  stale_or_mismatched_binding_disables_policy: true
+  selected_base_velocity_must_enter_collision_monitor: true

@@ -1,0 +1,41 @@
+# Deprecated calibration fallback only. The final runtime obtains coarse and
+# refined poses from AnyGrasp and does not select a template_set. Keep disabled
+# unless a fixed-grasp hardware gate explicitly needs a reproducible pose.
+enabled_for_runtime: false
+template_sets:
+  right_fixed_calibration_v2:
+    active_arm: 2
+    planning_group: right_arm_with_lift
+    ik_link: openarmx_right_hand_tcp
+    joint_names:
+      - lift_joint
+      - openarmx_right_joint1
+      - openarmx_right_joint2
+      - openarmx_right_joint3
+      - openarmx_right_joint4
+      - openarmx_right_joint5
+      - openarmx_right_joint6
+      - openarmx_right_joint7
+    templates:
+      - name: frontal_calibration_only
+        pregrasp_position: [-0.16, 0.00, 0.00]  # CALIBRATE
+        grasp_position: [-0.02, 0.00, 0.00]     # CALIBRATE
+        orientation_xyzw: [0.0, 0.7071068, 0.0, 0.7071068]  # CALIBRATE
+  left_fixed_calibration_v2:
+    active_arm: 1
+    planning_group: left_arm_with_lift
+    ik_link: openarmx_left_hand_tcp
+    joint_names:
+      - lift_joint
+      - openarmx_left_joint1
+      - openarmx_left_joint2
+      - openarmx_left_joint3
+      - openarmx_left_joint4
+      - openarmx_left_joint5
+      - openarmx_left_joint6
+      - openarmx_left_joint7
+    templates:
+      - name: frontal_calibration_only
+        pregrasp_position: [-0.16, 0.00, 0.00]  # CALIBRATE
+        grasp_position: [-0.02, 0.00, 0.00]     # CALIBRATE
+        orientation_xyzw: [0.0, 0.7071068, 0.0, 0.7071068]  # CALIBRATE

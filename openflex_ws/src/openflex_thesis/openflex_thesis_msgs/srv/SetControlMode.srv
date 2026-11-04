@@ -1,0 +1,8 @@
+uint8 requested_mode
+string requester
+string reason
+---
+bool accepted
+uint8 current_mode
+uint32 epoch
+string message

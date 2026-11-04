@@ -1,0 +1,21 @@
+# MoveIt exclusively owns lift_joint + active arm + gripper while the base is locked.
+ObjectMemory target
+ManipulationPlan coarse_plan
+GraspCandidateArray refined_grasps
+uint8 active_arm
+bool require_physical_perception
+float32 timeout_sec
+---
+bool success
+bool reposition_required
+bool grasp_verified
+bool transport_safe
+uint32 executed_grasp_id
+float32 executed_lift_position
+uint16 error_code
+string message
+---
+string phase
+uint32 tested_grasps
+uint32 active_grasp_id
+float32 elapsed_sec

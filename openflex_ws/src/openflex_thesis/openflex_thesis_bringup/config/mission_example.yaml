@@ -1,0 +1,17 @@
+task_id: thesis_demo_001
+object_id: thesis_item_01
+active_arm: right
+policy_variant: tc_wam_ready_region_act
+coarse_top_k: 5
+refined_top_k: 5
+max_recovery_attempts: 2
+
+pickup_observation_pose:
+  frame_id: map
+  position: [0.0, 0.0, 0.0]  # CALIBRATE
+  orientation_xyzw: [0.0, 0.0, 0.0, 1.0]  # CALIBRATE
+
+delivery_pose:
+  frame_id: map
+  position: [0.0, 0.0, 0.0]  # CALIBRATE
+  orientation_xyzw: [0.0, 0.0, 0.0, 1.0]  # CALIBRATE

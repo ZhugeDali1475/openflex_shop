@@ -1,0 +1,22 @@
+# Low-speed final alignment after Nav2 reaches a shelf approach waypoint.
+string station_id
+float32 target_clearance
+float32 clearance_tolerance
+float32 target_map_yaw
+float32 yaw_tolerance
+float32 timeout_sec
+# Acquire and filter the two front-surface returns without publishing motion.
+bool measure_only
+# Correct only the shelf-facing yaw while preserving the current clearance.
+bool yaw_only
+---
+bool success
+uint16 error_code
+float32 final_clearance
+float32 final_yaw_error
+string message
+---
+string phase
+float32 measured_clearance
+float32 yaw_error
+uint32 stable_samples

@@ -1,0 +1,25 @@
+robot_id: openflex-GEM12
+cameras:
+  left_wrist:
+    serial: "260322276903"
+  right_wrist:
+    serial: "260322275347"
+transforms:
+  - name: left_wrist_hand_eye
+    side: left
+    parent_frame: openarmx_left_link7
+    child_frame: left_camera_color_optical_frame
+    translation_xyz: [0.0867875564095, -0.00526285620647, 0.0774593627775]
+    rotation_rpy: [-0.546906974992, -0.074600008057, 1.511659118317]
+  - name: right_wrist_hand_eye
+    side: right
+    parent_frame: openarmx_right_link7
+    child_frame: right_camera_color_optical_frame
+    translation_xyz: [0.0764982432153, -0.0131550578687, 0.107998122174]
+    rotation_rpy: [-0.672621172606, -0.041024962340, 1.519516837631]
+  - name: right_camera_depth_to_color
+    side: right
+    parent_frame: right_camera_color_optical_frame
+    child_frame: right_camera_depth_optical_frame
+    translation_xyz: [-0.0000075453131, 0.0000100000007, 0.0000100000007]
+    rotation_rpy: [0.000492889571, 0.004222024393, -0.004425204325]

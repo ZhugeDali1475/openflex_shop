@@ -1,0 +1,106 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+      Splitter Ratio: 0.5
+    Tree Height: 500
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+  - Class: rviz_common/Time
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Reference Frame: <Fixed Frame>
+      Plane: XY
+      Plane Cell Count: 10
+      Cell Size: 1
+      Color: 160; 160; 164
+      Alpha: 0.5
+      Line Style:
+        Value: Lines
+        Line Width: 0.03
+      Value: true
+    - Class: openarmx_battery_monitor/BatteryOverlayDisplay
+      Name: BatteryOverlay_1
+      Enabled: true
+      Battery Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /battery_1/battery_state
+      Label: 槽1
+      Use Message Location: true
+      Hide When Offline: false
+      Margin X: 24
+      Margin Y: 20
+      Battery Width: 92
+      Battery Height: 36
+      Font Size: 16
+      Offline Timeout (s): 0.6
+      Value: true
+    - Class: openarmx_battery_monitor/BatteryOverlayDisplay
+      Name: BatteryOverlay_2
+      Enabled: true
+      Battery Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /battery_2/battery_state
+      Label: 槽2
+      Use Message Location: true
+      Hide When Offline: false
+      Margin X: 24
+      Margin Y: 92
+      Battery Width: 92
+      Battery Height: 36
+      Font Size: 16
+      Offline Timeout (s): 0.6
+      Value: true
+  Enabled: true
+  Global Options:
+    Fixed Frame: world
+    Background Color: 48; 48; 48
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 8
+      Pitch: 0.1
+      Yaw: 1.5
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Target Frame: <Fixed Frame>
+Window Geometry:
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Width: 1200
+  Height: 840
+  X: 200
+  Y: 60

@@ -1,0 +1,113 @@
+tc_wam_server:
+  ros__parameters:
+    evaluator_action: /thesis/evaluate_candidates
+    compute_action: /thesis/compute_tc_wam
+    base_frame: base_link
+    scored_topic: /thesis/tc_wam/candidates
+    grid_topic: /thesis/tc_wam/score_grid
+    marker_topic: /thesis/tc_wam/markers
+    best_pose_topic: /thesis/tc_wam/best_pose
+    state_topic: /thesis/tc_wam/state
+    grid_resolution: 0.05
+    distance_min_m: 0.60
+    distance_max_m: 1.00
+    distance_step_m: 0.10
+    lateral_min_m: -0.30
+    lateral_max_m: 0.30
+    lateral_step_m: 0.10
+    # Each base cell is crossed with AnyGrasp Top-K and lift IK seed strata.
+    yaw_offsets_rad: [0.0]
+    lift_seed_positions_m: [-0.45, -0.15, 0.15]
+    left_planning_group: left_arm_with_lift
+    right_planning_group: right_arm_with_lift
+    left_ik_link: openarmx_left_hand_tcp
+    right_ik_link: openarmx_right_hand_tcp
+    reachability_threshold: 0.34
+    ready_absolute_threshold: 0.65
+    ready_relative_ratio: 0.90
+    ready_neighbor_distance_m: 0.11
+    ready_neighbor_yaw_rad: 0.20
+    ready_lift_tolerance_m: 0.02
+    ready_distance_tolerance_m: 0.12
+    ready_yaw_tolerance_rad: 0.18
+    maximum_local_move_m: 1.25
+    weight_reachability: 0.22
+    weight_joint_margin: 0.18
+    weight_robustness: 0.25
+    weight_grasp_quality: 0.15
+    weight_visibility: 0.10
+    weight_move: 0.10
+    require_navigation_gate: false
+    evaluator_wait_timeout_sec: 5.0
+    state_publish_rate_hz: 20.0
+
+anygrasp_gateway:
+  ros__parameters:
+    action_name: /thesis/generate_grasps
+    request_topic: /thesis/anygrasp/request
+    response_topic: /thesis/anygrasp/candidates
+    default_timeout_sec: 8.0
+
+mock_anygrasp:
+  ros__parameters:
+    action_name: /thesis/generate_grasps
+    allow_mock: false
+
+object_memory:
+  ros__parameters:
+    observation_topic: /thesis/object_observation
+    memory_topic: /thesis/object_memory
+    freshness_tau_sec: 2.0
+    lost_timeout_sec: 1.0
+    min_confidence: 0.50
+    translation_move_threshold_m: 0.05
+    yaw_move_threshold_rad: 0.15
+    move_confirm_frames: 3
+
+object_observation_adapter:
+  ros__parameters:
+    # DREAM currently has no native OpenFlex ObjectObservation publisher. Point
+    # this at its exported active-object PoseStamped, or remap another detector.
+    pose_topic: /dream/active_object_pose
+    pose_covariance_topic: ""
+    confidence_topic: ""
+    output_topic: /thesis/object_observation
+    output_frame: map
+    expected_source_frame: ""
+    object_id: thesis_item_01
+    source_name: dream_pose_adapter
+    fixed_confidence: 0.90
+    confidence_timeout_sec: 0.50
+    max_pose_age_sec: 0.50
+    tf_timeout_sec: 0.25
+    position_variance: 0.0004
+    yaw_variance: 0.0025
+    allow_zero_stamp: false
+
+manual_object_source:
+  ros__parameters:
+    frame_id: map
+    object_id: thesis_item_01
+    position: [1.20, 0.00, 0.85]
+    yaw_rad: 3.141592653589793
+    confidence: 0.95
+    publish_rate_hz: 5.0
+
+mock_evaluator:
+  ros__parameters:
+    allow_mock: false
+    ideal_distance_m: 0.75
+    distance_half_width_m: 0.35
+    maximum_lateral_m: 0.45
+
+auto_compute:
+  ros__parameters:
+    memory_topic: /thesis/object_memory
+    anygrasp_action: /thesis/generate_grasps
+    compute_action: /thesis/compute_tc_wam
+    active_arm: 2
+    top_k: 3
+    evaluate_robustness: true
+    require_physical_perception: true
+    require_physical_evaluation: true
+    timeout_sec: 60.0

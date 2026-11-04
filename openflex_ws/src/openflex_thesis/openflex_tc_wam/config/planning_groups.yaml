@@ -1,0 +1,32 @@
+# Mirrors openarmx_integrated_moveit_config/config/openarmx_integrated.srdf.
+# The lift and arm limits must be rechecked against the deployed URDF before
+# collecting physical thesis evidence.
+planning_groups:
+  right_arm_with_lift:
+    active_arm: 2
+    ik_link: openarmx_right_hand_tcp
+    joint_names:
+      - lift_joint
+      - openarmx_right_joint1
+      - openarmx_right_joint2
+      - openarmx_right_joint3
+      - openarmx_right_joint4
+      - openarmx_right_joint5
+      - openarmx_right_joint6
+      - openarmx_right_joint7
+    joint_lower: [-0.650, -3.14, -2.60, -3.14, -2.80, -3.14, -2.20, -3.14]
+    joint_upper: [ 0.300,  3.14,  2.60,  3.14,  2.80,  3.14,  2.20,  3.14]
+  left_arm_with_lift:
+    active_arm: 1
+    ik_link: openarmx_left_hand_tcp
+    joint_names:
+      - lift_joint
+      - openarmx_left_joint1
+      - openarmx_left_joint2
+      - openarmx_left_joint3
+      - openarmx_left_joint4
+      - openarmx_left_joint5
+      - openarmx_left_joint6
+      - openarmx_left_joint7
+    joint_lower: [-0.650, -3.14, -2.60, -3.14, -2.80, -3.14, -2.20, -3.14]
+    joint_upper: [ 0.300,  3.14,  2.60,  3.14,  2.80,  3.14,  2.20,  3.14]

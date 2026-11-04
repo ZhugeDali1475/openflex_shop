@@ -1,0 +1,369 @@
+{
+  "schema_version": 2,
+  "shelf_id": 1,
+  "shelf_name": "1号货架",
+  "faces": {
+    "1": {
+      "image_file": "data/shelf_images/1/+x_0.png",
+      "image_hash": "sha256:69021bcb5652a2fdfbfaeece78b027ab3e08737ed0c856f40cf9370a7e3a3e8d",
+      "layers": {
+        "0": [
+          {
+            "x": 195,
+            "y": 947
+          },
+          {
+            "x": 1528,
+            "y": 942
+          },
+          {
+            "x": 1522,
+            "y": 1136
+          },
+          {
+            "x": 214,
+            "y": 1135
+          }
+        ],
+        "1": [
+          {
+            "x": 170,
+            "y": 747
+          },
+          {
+            "x": 1565,
+            "y": 737
+          },
+          {
+            "x": 1548,
+            "y": 921
+          },
+          {
+            "x": 193,
+            "y": 919
+          }
+        ],
+        "2": [
+          {
+            "x": 114,
+            "y": 517
+          },
+          {
+            "x": 1619,
+            "y": 501
+          },
+          {
+            "x": 1610,
+            "y": 720
+          },
+          {
+            "x": 154,
+            "y": 719
+          }
+        ],
+        "3": [
+          {
+            "x": 56,
+            "y": 240
+          },
+          {
+            "x": 1679,
+            "y": 222
+          },
+          {
+            "x": 1658,
+            "y": 463
+          },
+          {
+            "x": 89,
+            "y": 477
+          }
+        ],
+        "4": [
+          {
+            "x": 31,
+            "y": 14
+          },
+          {
+            "x": 1687,
+            "y": 4
+          },
+          {
+            "x": 1683,
+            "y": 193
+          },
+          {
+            "x": 36,
+            "y": 225
+          }
+        ]
+      },
+      "slots": [
+        {
+          "slot_id": "1-1-0-17",
+          "expected_sku": "怡宝",
+          "actual_sku": "怡宝",
+          "bbox": {
+            "x": 288,
+            "y": 1003,
+            "width": 70,
+            "height": 124
+          }
+        },
+        {
+          "slot_id": "1-1-0-32",
+          "expected_sku": "怡宝",
+          "actual_sku": "怡宝",
+          "bbox": {
+            "x": 396,
+            "y": 997,
+            "width": 70,
+            "height": 131
+          }
+        },
+        {
+          "slot_id": "1-1-0-51",
+          "expected_sku": "怡宝",
+          "actual_sku": "怡宝",
+          "bbox": {
+            "x": 531,
+            "y": 996,
+            "width": 59,
+            "height": 132
+          }
+        },
+        {
+          "slot_id": "1-1-0-70",
+          "expected_sku": "怡宝",
+          "actual_sku": "怡宝",
+          "bbox": {
+            "x": 666,
+            "y": 997,
+            "width": 55,
+            "height": 129
+          }
+        },
+        {
+          "slot_id": "1-1-0-86",
+          "expected_sku": "怡宝",
+          "actual_sku": "怡宝",
+          "bbox": {
+            "x": 783,
+            "y": 994,
+            "width": 53,
+            "height": 132
+          }
+        },
+        {
+          "slot_id": "1-1-1-19",
+          "expected_sku": "农夫山泉",
+          "actual_sku": "农夫山泉",
+          "bbox": {
+            "x": 275,
+            "y": 751,
+            "width": 76,
+            "height": 159
+          }
+        },
+        {
+          "slot_id": "1-1-1-36",
+          "expected_sku": "农夫山泉",
+          "actual_sku": "农夫山泉",
+          "bbox": {
+            "x": 401,
+            "y": 761,
+            "width": 66,
+            "height": 146
+          }
+        },
+        {
+          "slot_id": "1-1-1-54",
+          "expected_sku": "酸梅汤",
+          "actual_sku": "酸梅汤",
+          "bbox": {
+            "x": 532,
+            "y": 793,
+            "width": 54,
+            "height": 119
+          }
+        },
+        {
+          "slot_id": "1-1-1-73",
+          "expected_sku": "茉莉清茶",
+          "actual_sku": "茉莉清茶",
+          "bbox": {
+            "x": 666,
+            "y": 790,
+            "width": 62,
+            "height": 120
+          }
+        },
+        {
+          "slot_id": "1-1-1-106",
+          "expected_sku": "1955纯牛奶",
+          "actual_sku": "1955纯牛奶",
+          "bbox": {
+            "x": 917,
+            "y": 812,
+            "width": 43,
+            "height": 92
+          }
+        },
+        {
+          "slot_id": "1-1-1-127",
+          "expected_sku": "1955纯牛奶",
+          "actual_sku": "1955纯牛奶",
+          "bbox": {
+            "x": 1076,
+            "y": 816,
+            "width": 51,
+            "height": 93
+          }
+        },
+        {
+          "slot_id": "1-1-2-17",
+          "expected_sku": "茉莉花茶",
+          "actual_sku": "茉莉花茶",
+          "bbox": {
+            "x": 227,
+            "y": 588,
+            "width": 77,
+            "height": 126
+          }
+        },
+        {
+          "slot_id": "1-1-2-34",
+          "expected_sku": "冰红茶",
+          "actual_sku": "冰红茶",
+          "bbox": {
+            "x": 352,
+            "y": 588,
+            "width": 85,
+            "height": 124
+          }
+        },
+        {
+          "slot_id": "1-1-2-54",
+          "expected_sku": "绿茶",
+          "actual_sku": "绿茶",
+          "bbox": {
+            "x": 508,
+            "y": 588,
+            "width": 74,
+            "height": 122
+          }
+        },
+        {
+          "slot_id": "1-1-2-74",
+          "expected_sku": "冰糖雪梨",
+          "actual_sku": "冰糖雪梨",
+          "bbox": {
+            "x": 664,
+            "y": 586,
+            "width": 69,
+            "height": 125
+          }
+        },
+        {
+          "slot_id": "1-1-2-106",
+          "expected_sku": "上好佳芝士条",
+          "actual_sku": "上好佳芝士条",
+          "bbox": {
+            "x": 901,
+            "y": 610,
+            "width": 100,
+            "height": 101
+          }
+        },
+        {
+          "slot_id": "1-1-3-25",
+          "expected_sku": "白桃饮料",
+          "actual_sku": "白桃饮料",
+          "bbox": {
+            "x": 254,
+            "y": 346,
+            "width": 79,
+            "height": 128
+          }
+        },
+        {
+          "slot_id": "1-1-3-55",
+          "expected_sku": "水蜜桃饮料",
+          "actual_sku": "水蜜桃饮料",
+          "bbox": {
+            "x": 496,
+            "y": 341,
+            "width": 88,
+            "height": 129
+          }
+        },
+        {
+          "slot_id": "1-1-3-107",
+          "expected_sku": "番茄薯条",
+          "actual_sku": "番茄薯条",
+          "bbox": {
+            "x": 928,
+            "y": 366,
+            "width": 120,
+            "height": 99
+          }
+        },
+        {
+          "slot_id": "1-1-3-135",
+          "expected_sku": "上好佳虾条",
+          "actual_sku": "上好佳虾条",
+          "bbox": {
+            "x": 1170,
+            "y": 366,
+            "width": 116,
+            "height": 96
+          }
+        },
+        {
+          "slot_id": "1-1-3-162",
+          "expected_sku": "上好佳田园泡",
+          "actual_sku": "上好佳田园泡",
+          "bbox": {
+            "x": 1393,
+            "y": 378,
+            "width": 119,
+            "height": 82
+          }
+        },
+        {
+          "slot_id": "1-1-4-16",
+          "expected_sku": "上好佳虾片",
+          "actual_sku": "上好佳虾片",
+          "bbox": {
+            "x": 133,
+            "y": 127,
+            "width": 116,
+            "height": 85
+          }
+        },
+        {
+          "slot_id": "1-1-4-42",
+          "expected_sku": "上好佳玉米片",
+          "actual_sku": "上好佳玉米片",
+          "bbox": {
+            "x": 370,
+            "y": 114,
+            "width": 133,
+            "height": 95
+          }
+        },
+        {
+          "slot_id": "1-1-4-68",
+          "expected_sku": "上好佳洋葱圈",
+          "actual_sku": "上好佳洋葱圈",
+          "bbox": {
+            "x": 619,
+            "y": 127,
+            "width": 124,
+            "height": 77
+          }
+        }
+      ]
+    }
+  }
+}

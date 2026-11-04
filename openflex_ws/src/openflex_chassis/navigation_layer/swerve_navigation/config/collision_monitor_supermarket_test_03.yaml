@@ -1,0 +1,37 @@
+# supermarket_test_03 benchmark collision policy.
+#
+# This is the final predictive safety layer before cmd_vel_safety_gate.  The
+# active polygon follows the commanded holonomic trajectory, so lateral motion
+# away from an obstacle remains possible.  Reverse vx is independently denied
+# by the safety gate until verified rear sensing exists.
+collision_monitor:
+  ros__parameters:
+    use_sim_time: false
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel"
+    cmd_vel_out_topic: "cmd_vel_safe_in"
+    transform_tolerance: 0.15
+    source_timeout: 0.50
+    base_shift_correction: false
+    stop_pub_timeout: 2.0
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      # Physical chassis envelope. Nav2 adds 4 cm planning padding separately.
+      points: [-0.46, -0.45, -0.46, 0.45, 0.46, 0.45, 0.46, -0.45]
+      action_type: "approach"
+      time_before_collision: 1.8
+      simulation_time_step: 0.05
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: "collision_monitor/footprint_approach"
+      enabled: true
+    observation_sources: ["pointcloud_lidar"]
+    pointcloud_lidar:
+      type: "pointcloud"
+      # Keep collision safety independent from planning-cloud denoising.
+      topic: "/livox/body_cloud_safety"
+      min_height: -0.14
+      max_height: 1.80
+      enabled: true

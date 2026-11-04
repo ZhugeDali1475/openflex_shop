@@ -1,0 +1,17 @@
+schema_version: 1
+anchor:
+  map_name: supermarket_test_09
+  map_fingerprint: sha256:8337f188d4f80be0f151c96026ae051bf7ddde99a4b82340b0191bd27530a3d2
+  station_id: SHELF-A
+  shelf_id: 2
+  face: 1
+  coarse_x: 1.945
+  coarse_y: 1.323
+  coarse_yaw: 3.141592653589793
+  aligned_x: 1.7980846187490276
+  aligned_y: 1.2364545168923673
+  aligned_yaw: -3.1298734942977875
+  shelf_world_x: 0.5706867418984594
+  shelf_world_y: 0.8047947063020753
+  shelf_yaw: 0.06356114806348771
+  captured_at: '2026-08-16T15:22:37+08:00'

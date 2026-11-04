@@ -1,0 +1,70 @@
+# Collision Monitor — Livox-only 安全层
+# D435 不再参与导航避障，避免相机 TF/时间戳/深度噪声导致误停或崩溃
+collision_monitor:
+  ros__parameters:
+    use_sim_time: false
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel"
+    cmd_vel_out_topic: "cmd_vel_safe_in"
+    transform_tolerance: 0.2
+    source_timeout: 0.8
+    base_shift_correction: false
+    # Keep a definite zero on the downstream safety chain long enough for
+    # controller/action transitions. Fresh safe commands still resume
+    # immediately when the collision action returns to normal.
+    stop_pub_timeout: 2.0
+    # Direction-independent stop polygons latch every command at a close
+    # obstacle, including a command that moves the swerve base away from it.
+    # Use the swept-footprint approach model as the active safety policy: it
+    # evaluates the commanded vx/vy/wz trajectory and therefore permits only
+    # motion that increases clearance. Reverse vx is independently rejected by
+    # cmd_vel_safety_gate because rear sensing is not currently verified.
+    polygons: ["FootprintApproach"]
+    EmergencyStopFront:
+      type: "polygon"
+      # Thin front strip just outside the padded footprint.
+      points: [0.52, 0.49, 0.52, -0.49, 0.46, -0.49, 0.46, 0.49]
+      action_type: "stop"
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: "collision_monitor/emergency_stop_front"
+      enabled: false
+    EmergencyStopRear:
+      type: "polygon"
+      # Thin rear strip just outside the padded footprint.
+      points: [-0.46, 0.49, -0.46, -0.49, -0.52, -0.49, -0.52, 0.49]
+      action_type: "stop"
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: "collision_monitor/emergency_stop_rear"
+      enabled: false
+    FootprintApproach:
+      type: "polygon"
+      # Use the physical chassis footprint without the costmap's 4 cm planning
+      # padding. A point inside planning padding but outside the real body must
+      # still be allowed to move away; otherwise every direction is considered
+      # colliding at simulation t=0 and the robot can never escape.
+      points: [-0.46, -0.45, -0.46, 0.45, 0.46, 0.45, 0.46, -0.45]
+      action_type: "approach"
+      # Start continuously reducing speed when the predicted collision is
+      # less than 1.5 s away. At zero clearance the output is zero.
+      time_before_collision: 1.5
+      simulation_time_step: 0.05
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: "collision_monitor/footprint_approach"
+      enabled: true
+    observation_sources: ["pointcloud_lidar"]
+    # Livox 3D 点云 — 360° 全周安全
+    pointcloud_lidar:
+      type: "pointcloud"
+      # Use the conservative height/self-filtered cloud. Planning uses a
+      # separately denoised cloud, so a filter regression cannot weaken this
+      # final collision protection layer.
+      topic: "/livox/body_cloud_safety"
+      # Relay already removes ground below -0.15m; retain low furniture,
+      # pallet feet and wheel-height obstacles above that plane.
+      min_height: -0.14
+      max_height: 1.80
+      enabled: true

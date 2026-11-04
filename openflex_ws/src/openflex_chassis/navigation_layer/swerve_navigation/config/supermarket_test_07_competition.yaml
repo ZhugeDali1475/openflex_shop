@@ -1,0 +1,40 @@
+schema_version: 1
+profile:
+  id: supermarket_test_07_competition
+  display_name: "supermarket_test_07 商超抓取导航联调"
+  purpose: "货架精停、模拟抓取、受控退避和下一段导航联调"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_07"
+  launch_file: "supermarket_test_05_benchmark.launch.py"
+  # Derived from the first recorded test_07 LIO pose. Verify against the
+  # physical start marker before autonomous competition use.
+  initial_pose: {x: 0.00344, y: -0.28278, yaw: 1.57006}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+  goal_obstacle_clearance_m: 0.05
+
+acceptance:
+  goal_position_m: 0.05
+  goal_yaw_rad: 0.052
+  max_goal_position_m: 0.10
+  max_goal_yaw_rad: 0.087
+  path_cross_track_m: 0.12
+  max_icp_step_m: 0.08
+  max_icp_step_yaw_rad: 0.06
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.80
+  minimum_success_rate: 0.95
+  required_zero_collision_tours: 10
+
+waypoints:
+  SHELF_TABLE_APPROACH:
+    label: "货架台正对预定点"
+    pose: {x: -1.83284, y: -2.14956, yaw: -1.5707963267948966}
+    clearance_m: 0.05
+    role: "shelf_approach"
+
+tours:
+  shelf_alignment:
+    label: "货架精停联调"
+    sequence: [SHELF_TABLE_APPROACH]
+    settle_sec: 1.0

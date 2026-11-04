@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenFlex GraspNet Inspector</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">OPENFLEX PRODUCT PERCEPTION</div>
+      <h1>GraspNet 抓取检查</h1>
+    </div>
+    <div class="toolbar">
+      <span id="connection" class="connection pending">连接中</span>
+      <span class="target-label">目标 <strong id="target">等待商品</strong></span>
+      <button id="reset-view" type="button" title="恢复点云视角">重置视角</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="status-grid" aria-label="pipeline status">
+      <article class="status-tile" id="tile-segmentation">
+        <div class="tile-label">分割</div><div class="tile-state">等待</div><div class="tile-message">尚未收到结果</div>
+      </article>
+      <article class="status-tile" id="tile-grasp">
+        <div class="tile-label">GraspNet</div><div class="tile-state">等待</div><div class="tile-message">尚未收到候选</div>
+      </article>
+      <article class="status-tile" id="tile-execution">
+        <div class="tile-label">执行器</div><div class="tile-state">等待</div><div class="tile-message">规划模式</div>
+      </article>
+    </section>
+
+    <section class="visual-grid">
+      <div class="media-column">
+        <article class="panel image-panel">
+          <div class="panel-head"><h2>分割叠图</h2><span id="image-frame">等待图像</span></div>
+          <div class="image-frame"><img id="overlay" alt="segmentation overlay"><div class="empty" id="overlay-empty">等待分割图像</div></div>
+        </article>
+        <article class="panel image-panel split-panel">
+          <div class="panel-head"><h2>掩码 / 原图</h2><span id="cloud-frame">等待点云</span></div>
+          <div class="image-pair">
+            <div class="image-frame small"><img id="mask" alt="segmentation mask"><div class="empty" id="mask-empty">等待掩码</div></div>
+            <div class="image-frame small"><img id="rgb" alt="camera image"><div class="empty" id="rgb-empty">等待原图</div></div>
+          </div>
+        </article>
+      </div>
+
+      <article class="panel cloud-panel">
+        <div class="panel-head"><h2>点云与抓取候选</h2><span id="frame-id">等待数据</span></div>
+        <div class="canvas-wrap"><canvas id="cloud-canvas"></canvas><div class="canvas-empty" id="canvas-empty">等待商品点云</div></div>
+        <div class="legend">
+          <span><i class="dot product"></i>商品点云</span>
+          <span><i class="dot scene"></i>场景点云</span>
+          <span><i class="pose-mark object"></i>商品位姿</span>
+          <span><i class="pose-mark pregrasp"></i>预抓取位姿</span>
+          <span><i class="pose-mark grasp"></i>抓取位姿</span>
+          <span><i class="line path"></i>预抓取路径</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="info-grid">
+      <article class="panel metrics-panel">
+        <div class="panel-head"><h2>候选约束统计</h2><span id="candidate-total">0 candidates</span></div>
+        <div class="metric-list">
+          <div><span>中心邻域内</span><strong id="near-center">0</strong></div>
+          <div><span>接近货架法向</span><strong id="aligned">0</strong></div>
+          <div><span>宽度满足夹爪</span><strong id="width-ok">0</strong></div>
+          <div class="emphasis"><span>参与拟合</span><strong id="constrained">0</strong></div>
+        </div>
+        <div class="constraint-note" id="constraint-note">等待 GraspNet 诊断</div>
+      </article>
+      <article class="panel selected-panel">
+        <div class="panel-head"><h2>当前结果</h2><span id="result-backend">GraspNetBaseline</span></div>
+        <dl class="result-list">
+          <div><dt>原因</dt><dd id="result-reason">等待结果</dd></div>
+          <div><dt>中心</dt><dd id="result-center">-</dd></div>
+          <div><dt>进给轴</dt><dd id="result-axis">-</dd></div>
+          <div><dt>宽度</dt><dd id="result-width">-</dd></div>
+          <div><dt>商品位姿</dt><dd id="object-pose">-</dd></div>
+          <div><dt>预抓取</dt><dd id="pregrasp-pose">-</dd></div>
+          <div><dt>抓取位姿</dt><dd id="grasp-pose">-</dd></div>
+          <div><dt>时间戳</dt><dd id="capture-stamp">-</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="panel candidates-panel">
+      <div class="panel-head"><h2>候选列表</h2><span>点击行查看对应方向</span></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>状态</th><th>分数</th><th>宽度</th><th>中心距离</th><th>方向角</th><th>偏离项</th></tr></thead>
+          <tbody id="candidate-rows"><tr><td colspan="6" class="table-empty">等待候选数据</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

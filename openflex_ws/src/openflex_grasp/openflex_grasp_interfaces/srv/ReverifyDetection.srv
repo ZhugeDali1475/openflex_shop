@@ -1,0 +1,14 @@
+# Re-run SAM2 with the original selected box on the latest same-arm RGB-D frame.
+string detection_id
+float32 max_center_shift_m
+float32 max_size_change_ratio
+float32 min_mask_iou
+float32 min_valid_depth_ratio
+---
+bool success
+uint16 error_code
+string message
+float32 center_shift_m
+float32 size_change_ratio
+float32 mask_iou
+float32 valid_depth_ratio

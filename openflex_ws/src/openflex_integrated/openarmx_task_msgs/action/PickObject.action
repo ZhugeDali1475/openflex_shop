@@ -1,0 +1,26 @@
+# MoveIt-side high-level pick contract. The pose must carry its frame_id.
+string object_id
+string detection_id
+geometry_msgs/PoseStamped object_pose
+string slot_id
+bool use_shelf_level
+int32 shelf_level
+bool use_nominal_lift_position
+float64 nominal_lift_position
+# The competition task executor sets this to ARM_WITH_LIFT (8).  A pick
+# adapter must not reposition the base after shelf fine alignment.
+uint8 ARM_ONLY=7
+uint8 ARM_WITH_LIFT=8
+uint8 max_dof
+string arm_name
+string grasp_strategy
+bool retreat_to_transport
+float32 timeout_sec
+---
+bool success
+bool object_attached
+uint16 error_code
+string message
+---
+string phase
+float32 progress

@@ -1,0 +1,166 @@
+# IK solver configuration for the OpenArmX integrated robot.
+#
+# The single-arm groups remain on the official KDL plugin. The Openflex wrapper
+# keeps that verified KDL behavior for lift groups and adds whole-body routing.
+
+lift_only:
+  kinematics_solver: openarmx_integrated_moveit_config/OpenflexKinematicsPlugin
+  kinematics_solver_ik_links:
+    - lift_carriage_link
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.02
+  kinematics_solver_attempts: 1
+  openflex_ik:
+    position_tolerance: 0.002
+    rotation_tolerance_deg: 1.0
+
+left_arm_with_lift:
+  kinematics_solver: openarmx_integrated_moveit_config/OpenflexKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.10
+  kinematics_solver_attempts: 1
+  openflex_ik:
+    # Clamp finite live-state IK seeds to the nearest bound. IK solutions still
+    # obey the strict RobotModel limits.
+    stage_a_timeout_sec: 0.05
+    stage_b_timeout_sec: 0.05
+    position_tolerance: 0.002
+    rotation_tolerance_deg: 2.0
+
+right_arm_with_lift:
+  kinematics_solver: openarmx_integrated_moveit_config/OpenflexKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.10
+  kinematics_solver_attempts: 1
+  openflex_ik:
+    # Clamp finite live-state IK seeds to the nearest bound. IK solutions still
+    # obey the strict RobotModel limits.
+    stage_a_timeout_sec: 0.05
+    stage_b_timeout_sec: 0.05
+    position_tolerance: 0.002
+    rotation_tolerance_deg: 2.0
+
+# 7-DOF arm-only groups. These KDL settings remain the public arm IK behavior.
+# PickIK reads the extra parameters only when Openflex Stage C loads it as a
+# child plugin for whole-body planning.
+left_arm:
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.05
+  kinematics_solver_attempts: 4
+  mode: global
+  position_scale: 0.1
+  # Stage C solves orientation before analytically compensating base XY and
+  # lift Z. Keep position as a soft cost without a pre-compensation hard gate.
+  position_threshold: 10.0
+  cost_threshold: 10.0
+  rotation_scale: 1.0
+  orientation_threshold: 0.005
+  minimal_displacement_weight: 0.0
+  center_joints_weight: 0.0
+  avoid_joint_limits_weight: 0.0
+
+right_arm:
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.05
+  kinematics_solver_attempts: 4
+  mode: global
+  position_scale: 0.1
+  # Stage C solves orientation before analytically compensating base XY and
+  # lift Z. Keep position as a soft cost without a pre-compensation hard gate.
+  position_threshold: 10.0
+  cost_threshold: 10.0
+  rotation_scale: 1.0
+  orientation_threshold: 0.005
+  minimal_displacement_weight: 0.0
+  center_joints_weight: 0.0
+  avoid_joint_limits_weight: 0.0
+
+# Stage 0 classifies targets using the current shoulder position and this fixed
+# radius. It does not reject targets: failed A/B calls always fall through.
+# Stage A: fixed base + lift, official 7-DOF KDL.
+# Stage B: fixed base, official lift + arm KDL.
+# Stage C: front-facing base candidates, PickIK with low position cost and
+# high orientation cost, then FK-derived base XY and lift-Z compensation.
+left_whole_body:
+  kinematics_solver: openarmx_integrated_moveit_config/OpenflexKinematicsPlugin
+  kinematics_solver_ik_links:
+    - openarmx_left_hand
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.15
+  kinematics_solver_attempts: 1
+  openflex_ik:
+    workspace_fixed_lift_radius_m: 1.10
+    stage_a_timeout_sec: 0.03
+    stage_b_timeout_sec: 0.03
+    stage_c_timeout_per_seed_sec: 0.02
+    stage_c_min_remaining_sec: 0.002
+    stage_c_yaw_count: 8
+    stage_c_seeds_per_yaw: 4
+    stage_c_random_seed: 20260727
+    stage_c_yaw_offset_rad: 0.0
+    stage_c_yaw_range_rad: 0.785398
+    # Shoulder centers are 305 mm apart, so use their +/- 0.15 m lateral
+    # offset from the base centerline. The 0.45 m front candidate was selected
+    # from left/right whole-body IK sweeps over three independent FK datasets.
+    stage_c_front_distance_m: 0.45
+    stage_c_left_lateral_offset_m: 0.15
+    stage_c_right_lateral_offset_m: -0.15
+    stage_c_orientation_tolerance_rad: 0.005
+    front_min_x_m: 0.05
+    front_max_x_m: 1.20
+    front_half_angle_rad: 1.396263
+    # The Action reads this left-side block as the single shared task-policy
+    # source. Keep left/right values identical while the Action supports one arm.
+    action_default_max_dof: 11
+    action_max_yaw_tolerance_rad: 1.570796
+    action_max_yaw_samples: 15
+    action_candidate_plan_timeout_sec: 0.75
+    action_default_planning_timeout_sec: 5.0
+    action_default_velocity_scale: 0.50
+    action_default_acceleration_scale: 0.30
+    action_navigation_timeout_sec: 90.0
+    # Final TCP tolerance after Stage C base/lift compensation.
+    position_tolerance: 0.002
+    rotation_tolerance_deg: 2.0
+
+right_whole_body:
+  kinematics_solver: openarmx_integrated_moveit_config/OpenflexKinematicsPlugin
+  kinematics_solver_ik_links:
+    - openarmx_right_hand
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.15
+  kinematics_solver_attempts: 1
+  openflex_ik:
+    workspace_fixed_lift_radius_m: 1.10
+    stage_a_timeout_sec: 0.03
+    stage_b_timeout_sec: 0.03
+    stage_c_timeout_per_seed_sec: 0.02
+    stage_c_min_remaining_sec: 0.002
+    stage_c_yaw_count: 8
+    stage_c_seeds_per_yaw: 4
+    stage_c_random_seed: 20260727
+    stage_c_yaw_offset_rad: 0.0
+    stage_c_yaw_range_rad: 0.785398
+    # Shoulder centers are 305 mm apart, so use their +/- 0.15 m lateral
+    # offset from the base centerline. The 0.45 m front candidate was selected
+    # from left/right whole-body IK sweeps over three independent FK datasets.
+    stage_c_front_distance_m: 0.45
+    stage_c_left_lateral_offset_m: 0.15
+    stage_c_right_lateral_offset_m: -0.15
+    stage_c_orientation_tolerance_rad: 0.005
+    front_min_x_m: 0.05
+    front_max_x_m: 1.20
+    front_half_angle_rad: 1.396263
+    action_default_max_dof: 11
+    action_max_yaw_tolerance_rad: 1.570796
+    action_max_yaw_samples: 15
+    action_candidate_plan_timeout_sec: 0.75
+    action_default_planning_timeout_sec: 5.0
+    action_default_velocity_scale: 0.50
+    action_default_acceleration_scale: 0.30
+    action_navigation_timeout_sec: 90.0
+    # Final TCP tolerance after Stage C base/lift compensation.
+    position_tolerance: 0.002
+    rotation_tolerance_deg: 2.0

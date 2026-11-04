@@ -1,0 +1,11 @@
+object_memory:
+  freshness_tau_sec: 2.0
+  lost_timeout_sec: 1.0
+  min_confidence: 0.50
+  translation_move_threshold_m: 0.05
+  yaw_move_threshold_rad: 0.15
+  move_confirm_frames: 3
+
+safety_rule:
+  remembered_pose_may_condition_reobservation: true
+  remembered_pose_may_authorize_final_grasp: false

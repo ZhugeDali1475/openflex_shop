@@ -1,0 +1,84 @@
+# Bottom-team field registered directly to supermarket_scene_from_db.xml.
+# map == MuJoCo world: +X right, +Y toward the field centre, +Z up.
+stations:
+  start:
+    nav_pose: {frame_id: map, x: 0.00, y: -3.50, z: 0.0, yaw: 1.57079632679}
+    dock: {enabled: false}
+
+  delivery_counter:
+    scene_entity: counter_bottom_left
+    nav_pose: {frame_id: map, x: -2.40, y: -2.60, z: 0.0, yaw: -1.57079632679}
+    dock: {enabled: false}
+    place_pose: {frame_id: base_link, x: 0.62, y: 0.0, z: 0.77, yaw: 0.0}
+    place_strategy: counter_top
+
+  replenishment_box:
+    scene_entity: counter_bottom_right
+    nav_pose: {frame_id: map, x: 2.40, y: -2.60, z: 0.0, yaw: -1.57079632679}
+    dock: {enabled: false}
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.62, y: 0.0, z: 0.82, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: graspnet_basket
+
+  shelf_a_pick: &shelf_a
+    scene_entity: shelf_group_3
+    shelf_face: negative_x
+    nav_pose: {frame_id: map, x: -2.10, y: -1.18, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 0.85, yaw: 0.0}, arm_name: right, grasp_strategy: graspnet_shelf}}
+  shelf_b_pick: &shelf_b
+    scene_entity: shelf_group_3
+    shelf_face: positive_x
+    nav_pose: {frame_id: map, x: -0.10, y: -1.18, z: 0.0, yaw: 3.14159265359}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 1.25, yaw: 0.0}, arm_name: left, grasp_strategy: graspnet_shelf}}
+  shelf_c_pick: &shelf_c
+    scene_entity: shelf_group_4
+    shelf_face: negative_x
+    nav_pose: {frame_id: map, x: 0.10, y: -1.18, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 0.85, yaw: 0.0}, arm_name: right, grasp_strategy: graspnet_shelf}}
+  shelf_d_pick: &shelf_d
+    scene_entity: shelf_group_4
+    shelf_face: positive_x
+    nav_pose: {frame_id: map, x: 2.10, y: -1.18, z: 0.0, yaw: 3.14159265359}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 0.45, yaw: 0.0}, arm_name: left, grasp_strategy: graspnet_shelf}}
+
+  shelf_a_scan: *shelf_a
+  shelf_b_scan: *shelf_b
+  shelf_c_scan: *shelf_c
+  shelf_d_scan: *shelf_d
+  shelf_a_place: *shelf_a
+  shelf_b_place: *shelf_b
+  shelf_c_place: *shelf_c
+  shelf_d_place: *shelf_d
+
+  delivery_scan:
+    nav_pose: {frame_id: map, x: -2.40, y: -2.60, z: 0.0, yaw: -1.57079632679}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.62, y: 0.0, z: 0.77, yaw: 0.0}}}
+  aisle_1_scan:
+    nav_pose: {frame_id: map, x: -2.15, y: -1.18, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.60, yaw: 0.0}}}
+  aisle_2_scan:
+    nav_pose: {frame_id: map, x: 2.15, y: -1.18, z: 0.0, yaw: 3.14159265359}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.60, yaw: 0.0}}}
+  replenishment_scan:
+    nav_pose: {frame_id: map, x: 2.40, y: -2.60, z: 0.0, yaw: -1.57079632679}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.62, y: 0.0, z: 0.82, yaw: 0.0}}}
+
+  phase_1_judging:
+    nav_pose: {frame_id: map, x: 0.00, y: -3.50, z: 0.0, yaw: 1.57079632679}
+    dock: {enabled: false}
+  phase_2_judging:
+    nav_pose: {frame_id: map, x: 0.00, y: -3.50, z: 0.0, yaw: 1.57079632679}
+    dock: {enabled: false}
+  finish:
+    nav_pose: {frame_id: map, x: 0.00, y: -3.50, z: 0.0, yaw: 1.57079632679}
+    dock: {enabled: false}

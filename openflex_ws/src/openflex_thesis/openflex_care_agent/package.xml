@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>openflex_care_agent</name>
+  <version>0.1.0</version>
+  <description>Capability-Aware Recovery Embodied Agent for shelf pick-and-place.</description>
+  <maintainer email="openarmrobot@gmail.com">OpenArmX</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+  <depend>rclpy</depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

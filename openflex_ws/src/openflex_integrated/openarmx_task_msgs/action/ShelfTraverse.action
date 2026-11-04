@@ -1,0 +1,26 @@
+# Guarded shelf-parallel motion to a map-frame lateral target.
+string station_id
+float32 target_map_x
+float32 target_map_y
+float32 target_map_yaw
+float32 target_clearance
+float32 clearance_tolerance
+float32 lateral_tolerance
+float32 yaw_tolerance
+float32 max_lateral_speed
+float32 timeout_sec
+# Preserve the current longitudinal position; only yaw and lateral motion are allowed.
+bool lateral_only
+---
+bool success
+uint16 error_code
+float32 final_lateral_error
+float32 final_clearance
+float32 final_yaw_error
+string message
+---
+string phase
+float32 remaining_lateral_distance
+float32 measured_clearance
+float32 yaw_error
+uint32 stable_samples

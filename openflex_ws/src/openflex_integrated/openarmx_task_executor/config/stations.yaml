@@ -1,0 +1,204 @@
+# Replace these values with measured map poses and station-frame slot poses.
+# nav_pose is consumed by Nav2 in the map frame. Slot and place poses should be
+# measured in the station frame or returned by the perception action.
+stations:
+  shelf_A:
+    nav_pose:
+      frame_id: map
+      x: 1.000
+      y: 0.000
+      z: 0.000
+      yaw: 0.000
+    marker_id: 10
+    dock:
+      enabled: true
+      position_tolerance: 0.030
+      yaw_tolerance: 0.050
+      # Desired marker pose in base_link after low-speed docking.  This is
+      # marker-to-base distance, not chassis-shell-to-shelf clearance.
+      target_marker_pose:
+        x: 0.650
+        y: 0.000
+        z: 0.000
+        yaw: 0.000
+    slots:
+      demo_object:
+        pose:
+          frame_id: shelf_A
+          x: 0.650
+          y: 0.000
+          z: 0.850
+          yaw: 0.000
+        arm_name: left
+        grasp_strategy: front
+        level: 2
+
+  drop_A:
+    nav_pose:
+      frame_id: map
+      x: 2.000
+      y: 0.000
+      z: 0.000
+      yaw: 3.1415926
+    marker_id: 20
+    dock:
+      enabled: true
+      position_tolerance: 0.030
+      yaw_tolerance: 0.050
+      # Replace with a measured safe pose for the actual drop station.
+      target_marker_pose:
+        x: 0.650
+        y: 0.000
+        z: 0.000
+        yaw: 0.000
+    place_pose:
+      frame_id: drop_A
+      x: 0.550
+      y: 0.000
+      z: 0.800
+      yaw: 0.000
+    place_strategy: top
+
+  # Competition framework placeholders. All map poses, marker IDs and local
+  # manipulation poses must be measured on the official field before use.
+  delivery_counter:
+    nav_pose: {frame_id: map, x: -2.00, y: -1.00, z: 0.0, yaw: 0.0}
+    marker_id: 101
+    dock:
+      enabled: true
+      position_tolerance: 0.030
+      yaw_tolerance: 0.050
+      target_marker_pose: {frame_id: base_link, x: 0.70, y: 0.0, z: 0.0, yaw: 0.0}
+    place_pose: {frame_id: base_link, x: 0.58, y: 0.0, z: 0.83, yaw: 0.0}
+    place_strategy: top
+
+  replenishment_box:
+    nav_pose: {frame_id: map, x: 2.00, y: -1.00, z: 0.0, yaw: 3.1415926}
+    marker_id: 102
+    dock:
+      enabled: true
+      position_tolerance: 0.030
+      yaw_tolerance: 0.050
+      target_marker_pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.0, yaw: 0.0}
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.52, y: 0.0, z: 0.58, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: box_top
+
+  shelf_a_pick:
+    nav_pose: {frame_id: map, x: -0.90, y: 0.20, z: 0.0, yaw: 0.0}
+    marker_id: 111
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    slots:
+      milk:
+        pose: {frame_id: base_link, x: 0.60, y: 0.10, z: 0.85, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: carton_side
+        level: 2
+
+  shelf_b_pick:
+    nav_pose: {frame_id: map, x: -0.90, y: 2.10, z: 0.0, yaw: 0.0}
+    marker_id: 112
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    slots:
+      chips:
+        pose: {frame_id: base_link, x: 0.58, y: 0.08, z: 1.20, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: bag_side
+        level: 3
+
+  shelf_c_pick:
+    nav_pose: {frame_id: map, x: 0.90, y: 2.10, z: 0.0, yaw: 3.1415926}
+    marker_id: 113
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    slots:
+      juice:
+        pose: {frame_id: base_link, x: 0.60, y: -0.10, z: 0.85, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: carton_side
+        level: 2
+
+  shelf_d_pick:
+    nav_pose: {frame_id: map, x: 0.90, y: 0.20, z: 0.0, yaw: 3.1415926}
+    marker_id: 114
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    slots:
+      bottled_water:
+        pose: {frame_id: base_link, x: 0.60, y: -0.10, z: 0.45, yaw: 0.0}
+        arm_name: left
+        grasp_strategy: bottle_side
+        level: 1
+
+  # Scan stops are observation poses, not manipulation poses. Wildcard slots
+  # provide a nominal fallback only after the perception server identifies an
+  # object at that station.
+  shelf_a_scan:
+    nav_pose: {frame_id: map, x: -1.10, y: 0.20, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.85, yaw: 0.0}}}
+  shelf_b_scan:
+    nav_pose: {frame_id: map, x: -1.10, y: 2.10, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.85, yaw: 0.0}}}
+  shelf_c_scan:
+    nav_pose: {frame_id: map, x: 1.10, y: 2.10, z: 0.0, yaw: 3.1415926}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.85, yaw: 0.0}}}
+  shelf_d_scan:
+    nav_pose: {frame_id: map, x: 1.10, y: 0.20, z: 0.0, yaw: 3.1415926}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.65, y: 0.0, z: 0.85, yaw: 0.0}}}
+  delivery_scan:
+    nav_pose: {frame_id: map, x: -1.70, y: -0.80, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 0.80, yaw: 0.0}}}
+  aisle_1_scan:
+    nav_pose: {frame_id: map, x: -0.20, y: 1.00, z: 0.0, yaw: 1.5707963}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.50, yaw: 0.0}}}
+  aisle_2_scan:
+    nav_pose: {frame_id: map, x: 0.20, y: 1.80, z: 0.0, yaw: -1.5707963}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.50, yaw: 0.0}}}
+  replenishment_scan:
+    nav_pose: {frame_id: map, x: 1.70, y: -0.80, z: 0.0, yaw: 3.1415926}
+    dock: {enabled: false}
+    slots: {"*": {pose: {frame_id: base_link, x: 0.60, y: 0.0, z: 0.60, yaw: 0.0}}}
+
+  # An InspectRetailScene provider should return one of these destination
+  # station IDs for each physical shelf slot. Add one station per scored slot.
+  shelf_a_place:
+    nav_pose: {frame_id: map, x: -0.90, y: 0.20, z: 0.0, yaw: 0.0}
+    marker_id: 121
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    place_pose: {frame_id: base_link, x: 0.60, y: 0.05, z: 0.85, yaw: 0.0}
+    place_strategy: shelf_insert
+  shelf_b_place:
+    nav_pose: {frame_id: map, x: -0.90, y: 2.10, z: 0.0, yaw: 0.0}
+    marker_id: 122
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    place_pose: {frame_id: base_link, x: 0.60, y: 0.05, z: 1.20, yaw: 0.0}
+    place_strategy: shelf_insert
+  shelf_c_place:
+    nav_pose: {frame_id: map, x: 0.90, y: 2.10, z: 0.0, yaw: 3.1415926}
+    marker_id: 123
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    place_pose: {frame_id: base_link, x: 0.60, y: -0.05, z: 0.85, yaw: 0.0}
+    place_strategy: shelf_insert
+  shelf_d_place:
+    nav_pose: {frame_id: map, x: 0.90, y: 0.20, z: 0.0, yaw: 3.1415926}
+    marker_id: 124
+    dock: {enabled: true, position_tolerance: 0.030, yaw_tolerance: 0.050}
+    place_pose: {frame_id: base_link, x: 0.60, y: -0.05, z: 0.45, yaw: 0.0}
+    place_strategy: shelf_insert
+
+  phase_1_judging:
+    nav_pose: {frame_id: map, x: -2.40, y: 0.00, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+  phase_2_judging:
+    nav_pose: {frame_id: map, x: 0.00, y: -1.50, z: 0.0, yaw: 0.0}
+    dock: {enabled: false}
+  finish:
+    nav_pose: {frame_id: map, x: 2.40, y: 0.00, z: 0.0, yaw: 3.1415926}
+    dock: {enabled: false}

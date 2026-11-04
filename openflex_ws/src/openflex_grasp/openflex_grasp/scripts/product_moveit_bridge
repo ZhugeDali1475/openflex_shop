@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "${OPENFLEX_ROS_PYTHON:-python3}" -m openflex_grasp.product_moveit_bridge "$@"

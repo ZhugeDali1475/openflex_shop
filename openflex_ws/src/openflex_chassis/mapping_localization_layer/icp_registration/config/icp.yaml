@@ -1,0 +1,193 @@
+/icp_registration:
+  ros__parameters:
+    use_sim_time: false
+    rough_leaf_size: 0.4
+    refine_leaf_size: 0.1
+    pcd_path: ""  # 运行时通过 launch 参数指定
+    map_frame_id: "map"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+    laser_frame_id: "base_link"
+    pointcloud_topic: "/livox/lidar"
+    # Fitness score 不能单独证明候选绝对正确；保持保守门限，并由下方的
+    # 歧义检测和 trusted wheel innovation gate 共同决策。
+    thresh: 0.30
+    # 兼容诊断参数：连续 ICP 不再用全部点 getFitnessScore() 单阈值决定健康。
+    # nav_103048 中正确静止匹配会因约 12% 地图外点升到 0.151~0.165。
+    continuous_thresh: 0.15
+    icp_max_correspondence_distance: 1.0
+    # 连续跟踪已有可靠初值，禁止使用 1m 对应距离跳到相邻货架。
+    continuous_icp_max_correspondence_distance: 0.5
+    # 连续 ICP 使用显式最近邻质量：0.5m 内点比例、内点 RMSE 和距离中位数。
+    # 初值来自 nav_103048 正确静止匹配（ratio=0.87~0.88, RMSE=0.10~0.11m,
+    # p50≈0.05m）；仍需旧错误 bag 和更多实车数据共同回归。
+    # 2026-08-10 test_08 场地 nav_181741：小车停在建图起点，ICP 求得正确位姿
+    # （yaw=90.9° vs profile 90°，x=-0.04 y=-0.20），但 ratio 稳定 0.720~0.724
+    # 卡在 0.80 上，accepted 恒为 0，4 帧稳定永远攒不满，底盘被锁死。
+    # RMSE 0.138~0.143m 本来就过线，故只放宽 ratio；0.68 对实测留 0.04 余量。
+    # 场景差异（货品/临时物件变动）是 28% 外点的主因，非定位错误。
+    continuous_min_inlier_ratio: 0.68
+    continuous_max_inlier_rmse: 0.15
+    continuous_max_median_distance: 0.10
+    # 初始搜索范围: (2*grid_half_cells+1)^2 网格，间距 xy_offset。
+    # 搜索超时意味着没有完成全候选比较，必须失败，不能接受部分最优。
+    xy_offset: 5.0
+    grid_half_cells: 2
+    grid_search_timeout_sec: 30.0
+    yaw_offset: 180.0
+    yaw_resolution: 30.0
+    # 启动后先等 FAST-LIVO 完成 IMU/LiDAR 自同步，再允许 SC/ICP 决定初始 map->odom。
+    # 日志里 2~4 秒内仍有 "IMU and LiDAR not synced"，过早初始化会把 ICP 锁到错误姿态。
+    initial_alignment_delay_sec: 8.0
+    # 周期性重定位间隔 (秒)，0 = 禁用。定位成功后按此间隔持续 ICP 纠偏
+    continuous_realign_interval_sec: 1.0
+    # 全局候选出现后，必须连续多次局部 ICP 稳定才允许底盘运动。
+    localization_stable_samples: 4
+    # Recovery accepts 4 good candidates within the latest 5 scans; a single
+    # p50-at-threshold frame no longer erases all progress.
+    localization_stability_window_size: 5
+    localization_stable_pos_thresh: 0.05   # m
+    localization_stable_yaw_thresh: 0.04   # rad (~2.3deg)
+    # 恢复放行仍要求位姿连续稳定，并要求 score 留在实测正确运动区间内。
+    localization_stable_score_thresh: 0.07
+    max_continuous_failures: 3
+    max_base_translation_speed: 0.85       # m/s, 高于底盘物理上限并留余量
+    translation_jump_margin: 0.15          # m
+    # 恢复候选还必须接近从最后可信位姿传播的轮式里程计预测。轮式里程计只做
+    # veto，不直接修改 map->odom；可拒绝重复出现但横向偏移 0.3~0.6m 的 ICP 局部解。
+    recovery_wheel_position_gate: 0.20
+    recovery_wheel_yaw_gate: 0.30          # rad (~17deg)
+    # 普通掉定位只允许在最后可信轨迹附近自动恢复；从真正进入 LOST 状态起
+    # 超过该时长仍未恢复时，要求人工 /initialpose。
+    trusted_recovery_anchor_timeout_sec: 30.0
+    # 连续跟踪退化后先锁车并在 trusted wheel prediction 附近继续局部 ICP；
+    # 只有局部恢复持续失败到该时长，才升级到全局 SC/grid。
+    # nav_20260816_110143: the trusted candidate reached 3/4 confirmations at
+    # 8s and was then needlessly escalated to ambiguous global recovery.
+    local_recovery_timeout_sec: 12.0
+    localization_state_topic: "/localization_ok"
+    # Keep a valid identity map->odom TF while localization is held so RViz
+    # can still render the live cloud/scan for diagnosis.  cmd_vel remains
+    # blocked by /localization_ok until an ICP candidate is verified.
+    publish_identity_until_localized: true
+    initial_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # x,y,z,roll,pitch,yaw
+    # 更多迭代不能消除错误局部极值，只会拖慢 325 候选的全局搜索。
+    rough_iter: 30
+    refine_iter: 20
+
+    # NDT 粗配准参数 (SC relocalization 用)
+    ndt_resolution: 1.0
+    ndt_step_size: 0.1
+    ndt_max_iterations: 30
+    ndt_epsilon: 0.01
+    ndt_score_thresh: 0.6
+    # 2026-07-20 错误 SC 候选 score=0.2387；拒绝后网格 ICP 找到 0.0077 的正确解。
+    sc_icp_thresh: 0.10
+
+    # SC relocalization 参数
+    submap_half_range: 5
+    sc_dist_thresh: 0.20
+    # 最优候选必须显著优于空间上不同的次优候选，否则保持定位未就绪。
+    sc_candidate_separation: 1.0       # m，同一地点的相邻关键帧不算次优地点
+    sc_ambiguity_distance_margin: 0.05 # second_dist - best_dist；越大越严格
+    # RViz /initialpose 是无 GPS 部署中的强先验，默认禁止 SC 覆盖它。
+    allow_sc_override_initial_pose: false
+    # SC 在重复货架/走廊中可能出现同分候选。无人工位姿时允许回退到
+    # 全局网格，但只有很低的精配准误差才能进入现有 4 帧稳定验证；否则
+    # 保持底盘锁定并继续重试。设为 false 可恢复“必须点 /initialpose”。
+    allow_ambiguous_sc_grid_fallback: true
+    # 2026-08-10 test_08 nav_181741/nav_181139：网格精配准 score 稳定 0.043~0.059
+    # （正确位姿），全部被 0.04 拒绝。放到 0.065 覆盖实测上界并留余量。
+    global_grid_score_thresh: 0.065
+    # 全局网格中空间相隔至少 1m 的第二个低分极小值若与最优值过近，
+    # 认为位置不可观，不会仅凭重复多帧错误地放行。
+    global_grid_candidate_separation: 1.0
+    global_grid_score_margin: 0.025
+    # 检测到空间独立的近似同分极值时绝不自动提交；人工先验仍可覆盖。
+    reject_ambiguous_global_candidates: true
+    # 人工初始位姿只允许小范围修正；禁止再次做 ±180° 全局搜索后跳到反向解。
+    manual_pose_xy_search_radius: 2.0   # m (从0.8扩大到2.0，允许更大初始位置误差)
+    manual_pose_yaw_search_range: 0.52  # rad (~30deg, 从20度扩大到30度)
+
+    # 地图裁剪: ICP 前只使用估计位置附近的地图点, 0.0=禁用
+    map_crop_radius: 50.0  # meters
+
+    # 导航输出仍为平面位姿，但最近邻搜索保留 z，以区分不同高度的货架结构。
+    constrain_to_2d: true
+    preserve_3d_structure_for_planar_icp: true
+
+    # TF 平滑: map→odom 更新时插值过渡的时长, 0.0=禁用(立即跳变)
+    tf_smooth_duration: 0.25  # seconds; 仅小幅连续纠偏使用，重定位仍强制 snap
+
+    # LIO yaw jump detection: 直接读取原始 LIO，与轮式里程计比较；不能使用
+    # safe_odom_mux 发布的 odom->base_link 代替原始 LIO。
+    # 原理: LIO_yaw - wheel_yaw 的差值(divergence)应保持稳定
+    #        差值突变 > divergence_thresh 则判定 LIO 跳变
+    lio_odom_topic: "/fastlio2/lio_odom"
+    wheel_odom_topic: "/odom"
+    lio_jump_divergence_thresh: 0.25  # rad (~14°), 更敏感地检测漂移（从0.35降低）
+    lio_jump_icp_score_factor: 0.3   # 放宽恢复条件，从0.1提升到0.3，允许中等质量的ICP恢复
+    lio_jump_detection_timeout: 15.0 # seconds, 延长恢复窗口期（从10秒延长到15秒）
+    # 绝对 yaw 偏差检测: 校准 ICP_yaw - wheel_yaw 偏移量，当偏移量漂移超阈值时触发双路恢复
+    # 用于捕获 LIO 渐变漂移（逐帧 yaw_delta < 46° 但累计翻转 180°）的情况
+    icp_wheel_abs_yaw_thresh: 1.2    # rad (~69°), 降低阈值更早检测累积漂移（从1.5降低）
+    icp_wheel_recovery_yaw_gate_thresh: 0.70  # rad (~40°), 放宽恢复门槛（从0.52提升）
+    wheel_odom_pose_timeout: 0.5      # seconds, 轮式里程计过旧时禁止用它判定恢复
+    # 原地旋转时 3D ICP 的 x/y 可观性差，保持已有 map→odom 平移，只接受航向纠偏。
+    pure_rotation_angular_speed_thresh: 0.10  # rad/s
+    pure_rotation_linear_speed_thresh: 0.05   # m/s
+    # 覆盖 1.0s 连续 ICP 周期及 0.25s TF 平滑，避免漏掉停车后的第一帧配准。
+    pure_rotation_translation_freeze_settle_time: 1.25  # s
+    # 旋转结束后继续用 wheel anchor 传播 map x/y，直到轮里程计确认至少 5cm
+    # 平移；避免停车视角下 LIO/ICP 横向退化重新注入旋转漂移。
+    pure_rotation_anchor_release_distance: 0.05  # m
+    # 纯旋转时只对“刚刚越过常规阈值”的 ICP 帧保留上一可信 TF；不会发布该弱帧结果。
+    # 同时要求轮里程计/LIO 新鲜、无平移、无航向分歧，且保护时长有上限。
+    # 三项质量指标同时放宽：上限指标用 limit*margin，内点率是下限故用 value*margin，
+    # 等价于 limit/margin 但不引入除法。
+    # 1.10 的有效内点率下限 = 0.68/1.10 = 0.618；取自交付台实测最低 0.655
+    # (nav_20260815_113124 +97.08s)，留约 6% 余量。1.05 只能给到 0.6476，
+    # 余量 0.0074 过薄。rmse/p50 上限随之放到 0.165/0.110，实测最大 0.146/0.104。
+    pure_rotation_weak_quality_margin_factor: 1.10
+    pure_rotation_weak_quality_max_duration: 10.0  # s
+    # nav_20260815_145007：大角度转向停止后，ratio=0.717~0.732、p50<=0.098
+    # 仍正常，但 RMSE 在 0.150~0.153m 边界波动，三帧即触发锁车。该保护不接纳
+    # 弱 ICP 结果，只让最后可信 map->odom 在 wheel/LIO 一致时传播一段受限退出路程。
+    # 任一时间、里程、速度或质量边界越线后，立即恢复正常失败计数。
+    post_rotation_weak_quality_max_duration: 8.0  # s
+    post_rotation_weak_quality_max_travel: 0.20   # m
+    post_rotation_weak_quality_max_linear_speed: 0.20  # m/s
+    # 交付台近场精调租约：弱 ICP 解不会被发布，只在 wheel/LIO 新鲜且一致时保留
+    # 最后可信 map->odom。精调成功时重新计时和采集锚点，普通严格 ICP 强帧会
+    # 刷新租约而不会提前取消；连续弱匹配仍最多保持 30s。退避成功后显式释放。
+    # 0.45m 覆盖放置等待和约 0.15m 退避。
+    fine_alignment_guard_topic: "/shelf_fine_align/localization_guard_state"
+    fine_alignment_guard_max_duration: 30.0
+    fine_alignment_guard_max_travel: 0.45
+    fine_alignment_guard_max_linear_speed: 0.10
+    fine_alignment_guard_max_lio_wheel_divergence: 0.25
+    fine_alignment_guard_min_inlier_count: 800
+    fine_alignment_guard_min_inlier_ratio: 0.65
+    fine_alignment_guard_max_inlier_rmse: 0.165
+    fine_alignment_guard_max_median_distance: 0.120
+    # 低支撑通道：交付台等局部地图缺失处，未建图结构把 valid_count 抬高
+    # (交付台实测 1589 -> 1798) 而 inlier_count 不变 (1099~1197)，内点率被稀释到
+    # 0.655，但 inlier_rmse (<=0.146) 与 p50 (<=0.104) 反而收紧。配准发散时残差会
+    # 与内点率同步恶化，二者由此可区分。
+    # 与纯旋转保护相反，本通道“接纳”该帧结果，因此只放宽支撑点数量，残差门槛
+    # 由 residual_tighten 缩放且被钳到 <=1.0，绝不会接受常规门限已按残差拒绝的帧。
+    # 纯旋转保护要求 |w|>=0.10，转向结束即失效；本通道覆盖转向后与精调静止期。
+    # nav_20260815_113124 +87.07s~+107.07s 连续 15 帧被拒实测：全部只因内点率
+    # (0.655~0.673 vs 0.680) 被拒；其中 14 帧本就满足常规残差门限
+    # (rmse<=0.146/0.150, p50<=0.099/0.100)，仅 +105.09s 的 p50=0.104 越线。
+    # 故 residual_tighten 取 1.0：收到 0.95 会拒掉其中 7 帧，仍会让
+    # max_continuous_failures=3 升级到恢复流程，等于没修。
+    continuous_low_support_min_inlier_ratio: 0.60
+    continuous_low_support_min_inlier_count: 800
+    continuous_low_support_residual_tighten: 1.0
+    # 实测被拒窗口正好 20.0s (87.07->107.07)，20.0 会卡在边界上，放到 25.0 留余量。
+    continuous_low_support_max_duration: 25.0  # s
+    # 连续 ICP 只能对局部 odom 预测做小幅平移纠偏；更大的修正通常是旋转点云退化。
+    # 全局重定位不受此限制。
+    continuous_translation_correction_limit: 0.20  # m/update (从0.12提升到0.20，加快收敛速度)
+    localization_hold_topic: "/localization_hold"

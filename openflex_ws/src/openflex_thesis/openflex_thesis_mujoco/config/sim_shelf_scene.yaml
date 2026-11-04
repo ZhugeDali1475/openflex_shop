@@ -1,0 +1,25 @@
+# Exact geometry of the generated MuJoCo scene. This is calibrated only to the
+# digital scene and must never be substituted for physical shelf calibration.
+calibrated: false
+frame_id: map
+collision_objects:
+  - id: mujoco_shelf_back
+    shape: box
+    dimensions: [0.05, 1.30, 2.10]
+    position: [1.46, 0.0, 1.05]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+  - id: mujoco_shelf_board_target_level
+    shape: box
+    dimensions: [0.50, 1.30, 0.036]
+    position: [1.24, 0.0, 0.74]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+  - id: mujoco_shelf_left_wall
+    shape: box
+    dimensions: [0.50, 0.036, 2.10]
+    position: [1.24, 0.65, 1.05]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+  - id: mujoco_shelf_right_wall
+    shape: box
+    dimensions: [0.50, 0.036, 2.10]
+    position: [1.24, -0.65, 1.05]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]

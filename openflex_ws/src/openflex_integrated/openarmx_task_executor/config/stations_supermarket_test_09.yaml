@@ -1,0 +1,252 @@
+# Test-9 phase-1 manipulation poses and calibrated shelf observation levels.
+# Navigation poses are overlaid from the map's competition_mission.yaml.  The
+# arm targets below are the poses taught on this robot and stored by the
+# competition console as "move", "第四层货架右侧拍照", "放置过渡2" and
+# "放置2". Gripper joints are intentionally excluded: the right gripper keeps
+# its grasp command throughout every arm posture and is released only by the
+# dedicated gripper action after "放置2" is reached.
+_shelf_defaults: &shelf_defaults
+  alignment:
+    enabled: true
+    mode: shelf_scan
+    # The A shelf has low-level uprights that protrude about 4 cm beyond the
+    # nominal face along the validated lateral route. Keep 10 cm before moving.
+    target_clearance: 0.10
+    clearance_tolerance: 0.01
+    yaw_tolerance: 0.0174533
+    timeout_sec: 20.0
+  retreat:
+    after_pick: true
+    after_place: false
+    distance: 0.15
+    speed: 0.04
+  level_lift_positions:
+    # Level 0 is the taught chassis travel posture ("move").
+    0: 0.0
+    # Legacy measured right-wrist observation poses retained for level-2 use
+    # and manual diagnostics. The formal DB-level-3 workflow uses level 4.
+    2: 0.1066645
+    3: 0.29981
+    # Formal Test-9 observation posture: "fourth shelf level, right photo".
+    4: 0.183
+  level_arm_positions:
+    0:
+      left:
+        # Competition-console "move" preset.  J1 stays just inside the
+        # calibrated 0.905604 rad physical limit instead of using the GUI's
+        # milliradian-rounded 0.906 display value.
+        openarmx_left_joint1: 0.9055
+        openarmx_left_joint2: -0.019
+        openarmx_left_joint3: 0.013
+        openarmx_left_joint4: 1.8
+        openarmx_left_joint5: 0.106
+        openarmx_left_joint6: 0.027
+        openarmx_left_joint7: -0.922
+      right:
+        openarmx_right_joint1: -1.139
+        openarmx_right_joint2: 0.114
+        openarmx_right_joint3: 0.109
+        openarmx_right_joint4: 1.8
+        openarmx_right_joint5: 0.157
+        openarmx_right_joint6: 0.03
+        openarmx_right_joint7: 1.034
+    2:
+      # Keep the unused left arm inside the taught move envelope.
+      left:
+        openarmx_left_joint1: 0.9055
+        openarmx_left_joint2: -0.019
+        openarmx_left_joint3: 0.013
+        openarmx_left_joint4: 1.8
+        openarmx_left_joint5: 0.106
+        openarmx_left_joint6: 0.027
+        openarmx_left_joint7: -0.922
+      right:
+        openarmx_right_joint1: -1.0466848611831665
+        openarmx_right_joint2: 0.33853742480278015
+        openarmx_right_joint3: -0.34889495372772217
+        openarmx_right_joint4: 1.770176649093628
+        openarmx_right_joint5: 0.12601648271083832
+        openarmx_right_joint6: -0.216932475566864
+        openarmx_right_joint7: 0.8778956532478333
+    3:
+      left:
+        openarmx_left_joint1: 0.9055
+        openarmx_left_joint2: -0.019
+        openarmx_left_joint3: 0.013
+        openarmx_left_joint4: 1.8
+        openarmx_left_joint5: 0.106
+        openarmx_left_joint6: 0.027
+        openarmx_left_joint7: -0.922
+      right:
+        openarmx_right_joint1: -0.7114080786705017
+        openarmx_right_joint2: 0.4018333852291107
+        openarmx_right_joint3: -0.24301807582378387
+        openarmx_right_joint4: 1.7709438800811768
+        openarmx_right_joint5: 0.21539802849292755
+        openarmx_right_joint6: -0.01745433732867241
+        openarmx_right_joint7: 0.7056539058685303
+    4:
+      left:
+        # Left-arm half of the taught fourth-level competition-console preset.
+        openarmx_left_joint1: 0.9055
+        openarmx_left_joint2: 0.016
+        openarmx_left_joint3: 0.045
+        openarmx_left_joint4: 1.8
+        openarmx_left_joint5: 0.2
+        openarmx_left_joint6: 0.117
+        openarmx_left_joint7: -0.796
+      right:
+        openarmx_right_joint1: -0.708
+        openarmx_right_joint2: 0.582
+        openarmx_right_joint3: 0.382
+        openarmx_right_joint4: 1.8
+        openarmx_right_joint5: 0.648
+        openarmx_right_joint6: 0.126
+        openarmx_right_joint7: 0.508
+  slots:
+    "*":
+      pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 1.25, yaw: 0.0}
+      arm_name: right
+      grasp_strategy: graspnet_shelf
+
+stations:
+  START:
+    nav_pose:
+      frame_id: map
+      x: -0.118
+      y: 0.051
+      z: 0.0
+      yaw: 1.5603243512829308
+    alignment:
+      enabled: false
+      mode: none
+    retreat:
+      after_pick: false
+      after_place: false
+      distance: 0.15
+      speed: 0.04
+
+  SHELF-A:
+    <<: *shelf_defaults
+    nav_pose:
+      frame_id: map
+      x: 1.842
+      y: 1.321
+      z: 0.0
+      yaw: -3.115412714809878
+
+  JIAOFU:
+    nav_pose:
+      frame_id: map
+      x: 2.12
+      y: 0.294
+      z: 0.0
+      yaw: -1.53588974175501
+    alignment:
+      enabled: true
+      mode: shelf_scan
+      target_clearance: 0.20
+      clearance_tolerance: 0.01
+      yaw_tolerance: 0.0174533
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance: 0.15
+      speed: 0.04
+    place_pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+    place_strategy: counter_top
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: mock
+
+  # Test-9 C point. Levels 10 and 11 are internal taught-posture IDs rather
+  # than shelf heights: 10 = "放置过渡2", 11 = "放置2".
+  jiaofu2:
+    nav_pose:
+      frame_id: map
+      x: -2.256
+      y: 0.194
+      z: 0.0
+      yaw: -1.603957582582789
+    alignment:
+      enabled: true
+      mode: shelf_scan
+      target_clearance: 0.05
+      clearance_tolerance: 0.01
+      yaw_tolerance: 0.0174533
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance: 0.15
+      speed: 0.04
+    level_lift_positions:
+      0: 0.0
+      10: 0.0
+      11: 0.0
+    level_arm_positions:
+      # "move". The rounded 0.906 left J1 preset is kept just inside the
+      # calibrated 0.905604 rad physical limit.
+      0:
+        left:
+          openarmx_left_joint1: 0.9055
+          openarmx_left_joint2: -0.019
+          openarmx_left_joint3: 0.013
+          openarmx_left_joint4: 1.8
+          openarmx_left_joint5: 0.106
+          openarmx_left_joint6: 0.027
+          openarmx_left_joint7: -0.922
+        right:
+          openarmx_right_joint1: -1.139
+          openarmx_right_joint2: 0.114
+          openarmx_right_joint3: 0.109
+          openarmx_right_joint4: 1.8
+          openarmx_right_joint5: 0.157
+          openarmx_right_joint6: 0.03
+          openarmx_right_joint7: 1.034
+      # "放置过渡2"
+      10:
+        left:
+          openarmx_left_joint1: 0.9055
+          openarmx_left_joint2: -0.184
+          openarmx_left_joint3: 0.014
+          openarmx_left_joint4: 1.8
+          openarmx_left_joint5: 0.022
+          openarmx_left_joint6: -0.022
+          openarmx_left_joint7: 0.044
+        right:
+          openarmx_right_joint1: -0.243
+          openarmx_right_joint2: 0.802
+          openarmx_right_joint3: 0.207
+          openarmx_right_joint4: 1.8
+          openarmx_right_joint5: 0.684
+          openarmx_right_joint6: 0.166
+          openarmx_right_joint7: 0.213
+      # "放置2"
+      11:
+        left:
+          openarmx_left_joint1: 0.822
+          openarmx_left_joint2: -0.25
+          openarmx_left_joint3: -0.129
+          openarmx_left_joint4: 1.8
+          openarmx_left_joint5: -0.291
+          openarmx_left_joint6: -0.147
+          openarmx_left_joint7: -0.116
+        right:
+          openarmx_right_joint1: 0.526
+          openarmx_right_joint2: 0.561
+          openarmx_right_joint3: -0.326
+          openarmx_right_joint4: 0.89
+          openarmx_right_joint5: 0.632
+          openarmx_right_joint6: 0.13
+          openarmx_right_joint7: 0.358
+    place_pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+    place_strategy: counter_top
+    slots:
+      "*":
+        pose: {frame_id: base_link, x: 0.55, y: 0.0, z: 0.75, yaw: 0.0}
+        arm_name: right
+        grasp_strategy: mock

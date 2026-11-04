@@ -1,0 +1,15 @@
+# Plan or execute one complete joint-space posture through MoveIt.
+string planning_group
+sensor_msgs/JointState joint_goal
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_timeout_sec
+bool execute
+---
+moveit_msgs/MoveItErrorCodes error_code
+sensor_msgs/JointState resolved_joint_goal
+moveit_msgs/RobotTrajectory trajectory
+float64 planning_time
+string message
+---
+string phase

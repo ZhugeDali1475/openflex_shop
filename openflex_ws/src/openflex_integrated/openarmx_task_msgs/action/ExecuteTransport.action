@@ -1,0 +1,22 @@
+# Long-running competition task: move one object from a source station to a
+# destination station. The executor owns sequencing and retries.
+string task_id
+string object_id
+string source_station
+string destination_station
+string source_slot
+string destination_slot
+bool use_source_level
+int32 source_level
+bool use_nominal_object_pose
+geometry_msgs/PoseStamped nominal_object_pose
+uint8 max_retries
+float32 timeout_sec
+---
+bool success
+uint16 error_code
+string message
+---
+string phase
+float32 progress
+uint8 retry_count

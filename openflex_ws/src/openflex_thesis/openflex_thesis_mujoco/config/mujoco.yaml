@@ -1,0 +1,68 @@
+openflex_thesis_mujoco_bridge:
+  ros__parameters:
+    upstream_model_path: ""
+    derived_model_path: /tmp/openflex_thesis_mujoco_scene.xml
+    timestep_sec: 0.002
+    real_time_factor: 1.0
+    enable_viewer: false
+    publish_rate_hz: 50.0
+    command_timeout_sec: 0.25
+    base_velocity_tau_sec: 0.08
+    max_linear_mps: 0.50
+    max_angular_rps: 0.80
+    object_id: thesis_item_01
+    initial_base_pose: [0.0, 0.0, 0.0]
+    # Validated MoveIt "hands_up" posture for the non-working left arm.
+    inactive_arm_park_positions: [0.0, 0.0, 0.0, 1.8, 0.0, 0.0, 0.0]
+    inactive_gripper_open_position: 0.04
+    # [x, y, z, yaw], object +x points from the shelf toward free space.
+    object_nominal_pose: [1.12, 0.0, 0.84, 3.141592653589793]
+    object_randomization_xy_m: [0.08, 0.18]
+    object_randomization_yaw_rad: 0.20
+    occlusion_probability: 0.0
+    observation_position_noise_std_m: 0.0
+    observation_confidence: 0.99
+    random_seed: 7
+    grasp_attach_distance_m: 0.16
+    gripper_closed_threshold_m: 0.008
+    gripper_goal_tolerance_m: 0.003
+    gripper_action_timeout_sec: 4.0
+    delivery_surface_z_m: 0.56
+
+mujoco_oracle_anygrasp:
+  ros__parameters:
+    request_topic: /thesis/anygrasp/request
+    response_topic: /thesis/anygrasp/candidates
+    coarse_lateral_spread_m: 0.025
+    refined_lateral_spread_m: 0.010
+    pregrasp_distance_m: 0.12
+
+scripted_local_alignment_baseline:
+  ros__parameters:
+    linear_gain: 1.1
+    angular_gain: 1.8
+    max_linear_mps: 0.18
+    max_angular_rps: 0.30
+    position_tolerance_m: 0.025
+    yaw_tolerance_rad: 0.035
+
+sim_navigation_baseline_not_nav2:
+  ros__parameters:
+    linear_gain: 0.9
+    angular_gain: 1.5
+    max_linear_mps: 0.35
+    max_angular_rps: 0.50
+    position_tolerance_m: 0.04
+    yaw_tolerance_rad: 0.05
+    timeout_sec: 60.0
+
+thesis_mujoco_mission_client:
+  ros__parameters:
+    task_id: MUJOCO_TRIAL_001
+    object_id: thesis_item_01
+    active_arm: 2
+    pickup_observation_pose: [0.0, 0.0, 0.0]
+    delivery_pose: [-0.85, -0.80, 0.0]
+    coarse_top_k: 5
+    refined_top_k: 5
+    max_recovery_attempts: 2

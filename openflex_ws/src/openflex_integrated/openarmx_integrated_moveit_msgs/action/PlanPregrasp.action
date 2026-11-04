@@ -1,0 +1,46 @@
+# Object perception converts its grasp into a 6D TCP pregrasp pose in odom.
+uint8 LEFT=0
+uint8 RIGHT=1
+uint8 arm
+
+# Maximum motion scope for this request. AUTO uses the shared YAML default.
+uint8 AUTO=0
+uint8 ARM_ONLY=7
+uint8 ARM_WITH_LIFT=8
+uint8 WHOLE_BODY=11
+uint8 max_dof
+
+geometry_msgs/PoseStamped tcp_pregrasp_pose
+
+# Omit the mode and heading fields to keep the current RobotState base yaw.
+uint8 CURRENT_STATE=0
+uint8 EXPLICIT=1
+uint8 base_yaw_mode
+float64 desired_base_yaw_odom
+float64 base_yaw_tolerance
+uint16 base_yaw_samples
+
+float64 front_distance
+
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_timeout_sec
+bool execute
+---
+moveit_msgs/MoveItErrorCodes error_code
+uint8 STAGE_A=0
+uint8 STAGE_B=1
+uint8 STAGE_C=2
+uint8 initial_route
+uint8 selected_stage
+geometry_msgs/PoseStamped base_goal_odom
+float64 lift_goal
+sensor_msgs/JointState arm_goal
+moveit_msgs/RobotTrajectory arm_trajectory
+float64 planning_time
+string message
+---
+string phase
+uint16 candidates_generated
+uint16 candidates_valid
+uint16 candidates_planned

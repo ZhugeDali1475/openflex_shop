@@ -1,0 +1,43 @@
+[INFO] [1785937774.895773539] [tf2_echo]: Waiting for transform base_link ->  right_camera_color_optical_frame: Invalid frame ID "base_link" passed to canTransform argument target_frame - frame does not exist
+[INFO] [1785937776.881092104] [tf2_echo]: Waiting for transform base_link ->  right_camera_color_optical_frame: Could not find a connection between 'base_link' and 'right_camera_color_optical_frame' because they are not part of the same tree.Tf has two or more unconnected trees.
+At time 1785937778.853557211
+- Translation: [0.203, -0.174, 0.805]
+- Rotation: in Quaternion (xyzw) [0.661, -0.591, 0.313, -0.341]
+- Rotation: in RPY (radian) [-2.179, -0.010, -1.465]
+- Rotation: in RPY (degree) [-124.864, -0.577, -83.925]
+- Matrix:
+  0.106 -0.568  0.817  0.203
+ -0.994 -0.069  0.081 -0.174
+  0.010 -0.820 -0.572  0.805
+  0.000  0.000  0.000  1.000
+At time 1785937779.860572866
+- Translation: [0.203, -0.174, 0.805]
+- Rotation: in Quaternion (xyzw) [0.661, -0.591, 0.313, -0.341]
+- Rotation: in RPY (radian) [-2.179, -0.010, -1.465]
+- Rotation: in RPY (degree) [-124.866, -0.560, -83.912]
+- Matrix:
+  0.106 -0.568  0.816  0.203
+ -0.994 -0.069  0.081 -0.174
+  0.010 -0.820 -0.572  0.805
+  0.000  0.000  0.000  1.000
+At time 1785937780.856917303
+- Translation: [0.203, -0.174, 0.805]
+- Rotation: in Quaternion (xyzw) [0.661, -0.591, 0.313, -0.341]
+- Rotation: in RPY (radian) [-2.179, -0.010, -1.465]
+- Rotation: in RPY (degree) [-124.866, -0.560, -83.912]
+- Matrix:
+  0.106 -0.568  0.816  0.203
+ -0.994 -0.069  0.081 -0.174
+  0.010 -0.820 -0.572  0.805
+  0.000  0.000  0.000  1.000
+At time 1785937781.852140822
+- Translation: [0.203, -0.174, 0.805]
+- Rotation: in Quaternion (xyzw) [0.661, -0.591, 0.313, -0.341]
+- Rotation: in RPY (radian) [-2.179, -0.010, -1.465]
+- Rotation: in RPY (degree) [-124.864, -0.577, -83.925]
+- Matrix:
+  0.106 -0.568  0.817  0.203
+ -0.994 -0.069  0.081 -0.174
+  0.010 -0.820 -0.572  0.805
+  0.000  0.000  0.000  1.000
+[INFO] [1785937782.640097814] [rclcpp]: signal_handler(SIGINT/SIGTERM)

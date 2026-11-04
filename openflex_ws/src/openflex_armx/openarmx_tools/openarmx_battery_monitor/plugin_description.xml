@@ -1,0 +1,10 @@
+<library path="openarmx_battery_monitor">
+  <class
+    name="openarmx_battery_monitor/BatteryOverlayDisplay"
+    type="openarmx_battery_monitor::BatteryOverlayDisplay"
+    base_class_type="rviz_common::Display">
+    <description>
+      Shows a battery state badge anchored to the RViz render panel.
+    </description>
+  </class>
+</library>

@@ -1,0 +1,20 @@
+parameters:
+  name: left_link7_handeye
+  calibration_type: eye_in_hand
+  robot_base_frame: base_link
+  robot_effector_frame: openarmx_left_link7
+  tracking_base_frame: left_camera_color_optical_frame
+  tracking_marker_frame: aruco_marker_frame
+  freehand_robot_movement: true
+  move_group_namespace: /
+  move_group: manipulator
+transform:
+  translation:
+    x: 0.09555859171638514
+    y: -0.015860000793077835
+    z: 0.11456113647136229
+  rotation:
+    x: -0.1813082786012135
+    y: -0.22729225173182688
+    z: 0.6887430937975637
+    w: 0.6641524607795263

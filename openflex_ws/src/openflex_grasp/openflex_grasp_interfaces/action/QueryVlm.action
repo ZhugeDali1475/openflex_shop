@@ -1,0 +1,12 @@
+# Internal request to the single resident vision-language model worker.
+sensor_msgs/Image image
+string prompt
+uint32 max_new_tokens
+---
+bool success
+string text
+string model
+uint16 error_code
+string message
+---
+string phase

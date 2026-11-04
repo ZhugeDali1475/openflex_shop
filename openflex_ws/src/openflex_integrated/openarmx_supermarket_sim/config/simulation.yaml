@@ -1,0 +1,16 @@
+openarmx_supermarket_sim:
+  ros__parameters:
+    random_seed: 20260729
+    auto_run: false
+    exit_on_complete: true
+    auto_judge_pause_sec: 1.0
+    time_scale: 0.02
+    navigation_speed_mps: 0.50
+    minimum_action_delay_sec: 0.02
+    collision_probability: 0.0
+    drop_probability: 0.0
+    out_of_bounds_probability: 0.0
+    world_config: ""
+    station_config: ""
+    status_topic: /sim_competition/status
+    report_path: /tmp/openarmx_supermarket_sim_report.json

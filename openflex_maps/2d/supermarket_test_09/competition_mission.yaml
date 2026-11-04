@@ -1,0 +1,163 @@
+schema_version: 2
+map_name: supermarket_test_09
+stations:
+- id: START
+  label: 物理起点
+  role: start_position
+  pose:
+    x: -0.12114153523487368
+    y: -0.24898355080965362
+    yaw: 1.5603243512829308
+  action:
+    fine_align:
+      enabled: false
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: PRE_START
+  label: 起点前方导航等待区
+  role: waypoint
+  pose:
+    x: -0.118
+    y: 0.051
+    yaw: 1.5603243512829308
+  action:
+    fine_align:
+      enabled: false
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: false
+      distance_m: 0.3
+      speed_mps: 0.04
+- id: SHELF-1-FACE-0
+  label: 货架1面0锚点
+  role: shelf_approach
+  pose:
+    x: -2.2352677025718943
+    y: 1.408759277707058
+    yaw: 0.07963499699183582
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.1
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: SHELF-1-FACE-1
+  label: 货架1面1锚点
+  role: shelf_approach
+  pose:
+    x: -0.15622687135477287
+    y: 1.5596268775586521
+    yaw: 3.141592653589793
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.1
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: SHELF-2-FACE-0
+  label: 货架2面0锚点
+  role: shelf_approach
+  pose:
+    x: -0.12060498522172458
+    y: 1.6776475682256375
+    yaw: 0.06356114806348771
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.1
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: SHELF-A
+  label: 货架2面1锚点A
+  role: shelf_approach
+  pose:
+    x: 1.945
+    y: 1.323
+    yaw: 3.141592653589793
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.1
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: true
+      after_place: false
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: jiaofu2
+  label: C
+  role: delivery_table
+  pose:
+    x: -2.256
+    y: 0.194
+    yaw: -1.603957582582789
+  action:
+    fine_align:
+      enabled: true
+      mode: front_surface_scan
+      target_clearance_m: 0.05
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance_m: 0.15
+      speed_mps: 0.04
+- id: jiaofu3
+  label: D
+  role: delivery_table
+  pose:
+    x: -2.232
+    y: 0.005
+    yaw: -1.5533430342749532
+  action:
+    fine_align:
+      enabled: false
+      mode: front_surface_scan
+      target_clearance_m: 0.2
+      clearance_tolerance_m: 0.01
+      yaw_tolerance_deg: 1.0
+      timeout_sec: 20.0
+    retreat:
+      after_pick: false
+      after_place: true
+      distance_m: 0.15
+      speed_mps: 0.04

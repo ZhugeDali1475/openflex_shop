@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "${OPENFLEX_GRASPNET_PYTHON:-/home/openflex/openflex_shop/.venvs/openflex_graspnet/bin/python}" -m openflex_grasp.grasp_offline "$@"

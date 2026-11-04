@@ -1,0 +1,78 @@
+schema_version: 1
+profile:
+  id: supermarket_test_03
+  display_name: "商超比赛底盘导航基准场"
+  purpose: "定位、航点跟踪、全向运动、动态避障和精停的真机验收"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_03"
+  launch_file: "supermarket_test_03_benchmark.launch.py"
+  initial_pose: {x: 0.0, y: -0.28, yaw: 1.57}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+
+acceptance:
+  # Goal result is a strict tuning target; Nav2 has the same nominal window.
+  goal_position_m: 0.05
+  goal_yaw_rad: 0.05
+  max_goal_position_m: 0.07
+  max_goal_yaw_rad: 0.08
+  path_cross_track_m: 0.08
+  max_icp_step_m: 0.05
+  max_icp_step_yaw_rad: 0.04
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.50
+  minimum_success_rate: 0.99
+  required_zero_collision_tours: 20
+
+# Coordinates were screened against the 0.05 m PGM.  "clearance_m" is the
+# center-to-nearest occupied/unknown grid distance and is documentation, not a
+# substitute for Nav2 footprint collision checking on the live costmap.
+waypoints:
+  C0:
+    label: "中央基准-朝东"
+    pose: {x: -0.70, y: -0.55, yaw: 0.0}
+    clearance_m: 1.21
+    role: "wide_rotation_and_precision_reference"
+  W:
+    label: "西南航点"
+    pose: {x: -1.05, y: -1.50, yaw: -1.57}
+    clearance_m: 0.77
+    role: "waypoint_tracking"
+  D:
+    label: "南侧航点"
+    pose: {x: 0.25, y: -2.00, yaw: 0.0}
+    clearance_m: 0.87
+    role: "holonomic_transition"
+  C180:
+    label: "中央基准-朝西"
+    pose: {x: -0.70, y: -0.55, yaw: 3.141593}
+    clearance_m: 1.21
+    role: "wide_rotation_and_precision_reference"
+  N:
+    label: "北侧航点"
+    pose: {x: -0.15, y: 0.30, yaw: 1.57}
+    clearance_m: 0.76
+    role: "waypoint_tracking"
+
+tours:
+  baseline:
+    label: "全向导航基准巡游"
+    sequence: [C0, W, D, C180, N, C0]
+    settle_sec: 1.0
+  precision:
+    label: "中央精停与朝向重复"
+    sequence: [C0, C180, C0, C180, C0]
+    settle_sec: 1.5
+
+future_scene_contract:
+  # Copy this profile when the real venue is measured. Keep semantic IDs stable
+  # so the task layer can resolve shelf/bin IDs to approach and docking poses.
+  station_fields:
+    - station_id
+    - semantic_type
+    - nav_pose
+    - fine_dock_reference
+    - shelf_face
+    - shelf_segment
+    - allowed_heading
+    - transport_footprint_profile

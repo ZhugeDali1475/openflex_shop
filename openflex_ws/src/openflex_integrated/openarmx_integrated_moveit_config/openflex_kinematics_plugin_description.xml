@@ -1,0 +1,23 @@
+<class_libraries>
+<library path="openflex_kinematics">
+  <class name="openarmx_integrated_moveit_config/OpenflexKinematicsPlugin"
+         type="openarmx_integrated_moveit_config::OpenflexKinematicsPlugin"
+         base_class_type="kinematics::KinematicsBase">
+    <description>
+      Openflex IK for analytic lift-only motion, one arm with lift, and one-arm whole-body planning. Whole-body groups
+      route through a fixed shoulder workspace ball, then use KDL arm/lift stages and PickIK analytic rebase.
+    </description>
+  </class>
+</library>
+
+<library path="openarmx_moveit_controller_manager">
+  <class name="openarmx_integrated_moveit_config/OpenArmXControllerManager"
+         type="openarmx_integrated_moveit_config::OpenArmXControllerManager"
+         base_class_type="moveit_controller_manager::MoveItControllerManager">
+    <description>
+      Routes ordinary joint trajectories to the existing OpenArmX action bridge
+      and routes base_planar_joint multi-DOF goals to /navigate_to_pose.
+    </description>
+  </class>
+</library>
+</class_libraries>

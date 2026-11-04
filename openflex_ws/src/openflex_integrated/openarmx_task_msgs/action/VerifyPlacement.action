@@ -1,0 +1,17 @@
+# Verify that one placed item is in the requested shelf slot and is stable.
+string object_id
+string sku
+string station_id
+string slot_id
+float32 position_tolerance
+float32 timeout_sec
+---
+bool success
+bool stable
+float32 position_error
+float32 confidence
+uint16 error_code
+string message
+---
+string phase
+float32 confidence

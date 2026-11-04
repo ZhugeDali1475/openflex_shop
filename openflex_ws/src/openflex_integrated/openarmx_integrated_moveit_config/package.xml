@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!--
+   Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+
+   Copyright (c) 2026 Chengdu Changshu Robot Co., Ltd.
+   https://www.openarmx.com
+
+   This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+   4.0 International License (CC BY-NC-SA 4.0).
+
+   To view a copy of this license, visit:
+   http://creativecommons.org/licenses/by-nc-sa/4.0/
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+-->
+<package format="3">
+  <name>openarmx_integrated_moveit_config</name>
+  <version>0.1.0</version>
+  <description>
+     MoveIt configuration for the OpenArmX integrated wheeled-arm robot
+     (chassis + lift column + dual arms + head). The IK chains of both arms
+     include the lift prismatic DOF so that planning accounts for the whole
+     lift and considers chassis/lift collisions.
+  </description>
+  <maintainer email="openarmrobot@gmail.com">Chengdu Changshu Robot Co., Ltd</maintainer>
+
+  <license>CC-BY-NC-SA-4.0</license>
+
+  <url type="website">http://moveit.ros.org/</url>
+  <url type="bugtracker">https://github.com/ros-planning/moveit2/issues</url>
+  <url type="repository">https://github.com/ros-planning/moveit2</url>
+
+  <author email="openarmrobot@gmail.com">Chengdu Changshu Robot Co., Ltd</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>class_loader</depend>
+  <depend>eigen</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_msgs</depend>
+  <depend>moveit_ros_planning</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>moveit_simple_controller_manager</depend>
+  <depend>nav2_msgs</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>sensor_msgs</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>lift_slide_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>tl_expected</depend>
+  <depend>openarmx_integrated_moveit_msgs</depend>
+
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>moveit_kinematics</exec_depend>
+  <exec_depend>pick_ik</exec_depend>
+  <exec_depend>moveit_planners</exec_depend>
+  <exec_depend>ros2controlcli</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>moveit_ros_visualization</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>rviz_common</exec_depend>
+  <exec_depend>rviz_default_plugins</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <!-- Robot description packages required to resolve the integrated URDF -->
+  <exec_depend>openarmx_integrated_description</exec_depend>
+  <exec_depend>openarmx_integrated_bringup</exec_depend>
+  <exec_depend>openarmx_description</exec_depend>
+  <exec_depend>swerve_description</exec_depend>
+  <exec_depend>lift_slide_description</exec_depend>
+  <exec_depend>openarmx_head_description</exec_depend>
+
+  <export>
+      <build_type>ament_cmake</build_type>
+  </export>
+</package>

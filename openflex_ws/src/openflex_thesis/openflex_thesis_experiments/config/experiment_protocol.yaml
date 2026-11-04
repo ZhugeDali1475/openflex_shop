@@ -1,0 +1,60 @@
+protocol_version: thesis_anygrasp_tcwam_act_v2
+frozen: false
+randomization:
+  randomize_trial_order_within_block: true
+  seed: 20260715
+  split_unit: start_and_object_configuration
+
+experiments:
+  - name: calibration_nav_arrival
+    repetitions: 30
+    factors:
+      observation_pose: [pickup_handoff]
+    required_metrics: [dx, dy, dyaw, settling_time]
+
+  - name: tcwam_score_calibration
+    repetitions: 15
+    factors:
+      empirical_score_band: [high, middle, low]
+      grasp_source: [coarse_anygrasp]
+    required_metrics: [grasp_id, lift_position, ready_region_id, ik_valid, collision_free, grasp_success, score, planning_time]
+
+  - name: anygrasp_repeatability
+    repetitions: 10
+    factors:
+      stage: [coarse_observation_zone, refined_near_field]
+    required_metrics: [top_k_recall, grasp_pose_variance, quality_variance, inference_time]
+
+  - name: tcwam_method_comparison
+    repetitions: 15
+    factors:
+      method: [fixed_base, object_only_wam, anygrasp_conditioned_tcwam]
+      configuration_block: [balanced_nominal_lateral_depth]
+    required_metrics: [selected_grasp_id, selected_lift_position, ready_area, collision_free, grasp_success, planning_time]
+
+  - name: local_alignment_comparison
+    repetitions: 5
+    factors:
+      controller: [nav2_only, proportional_ready_controller, act_point_target, act_bound_ready_region]
+      initial_region: [outside_ready, ready_boundary, inside_ready]
+    required_metrics: [bound_ready_success, ready_region_id, duration, base_distance, final_speed, collision, policy_stop_latency]
+
+  - name: refined_grasp_ablation
+    repetitions: 10
+    factors:
+      perception: [single_coarse_anygrasp, coarse_plus_refined_anygrasp]
+      condition: [nominal, partial_occlusion]
+    required_metrics: [refined_grasp_id, current_base_reachable, recompute_count, moveit_plan_success, grasp_success]
+
+  - name: dynamic_recovery
+    repetitions: 10
+    factors:
+      memory: [static, event_triggered]
+      event: [object_moved, refined_grasp_unreachable]
+    required_metrics: [safe_stop, stale_plan_rejected, recompute_success, realignment_count, grasp_success, recovery_time]
+
+  - name: end_to_end
+    repetitions: 15
+    factors:
+      pipeline: [nav2_pid_moveit, nav2_anygrasp_tcwam_act_moveit]
+    required_metrics: [navigation, coarse_grasp, tc_wam, local_alignment, refined_grasp, moveit_grasp, transport, place, total_success]

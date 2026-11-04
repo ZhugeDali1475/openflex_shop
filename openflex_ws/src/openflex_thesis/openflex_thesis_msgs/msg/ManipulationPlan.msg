@@ -1,0 +1,22 @@
+# Selected (base, lift+arm IK solution, AnyGrasp pose) tuple.
+std_msgs/Header header
+string object_id
+uint32 map_version
+uint8 active_arm
+uint32 candidate_id
+uint32 grasp_id
+string planning_group
+string ik_link
+geometry_msgs/PoseStamped best_base_pose
+GraspCandidate selected_grasp
+float32 lift_position
+string[] joint_names
+float64[] pregrasp_joint_positions
+float64[] grasp_joint_positions
+float32 total_score
+float32 reachability
+float32 joint_margin
+float32 robustness
+float32 grasp_quality
+bool physical_evaluation
+ReadyRegion ready_region

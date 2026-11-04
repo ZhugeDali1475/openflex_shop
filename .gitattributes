@@ -1,0 +1,12 @@
+* text=auto
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.obj binary
+*.stl binary
+*.dae binary
+*.pcd binary
+*.bag binary
+*.pdf binary

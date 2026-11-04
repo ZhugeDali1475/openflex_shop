@@ -1,0 +1,21 @@
+# Internal worker contract. Large point clouds remain below Detect/Pick Actions.
+string detection_id
+bool consume
+---
+bool success
+uint16 error_code
+string message
+string detection_id
+string arm_name
+string object_id
+string provider
+string model
+string request_id
+string camera_serial
+string frame_id
+builtin_interfaces/Time stamp
+geometry_msgs/PoseStamped object_pose
+int32[4] box_xyxy
+sensor_msgs/Image mask
+sensor_msgs/PointCloud2 product_points
+sensor_msgs/PointCloud2 scene_points

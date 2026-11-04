@@ -1,0 +1,14 @@
+# Read and validate the delivery note while stopped at the delivery counter.
+string station_id
+uint16 expected_distinct_skus
+float32 min_confidence
+float32 timeout_sec
+---
+bool success
+openarmx_task_msgs/OrderLine[] lines
+uint16 error_code
+string message
+---
+string phase
+string raw_text
+float32 confidence

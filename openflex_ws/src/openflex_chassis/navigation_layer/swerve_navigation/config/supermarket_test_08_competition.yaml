@@ -1,0 +1,86 @@
+schema_version: 1
+profile:
+  id: supermarket_test_08_competition
+  display_name: "supermarket_test_08 商超抓取导航联调"
+  purpose: "货架精停、模拟抓取、受控退避和下一段导航联调"
+  map_root: "/home/openflex/openflex_shop/openflex_maps"
+  map_name: "supermarket_test_08"
+  launch_file: "supermarket_test_05_benchmark.launch.py"
+  # 中间走廊入口起点，正对两排货架之间（yaw=90deg）。
+  # 建图原点 (0.00083, -0.27334) 车尾距挡板仅 1cm，足迹压中 19 个 lethal 格，
+  # Nav2 规划器直接以 "Starting point in lethal space" 拒绝出解（nav_182630）。
+  # 本位姿实测足迹全空、最近障碍 1.10m、正前方 1.9m 通畅，且 A~H 八点全部连通。
+  # 现场必须把小车实际摆到该位置再开机：此值同时是 ICP 重定位搜索初值。
+  initial_pose: {x: -0.100, y: 0.700, yaw: 1.5708}
+  transport_footprint_m: {length: 0.92, width: 0.90, padding: 0.04}
+  goal_obstacle_clearance_m: 0.05
+
+acceptance:
+  goal_position_m: 0.05
+  goal_yaw_rad: 0.052
+  max_goal_position_m: 0.10
+  max_goal_yaw_rad: 0.087
+  path_cross_track_m: 0.12
+  max_icp_step_m: 0.08
+  max_icp_step_yaw_rad: 0.06
+  stopped_linear_mps: 0.02
+  stopped_angular_radps: 0.03
+  stopped_hold_sec: 0.80
+  minimum_success_rate: 0.95
+  required_zero_collision_tours: 10
+
+# Stations saved with the test_08 map (2d/supermarket_test_08/competition_mission.yaml).
+# START_CORRIDOR 是本工作区新增的比赛起点，不在原 mission 文件中。
+waypoints:
+  START_CORRIDOR:
+    label: "比赛起点（中间走廊入口）"
+    pose: {x: -0.100, y: 0.700, yaw: 1.5708}
+    # 起点无需货架级精停，放宽到 10cm/6deg 以免起步阶段反复微调。
+    clearance_m: 0.10
+    role: "staging"
+  SHELF_A:
+    label: "货架 A 预定点"
+    pose: {x: 1.946, y: 2.610, yaw: 3.141592653589793}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_B:
+    label: "货架 B 预定点"
+    pose: {x: 1.946, y: 1.741, yaw: 3.141592653589793}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_C:
+    label: "货架 C 预定点"
+    pose: {x: -0.081, y: 2.613, yaw: 0.0}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_D:
+    label: "货架 D 预定点"
+    pose: {x: -0.082, y: 1.689, yaw: 0.0}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_E:
+    label: "货架 E 预定点"
+    pose: {x: -0.158, y: 2.615, yaw: 3.141592653589793}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_F:
+    label: "货架 F 预定点"
+    pose: {x: -0.150, y: 1.688, yaw: 3.141592653589793}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_G:
+    label: "货架 G 预定点"
+    pose: {x: -2.169, y: 2.547, yaw: 0.0}
+    clearance_m: 0.05
+    role: "shelf_approach"
+  SHELF_H:
+    label: "货架 H 预定点"
+    pose: {x: -2.206, y: 1.625, yaw: 0.0}
+    clearance_m: 0.05
+    role: "shelf_approach"
+
+tours:
+  shelf_alignment:
+    label: "货架精停联调"
+    sequence: [START_CORRIDOR, SHELF_A, SHELF_B, SHELF_C, SHELF_D, SHELF_E, SHELF_F, SHELF_G, SHELF_H, START_CORRIDOR]
+    settle_sec: 1.0
