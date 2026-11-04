@@ -1,3 +1,4 @@
 [submodule "supermarket_scene"]
 	path = supermarket_scene
 	url = https://github.com/ZhugeDali1475/supermarket_scene.git
+	branch = thesis-integration-20261104
