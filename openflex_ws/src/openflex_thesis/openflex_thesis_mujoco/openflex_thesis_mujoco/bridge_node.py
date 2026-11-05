@@ -123,6 +123,14 @@ class MujocoBridgeNode(Node):
         self.last_publish_stamp_ns = 0
 
         self._cache_model_indices()
+        # base_link sits above the floor plane the map frame uses; the URDF
+        # states the same offset in base_footprint_joint (xyz="0 0 -0.17").
+        # The offset is published as map -> odom, because the MoveIt SRDF
+        # declares odom -> base_link as a *planar* virtual joint (x, y, yaw
+        # only), i.e. MoveIt's base_link is modelled in odom's own plane. See
+        # _publish_tf.
+        self.base_link_height = 0.0
+        self.attach_geometry = self._build_attach_geometry()
         self._create_ros_interfaces()
         self._reset_scene(randomize=False)
         self.viewer = None
@@ -167,7 +175,8 @@ class MujocoBridgeNode(Node):
             "max_angular_rps": 0.80,
             "object_id": "thesis_item_01",
             "initial_base_pose": [0.0, 0.0, 0.0],
-            "inactive_arm_park_positions": [0.2, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "inactive_arm_park_positions": [-0.7, -1.2, 0.4, 1.2, 0.0, 0.0, 0.0],
+            "hold_left_arm_park": True,
             "inactive_gripper_open_position": 0.04,
             "object_nominal_pose": [1.12, 0.0, 0.84, math.pi],
             "object_randomization_xy_m": [0.08, 0.18],
@@ -177,6 +186,24 @@ class MujocoBridgeNode(Node):
             "observation_confidence": 0.99,
             "random_seed": 7,
             "grasp_attach_distance_m": 0.13,
+            # Jaw region measured in the TCP frame from the MuJoCo hand meshes
+            # with the fingers closed: pads span z in [-0.069, +0.016] and the
+            # closed gap is 0.5 mm, so the outer span is 0.0855 m.
+            "grasp_attach_reach_min_m": -0.069,
+            "grasp_attach_reach_max_m": 0.016,
+            "grasp_attach_max_opening_m": 0.0855,
+            "grasp_attach_lateral_tolerance_m": 0.020,
+            # Object-vs-TCP proximity log radius. Logging only; the
+            # accept/reject decision does not read this value.
+            "grasp_proximity_log_radius_m": 0.30,
+            # The converted MJCF uses plain PD position actuators. Measured
+            # offline at the G5 grasp pose they droop 30 mm (lift, kp=10 000
+            # against a ~300 N load) and ~0.1 rad (shoulder, kp=180), i.e.
+            # 60-120 mm of TCP error, so every approach missed the object.
+            # Feeding the bias force forward for the actuated joints is what
+            # the real arm's gravity compensation does; free bodies (the
+            # grasped object) keep their own gravity.
+            "gravity_compensation": True,
             "gripper_closed_threshold_m": 0.008,
             "gripper_goal_tolerance_m": 0.003,
             "gripper_action_timeout_sec": 4.0,
@@ -211,6 +238,10 @@ class MujocoBridgeNode(Node):
             self.actuator_ids[name] = self._id(
                 mujoco.mjtObj.mjOBJ_ACTUATOR, f"{name}_pos"
             )
+        self.actuated_dofs = [
+            int(self.model.jnt_dofadr[self.joint_ids[name]]) for name in self.actuator_ids
+        ]
+        self.base_link_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "base_link")
         self.object_body_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "thesis_object")
         self.hand_body_ids = {
             arm: self._id(mujoco.mjtObj.mjOBJ_BODY, f"openarmx_{arm}_hand_tcp")
@@ -436,6 +467,7 @@ class MujocoBridgeNode(Node):
             self._set_left_arm_park_pose()
             self._initialize_actuators()
             mujoco.mj_forward(self.model, self.data)
+            self.base_link_height = float(self.data.xpos[self.base_link_id][2])
             self.reset_index += 1
             metadata = {
                 "simulator": "mujoco",
@@ -646,10 +678,20 @@ class MujocoBridgeNode(Node):
         return position, (qx, qy, qz, qw)
 
     def _try_attach(self) -> None:
+        """Attach the object only when the closed jaws actually straddle it.
+
+        The first implementation attached whenever the TCP came within
+        `grasp_attach_distance_m` (0.13-0.16 m) of the object centre, which
+        succeeds even when the object is not between the fingers. That made
+        every G4 run report `verified=true` regardless of the grasp geometry.
+        The gate below requires the object centre to sit inside the jaw region
+        expressed in the TCP frame, and the jaw opening to bracket the object.
+        """
         if self.attached_arm is not None:
             return
         closed_threshold = float(self.get_parameter("gripper_closed_threshold_m").value)
-        attach_distance = float(self.get_parameter("grasp_attach_distance_m").value)
+        max_distance = float(self.get_parameter("grasp_attach_distance_m").value)
+        geometry = self.attach_geometry
         object_position, object_orientation = self._mujoco_body_pose(
             self.data, self.object_body_id
         )
@@ -662,16 +704,130 @@ class MujocoBridgeNode(Node):
             distance = math.sqrt(
                 sum((object_position[i] - hand_position[i]) ** 2 for i in range(3))
             )
-            if distance <= attach_distance:
-                self.attached_arm = arm
-                self.attachment_offset = relative_pose(
-                    hand_position, hand_orientation, object_position, object_orientation
-                )
+            if distance > max_distance:
+                # Also worth seeing: the jaw gate is only consulted when the
+                # object is already inside this pre-screen radius, so a gate
+                # rejection and a distance rejection have different fixes.
                 self.get_logger().info(
-                    f"simulated grasp attached {self.get_parameter('object_id').value} "
-                    f"to {arm} TCP at distance {distance:.3f} m"
+                    f"grasp candidate on {arm} rejected: object {distance:.3f} m away "
+                    f"> grasp_attach_distance_m {max_distance:.3f}",
+                    throttle_duration_sec=1.0,
                 )
-                break
+                continue
+            offset, orientation = relative_pose(
+                hand_position, hand_orientation, object_position, object_orientation
+            )
+            reason = self.attach_rejection(offset, geometry)
+            if reason:
+                # Info, not debug: a rejected close is the difference between
+                # "the fingers shut on nothing" and a recorded G4 grasp, so it
+                # has to be visible in a normal mission log.
+                self.get_logger().info(
+                    f"grasp candidate on {arm} rejected: {reason} "
+                    f"(distance {distance:.3f} m, object in TCP frame "
+                    f"{tuple(round(value, 4) for value in offset)})",
+                    throttle_duration_sec=1.0,
+                )
+                continue
+            self.attached_arm = arm
+            self.attachment_offset = (offset, orientation)
+            self.get_logger().info(
+                f"simulated grasp attached {self.get_parameter('object_id').value} "
+                f"to {arm} TCP at distance {distance:.3f} m "
+                f"(object in TCP frame {tuple(round(value, 4) for value in offset)})"
+            )
+            break
+
+    def attach_rejection(self, offset, geometry) -> str:
+        """Return why this TCP-relative object pose is not a real grasp."""
+        x, y, z = (float(value) for value in offset)
+        reach_min, reach_max, half_gap = geometry
+        if z < reach_min:
+            return f"object behind the fingertips (z={z:.4f} < {reach_min:.4f})"
+        if z > reach_max:
+            return f"object beyond the finger pads (z={z:.4f} > {reach_max:.4f})"
+        if abs(y) > half_gap:
+            return f"object outside the jaw span (|y|={abs(y):.4f} > {half_gap:.4f})"
+        if abs(x) > float(self.get_parameter("grasp_attach_lateral_tolerance_m").value):
+            return f"object laterally off the jaw axis (|x|={abs(x):.4f})"
+        return ""
+
+    def _contact_summary(self) -> str:
+        """Names of the bodies currently in contact, for approach diagnosis.
+
+        A PD position servo cannot hold a commanded pose against an
+        unmodelled contact; when the hand stops short of the object this line
+        says whether the arm was resting on the shelf.
+        """
+        pairs = []
+        for index in range(self.data.ncon):
+            contact = self.data.contact[index]
+            names = []
+            for geom in (int(contact.geom1), int(contact.geom2)):
+                body = int(self.model.geom_bodyid[geom])
+                name = (
+                    mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+                    if body > 0
+                    else "world"
+                )
+                names.append(name or f"body{body}")
+            pair = "--".join(sorted(names))
+            if pair not in pairs:
+                pairs.append(pair)
+        if not pairs:
+            return " contacts=none"
+        pairs.sort()
+        return " contacts=" + ";".join(pairs)
+
+    def _log_grasp_proximity(self) -> None:
+        """Record where the object sits in each TCP frame while the hand is near.
+
+        `_try_attach` only speaks once the jaws are commanded closed, so the
+        moment the object starts moving away from the TCP - the difference
+        between "the approach missed it" and "the closed hand shoved it" - is
+        otherwise invisible. This line is throttled and never changes the
+        accept/reject decision.
+        """
+        radius = float(self.get_parameter("grasp_proximity_log_radius_m").value)
+        if radius <= 0.0:
+            return
+        object_position, object_orientation = self._mujoco_body_pose(
+            self.data, self.object_body_id
+        )
+        for arm in ("left", "right"):
+            hand_position, hand_orientation = self._mujoco_body_pose(
+                self.data, self.hand_body_ids[arm]
+            )
+            distance = math.sqrt(
+                sum((object_position[i] - hand_position[i]) ** 2 for i in range(3))
+            )
+            if distance > radius:
+                continue
+            offset, _ = relative_pose(
+                hand_position, hand_orientation, object_position, object_orientation
+            )
+            self.get_logger().info(
+                f"grasp proximity on {arm}: object {distance:.3f} m from the TCP "
+                f"(object in TCP frame "
+                f"{tuple(round(float(value), 4) for value in offset)}, "
+                f"gripper command {self.gripper_targets[arm]:.4f}, "
+                f"attached={self.attached_arm}){self._contact_summary()}",
+                throttle_duration_sec=1.0,
+            )
+
+    def _build_attach_geometry(self) -> tuple:
+        """Measured jaw region in the TCP frame, from the MuJoCo hand meshes.
+
+        With the right finger joints at the closed opening the finger pads span
+        z in [-0.069, +0.016] and the closed jaws leave a 1 mm gap; the pads
+        are 40 mm deep in x. Values live in parameters so a different hand can
+        be re-measured without editing code.
+        """
+        return (
+            float(self.get_parameter("grasp_attach_reach_min_m").value),
+            float(self.get_parameter("grasp_attach_reach_max_m").value),
+            0.5 * float(self.get_parameter("grasp_attach_max_opening_m").value),
+        )
 
     def _step_attachment(self) -> None:
         if self.attached_arm is None or self.attachment_offset is None:
@@ -688,6 +844,31 @@ class MujocoBridgeNode(Node):
         self._set_free_joint_pose("thesis_object_free", position, orientation)
         mujoco.mj_forward(self.model, self.data)
 
+    def _apply_gravity_compensation(self) -> None:
+        """Feed the gravity/Coriolis load forward for the actuated joints.
+
+        Without this the PD position servos of the converted MJCF hold a
+        configuration that is 60-120 mm away from the commanded one at the
+        grasp pose, which is larger than the object itself. Only actuated
+        joints are compensated; the base slides and the free bodies keep the
+        load they should have.
+        """
+        if not bool(self.get_parameter("gravity_compensation").value):
+            return
+        bias = self.data.qfrc_bias
+        applied = self.data.qfrc_applied
+        for dof in self.actuated_dofs:
+            applied[dof] = bias[dof]
+
+    def _hold_left_arm_park(self) -> None:
+        """Keep the inactive-arm baseline posture fixed in MuJoCo.
+
+        A physical deployment requires an equivalent controller or brake. This
+        lock is a digital baseline constraint and must be reported as such.
+        """
+        if bool(self.get_parameter("hold_left_arm_park").value):
+            self._set_left_arm_park_pose()
+
     def _simulation_loop(self) -> None:
         dt = float(self.model.opt.timestep)
         real_time_factor = max(0.01, float(self.get_parameter("real_time_factor").value))
@@ -699,8 +880,11 @@ class MujocoBridgeNode(Node):
                 self._step_trajectories()
                 for arm, joint in GRIPPER_JOINTS.items():
                     self.data.ctrl[self.actuator_ids[joint]] = self.gripper_targets[arm]
+                self._apply_gravity_compensation()
                 mujoco.mj_step(self.model, self.data)
+                self._hold_left_arm_park()
                 self._try_attach()
+                self._log_grasp_proximity()
                 self._step_attachment()
             deadline += wall_step
             wait = deadline - time.monotonic()
@@ -828,6 +1012,10 @@ class MujocoBridgeNode(Node):
             if self.attached_arm is None:
                 status.failure_code = 91
                 status.detail = "no object is attached in MuJoCo"
+                # Failure status: publish immediately but don't keep retransmitting.
+                # Set place_status_until in the past so it expires immediately.
+                self.place_status = status
+                self.place_status_until = time.monotonic() - 1.0
             else:
                 pose = msg.delivery_pose.pose
                 z = float(pose.position.z)
@@ -851,8 +1039,9 @@ class MujocoBridgeNode(Node):
                 status.released = True
                 status.verified = True
                 status.detail = "MuJoCo fixed-placement release verified"
-            self.place_status = status
-            self.place_status_until = time.monotonic() + 2.0
+                # Success status: publish for 2 seconds to ensure delivery.
+                self.place_status = status
+                self.place_status_until = time.monotonic() + 2.0
 
     def _publish_state(self) -> None:
         with self.lock:
@@ -940,19 +1129,55 @@ class MujocoBridgeNode(Node):
         )
         message.object_retained = attached
         message.transport_safe = bool(attached and object_position[2] > 0.20)
-        message.verified = bool(message.contact_detected and message.gripper_closed)
+        # Attachment now requires the object to sit inside the closed jaws, so
+        # `attached` is real geometry instead of a proximity proxy. Re-check the
+        # live pose rather than the stored grasp-time offset so a displaced
+        # object cannot keep reporting `verified=true`.
+        inside_jaws = False
+        live_offset = None
+        if attached:
+            hand_position, hand_orientation = self._mujoco_body_pose(
+                self.data, self.hand_body_ids[self.attached_arm]
+            )
+            object_position_now, object_orientation_now = self._mujoco_body_pose(
+                self.data, self.object_body_id
+            )
+            live_offset, _ = relative_pose(
+                hand_position,
+                hand_orientation,
+                object_position_now,
+                object_orientation_now,
+            )
+            inside_jaws = not self.attach_rejection(live_offset, self.attach_geometry)
+        message.verified = bool(
+            message.contact_detected and message.gripper_closed and inside_jaws
+        )
         message.detail = (
-            f"MuJoCo deterministic attachment on {self.attached_arm} TCP"
+            f"MuJoCo jaw-bracketed attachment on {self.attached_arm} TCP "
+            f"(object in TCP frame {tuple(round(float(v), 4) for v in live_offset)})"
             if attached
             else "MuJoCo object is not attached"
         )
         return message
 
     def _publish_tf(self, stamp, base_pose) -> None:
+        # The SRDF declares the chassis as
+        #   <virtual_joint name="base_planar_joint" type="planar"
+        #                  parent_frame="odom" child_link="base_link"/>
+        # A planar virtual joint has x, y and yaw only, so MoveIt models
+        # base_link in the *same plane* as odom and converts poses between the
+        # two frames with zero z offset. The chassis does ride
+        # `base_link_height` (0.17 m) above the floor, so that fixed offset must
+        # live in map -> odom: keeping it in odom -> base_link made MoveIt add
+        # 0.17 m to every base_link IK target (measured with /compute_ik: a
+        # base_link target at z = 0.6739 produced a TCP at z = 0.8439, i.e. the
+        # arm missed the object by exactly the mount height). The composite
+        # map -> base_link transform is unchanged either way.
         map_to_odom = TransformStamped()
         map_to_odom.header.stamp = deepcopy(stamp)
         map_to_odom.header.frame_id = "map"
         map_to_odom.child_frame_id = "odom"
+        map_to_odom.transform.translation.z = self.base_link_height
         map_to_odom.transform.rotation.w = 1.0
         odom_to_base = TransformStamped()
         odom_to_base.header.stamp = deepcopy(stamp)
@@ -960,6 +1185,7 @@ class MujocoBridgeNode(Node):
         odom_to_base.child_frame_id = "base_link"
         odom_to_base.transform.translation.x = base_pose[0]
         odom_to_base.transform.translation.y = base_pose[1]
+        odom_to_base.transform.translation.z = 0.0
         q = yaw_to_quaternion(base_pose[2])
         odom_to_base.transform.rotation.x, odom_to_base.transform.rotation.y, \
             odom_to_base.transform.rotation.z, odom_to_base.transform.rotation.w = q

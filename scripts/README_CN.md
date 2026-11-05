@@ -38,6 +38,7 @@ export MUJOCO_GL=egl
 | `diagnose_moveit_candidate.sh` | 输出候选 IK 和碰撞接触对 |
 | `check_moveit_current_state.py` | 检查当前整机状态及左臂姿态 |
 | `search_moveit_left_park.py` | 搜索左臂停放姿态 |
+| `probe_left_park_contact.py` | 离线复现左臂停姿压入地面、顶高 `lift_joint` 的缺陷（ROS-free） |
 
 ## 数据与清理
 

@@ -1,6 +1,7 @@
 """MoveIt lift+arm grasp executor guarded by a locked, measured-stopped base."""
 
 from copy import deepcopy
+import json
 import math
 import time
 from typing import Optional, Tuple
@@ -21,7 +22,7 @@ from moveit_msgs.msg import (
 from moveit_msgs.srv import ApplyPlanningScene, GetPositionIK, GetStateValidity
 from nav_msgs.msg import Odometry
 from openflex_thesis_msgs.action import ExecuteMoveItGrasp
-from openflex_thesis_msgs.msg import ControlMode, GraspCandidate, GraspStatus, ObjectMemory
+from openflex_thesis_msgs.msg import ControlMode, GraspCandidate, GraspStatus, ObjectMemory, PlaceStatus
 import rclpy
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -34,6 +35,7 @@ from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .async_tools import ros_sleep
+from .attached_object import relative_pose, summarize_box
 
 
 class MoveItGraspExecutorNode(Node):
@@ -48,6 +50,7 @@ class MoveItGraspExecutorNode(Node):
         self.declare_parameter("right_gripper_action", "/right_gripper_controller/gripper_cmd")
         self.declare_parameter("joint_state_topic", "/joint_states")
         self.declare_parameter("grasp_status_topic", "/thesis/grasp_status")
+        self.declare_parameter("place_status_topic", "/thesis/place/status")
         self.declare_parameter("memory_topic", "/thesis/object_memory")
         self.declare_parameter("control_mode_topic", "/thesis/control_mode")
         self.declare_parameter("measured_velocity_topic", "/swerve_drive_controller/odom")
@@ -70,14 +73,27 @@ class MoveItGraspExecutorNode(Node):
         self.declare_parameter("require_calibrated_object_geometry", True)
         self.declare_parameter("require_physical_plan", True)
         self.declare_parameter("object_geometry_calibrated", False)
+        self.declare_parameter("tcp_lookup_timeout_sec", 1.0)
+        self.declare_parameter("detach_after_place", True)
+        self.declare_parameter("require_transport_start_valid", True)
         self.declare_parameter("object_box_dimensions_m", [0.06, 0.06, 0.12])
         self.declare_parameter(
             "left_touch_links",
-            ["openarmx_left_hand", "openarmx_left_left_finger", "openarmx_left_right_finger"],
+            [
+                "openarmx_left_link7",
+                "openarmx_left_hand",
+                "openarmx_left_left_finger",
+                "openarmx_left_right_finger",
+            ],
         )
         self.declare_parameter(
             "right_touch_links",
-            ["openarmx_right_hand", "openarmx_right_left_finger", "openarmx_right_right_finger"],
+            [
+                "openarmx_right_link7",
+                "openarmx_right_hand",
+                "openarmx_right_left_finger",
+                "openarmx_right_right_finger",
+            ],
         )
         self.declare_parameter(
             "left_transport_positions", [-0.10, 0.0, 0.0, 0.0, 1.8, 0.0, 0.0, 0.0]
@@ -159,6 +175,13 @@ class MoveItGraspExecutorNode(Node):
             20,
             callback_group=self.callback_group,
         )
+        self.create_subscription(
+            PlaceStatus,
+            str(self.get_parameter("place_status_topic").value),
+            self.on_place_status,
+            20,
+            callback_group=self.callback_group,
+        )
         self.server = ActionServer(
             self,
             ExecuteMoveItGrasp,
@@ -182,6 +205,11 @@ class MoveItGraspExecutorNode(Node):
         self.active_object_id = ""
         self.active_map_version = 0
         self.object_attached = False
+        # The planning scene entry must outlive the grasp action, because the
+        # release happens in a different action later in the mission.
+        self.scene_attachment = None
+        self.pending_detach = None
+        self.create_timer(0.2, self.drain_pending_detach, callback_group=self.callback_group)
         self.active_move_group_handle = None
         self.busy = False
 
@@ -199,6 +227,59 @@ class MoveItGraspExecutorNode(Node):
     def on_grasp_status(self, msg: GraspStatus) -> None:
         self.grasp_status = deepcopy(msg)
         self.grasp_status_receipt = time.monotonic()
+
+    def on_place_status(self, msg: PlaceStatus) -> None:
+        """Drop the attached box once MuJoCo confirms the release.
+
+        Without this the planning scene keeps the previous trial's grasped
+        object forever and later trials collide against stale geometry.
+        """
+        if not bool(self.get_parameter("detach_after_place").value):
+            return
+        if not (msg.target_reached and msg.released and msg.verified):
+            return
+        attachment = self.scene_attachment
+        # Critical guard: only detach if we currently have an attached object
+        # AND it matches the released object_id AND we're not busy executing
+        # a grasp action (which would mean this is a stale message from a
+        # previous trial).
+        if attachment is None or attachment[0] != msg.object_id:
+            return
+        # Additional guard: ignore stale messages from previous runs.
+        # The bridge publishes place_status for 2 seconds after release,
+        # so we need to ensure this matches the current active object.
+        if self.active_object_id != msg.object_id:
+            return
+        # Final guard: only detach if we're not in the middle of a grasp action
+        # (busy flag is True during grasp execution).
+        if self.busy:
+            return
+        self.pending_detach = attachment
+        self.scene_attachment = None
+        self.object_attached = False
+
+    def drain_pending_detach(self) -> None:
+        attachment = self.pending_detach
+        if attachment is None:
+            return
+        self.pending_detach = None
+        object_id, link, arm = attachment
+        request = self.detach_object_request(object_id, link, arm)
+        future = self.scene_client.call_async(request)
+        future.add_done_callback(
+            lambda done: self.on_detached(object_id, done)
+        )
+
+    def on_detached(self, object_id: str, future) -> None:
+        try:
+            response = future.result()
+        except Exception as error:  # noqa: BLE001 - report, never crash the executor
+            self.get_logger().error(f"detach of {object_id} failed: {error}")
+            return
+        if response is not None and response.success:
+            self.get_logger().info(f"removed attached object for {object_id} from the planning scene")
+        else:
+            self.get_logger().error(f"planning scene refused detach of {object_id}")
 
     def on_memory(self, msg: ObjectMemory) -> None:
         self.object_memory = deepcopy(msg)
@@ -286,12 +367,41 @@ class MoveItGraspExecutorNode(Node):
     def pose_to_base(self, source: PoseStamped) -> Optional[PoseStamped]:
         base_frame = str(self.get_parameter("base_frame").value)
         if source.header.frame_id == base_frame:
+            self.get_logger().info(
+                "G5DBG pose_to_base early-return frame=%s in=(%.4f, %.4f, %.4f)"
+                % (
+                    source.header.frame_id,
+                    source.pose.position.x,
+                    source.pose.position.y,
+                    source.pose.position.z,
+                ),
+                throttle_duration_sec=2.0,
+            )
             return deepcopy(source)
         try:
             transform = self.tf_buffer.lookup_transform(base_frame, source.header.frame_id, Time())
         except TransformException as error:
             self.get_logger().error(f"cannot transform refined grasp to {base_frame}: {error}")
             return None
+        self.get_logger().info(
+            "G5DBG pose_to_base frame=%s->%s in=(%.4f, %.4f, %.4f) "
+            "T=(%.4f, %.4f, %.4f) q=(%.4f, %.4f, %.4f, %.4f)"
+            % (
+                source.header.frame_id,
+                base_frame,
+                source.pose.position.x,
+                source.pose.position.y,
+                source.pose.position.z,
+                transform.transform.translation.x,
+                transform.transform.translation.y,
+                transform.transform.translation.z,
+                transform.transform.rotation.x,
+                transform.transform.rotation.y,
+                transform.transform.rotation.z,
+                transform.transform.rotation.w,
+            ),
+            throttle_duration_sec=2.0,
+        )
         tq = transform.transform.rotation
         q_transform = (tq.x, tq.y, tq.z, tq.w)
         p = source.pose.position
@@ -347,7 +457,9 @@ class MoveItGraspExecutorNode(Node):
             return None
         return pre_state, grasp_state
 
-    async def move_to_state(self, group: str, state: RobotState) -> bool:
+    async def move_to_state(
+        self, group: str, state: RobotState, label: str = "move"
+    ) -> bool:
         if not self.hardware_guard_valid():
             return False
         goal = MoveGroup.Goal()
@@ -374,6 +486,15 @@ class MoveItGraspExecutorNode(Node):
             joint.tolerance_below = 0.01
             joint.weight = 1.0
             constraints.joint_constraints.append(joint)
+        self.get_logger().info(
+            f"{label} target joints: "
+            + str(
+                {
+                    item.joint_name: round(float(item.position), 6)
+                    for item in constraints.joint_constraints
+                }
+            )
+        )
         goal.request.goal_constraints.append(constraints)
         goal.request.start_state.is_diff = True
         goal.planning_options.plan_only = False
@@ -387,11 +508,28 @@ class MoveItGraspExecutorNode(Node):
         self.active_move_group_handle = handle
         try:
             wrapper = await handle.get_result_async()
-            return bool(
+            success = bool(
                 wrapper.status == GoalStatus.STATUS_SUCCEEDED
                 and wrapper.result.error_code.val == MoveItErrorCodes.SUCCESS
                 and self.hardware_guard_valid()
             )
+            if self.joint_state is not None:
+                actual = dict(
+                    zip(self.joint_state.name, self.joint_state.position)
+                )
+                self.get_logger().info(
+                    f"{label} result success={success}: "
+                    + str(
+                        {
+                            item.joint_name: round(
+                                float(actual.get(item.joint_name, float("nan"))),
+                                6,
+                            )
+                            for item in constraints.joint_constraints
+                        }
+                    )
+                )
+            return success
         finally:
             self.active_move_group_handle = None
 
@@ -411,32 +549,166 @@ class MoveItGraspExecutorNode(Node):
             and (wrapper.result.reached_goal or wrapper.result.stalled)
         )
 
-    async def attach_object(self, object_id: str, ik_link: str, arm: int) -> bool:
+    async def attach_object(
+        self,
+        object_id: str,
+        ik_link: str,
+        arm: int,
+        object_pose: PoseStamped,
+        tcp_pose: PoseStamped,
+    ) -> bool:
+        """Attach the grasp box with the object's real pose relative to the TCP.
+
+        The previous implementation used the identity pose, which put the box's
+        long axis on the approach axis and made its back face overlap
+        `openarmx_<arm>_link7` by 10.4 mm. MoveIt then rejected the transport
+        start state. See `attached_object.py` for the derivation.
+        """
         dimensions = [float(value) for value in self.get_parameter("object_box_dimensions_m").value]
         if len(dimensions) != 3 or any(value <= 0.0 for value in dimensions):
             return False
+        tcp = tcp_pose.pose
+        offset, orientation = relative_pose(
+            (tcp.position.x, tcp.position.y, tcp.position.z),
+            (tcp.orientation.x, tcp.orientation.y, tcp.orientation.z, tcp.orientation.w),
+            (
+                object_pose.pose.position.x,
+                object_pose.pose.position.y,
+                object_pose.pose.position.z,
+            ),
+            (
+                object_pose.pose.orientation.x,
+                object_pose.pose.orientation.y,
+                object_pose.pose.orientation.z,
+                object_pose.pose.orientation.w,
+            ),
+        )
         attached = AttachedCollisionObject()
         attached.link_name = ik_link
         attached.touch_links = list(
             self.get_parameter("left_touch_links" if arm == 1 else "right_touch_links").value
         )
         attached.object.header.frame_id = ik_link
-        attached.object.id = f"thesis_grasped_{object_id}"
+        attached.object.id = self.attached_object_id(object_id)
         attached.object.operation = CollisionObject.ADD
         primitive = SolidPrimitive()
         primitive.type = SolidPrimitive.BOX
         primitive.dimensions = dimensions
         attached.object.primitives.append(primitive)
         pose = Pose()
-        pose.orientation.w = 1.0
+        pose.position.x, pose.position.y, pose.position.z = offset
+        pose.orientation.x, pose.orientation.y = orientation[0], orientation[1]
+        pose.orientation.z, pose.orientation.w = orientation[2], orientation[3]
         attached.object.primitive_poses.append(pose)
+        half_size = [0.5 * value for value in dimensions]
+        self.get_logger().info(
+            "attach {} to {}: {}".format(
+                object_id,
+                ik_link,
+                json.dumps(
+                    {
+                        "offset_in_link_m": [round(value, 6) for value in offset],
+                        "orientation_in_link_xyzw": [round(value, 6) for value in orientation],
+                        "box": summarize_box(half_size, orientation),
+                    },
+                    sort_keys=True,
+                ),
+            )
+        )
+        return await self.apply_scene_object(attached, CollisionObject.ADD)
+
+    def attached_object_id(self, object_id: str) -> str:
+        return f"thesis_grasped_{object_id}"
+
+    def detach_object_request(self, object_id: str, ik_link: str, arm: int) -> ApplyPlanningScene.Request:
+        attached = AttachedCollisionObject()
+        attached.link_name = ik_link
+        attached.touch_links = list(
+            self.get_parameter("left_touch_links" if arm == 1 else "right_touch_links").value
+        )
+        attached.object.header.frame_id = ik_link
+        attached.object.id = self.attached_object_id(object_id)
+        attached.object.operation = CollisionObject.REMOVE
+        return self.scene_request(attached, CollisionObject.REMOVE)
+
+    async def detach_object(self, object_id: str, ik_link: str, arm: int) -> bool:
+        """Remove the attached box so the next trial starts from a clean scene."""
+        response = await self.scene_client.call_async(
+            self.detach_object_request(object_id, ik_link, arm)
+        )
+        return bool(response is not None and response.success)
+
+    @staticmethod
+    def scene_request(attached: AttachedCollisionObject, operation: int) -> ApplyPlanningScene.Request:
         request = ApplyPlanningScene.Request()
         request.scene = PlanningScene()
         request.scene.is_diff = True
         request.scene.robot_state.is_diff = True
+        attached.object.operation = operation
         request.scene.robot_state.attached_collision_objects.append(attached)
-        response = await self.scene_client.call_async(request)
+        return request
+
+    async def apply_scene_object(self, attached: AttachedCollisionObject, operation: int) -> bool:
+        response = await self.scene_client.call_async(self.scene_request(attached, operation))
         return bool(response is not None and response.success)
+
+    async def transportation_start_valid(self, group: str, target: RobotState) -> Tuple[bool, str]:
+        """Check the state the planner will start from, and the transport goal.
+
+        `Motion planning start tree could not be initialized` means the *start*
+        state was already invalid, so the current state is checked first. Both
+        checks report the colliding body pairs; the planner message does not.
+        """
+        current = RobotState()
+        current.is_diff = True
+        if self.joint_state is not None:
+            current.joint_state = deepcopy(self.joint_state)
+        states = [("current", current), ("transport", deepcopy(target))]
+        failures = []
+        for label, state in states:
+            validity = GetStateValidity.Request()
+            validity.group_name = group
+            validity.robot_state = state
+            checked = await self.validity_client.call_async(validity)
+            if checked is None:
+                failures.append(f"{label}: validity service returned nothing")
+                continue
+            if checked.valid:
+                continue
+            pairs = sorted(
+                {
+                    f"{contact.contact_body_1}<->{contact.contact_body_2}"
+                    for contact in checked.contacts
+                }
+            )
+            failures.append(f"{label}: " + ("; ".join(pairs) if pairs else "invalid without contacts"))
+        return (not failures), " | ".join(failures)
+
+    async def lookup_tcp_pose(self, ik_link: str) -> Optional[PoseStamped]:
+        timeout = float(self.get_parameter("tcp_lookup_timeout_sec").value)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() <= deadline:
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    str(self.get_parameter("base_frame").value), ik_link, Time()
+                )
+            except TransformException:
+                await ros_sleep(self, 0.02)
+                continue
+            output = PoseStamped()
+            output.header.stamp = self.get_clock().now().to_msg()
+            output.header.frame_id = str(self.get_parameter("base_frame").value)
+            output.pose.position.x = transform.transform.translation.x
+            output.pose.position.y = transform.transform.translation.y
+            output.pose.position.z = transform.transform.translation.z
+            rotation = transform.transform.rotation
+            output.pose.orientation.x = rotation.x
+            output.pose.orientation.y = rotation.y
+            output.pose.orientation.z = rotation.z
+            output.pose.orientation.w = rotation.w
+            return output
+        self.get_logger().error(f"cannot resolve {ik_link} within {timeout:.2f} s")
+        return None
 
     async def wait_for_verification(self, object_id: str, map_version: int) -> bool:
         started = time.monotonic()
@@ -449,7 +721,9 @@ class MoveItGraspExecutorNode(Node):
                 fresh
                 and status is not None
                 and status.object_id == object_id
-                and status.map_version == map_version
+                # Attaching and moving the target legitimately increments the
+                # object-memory map version during this same skill call.
+                and status.map_version >= map_version
                 and status.verified
                 and status.object_retained
             ):
@@ -555,15 +829,19 @@ class MoveItGraspExecutorNode(Node):
                 result.error_code = 74
                 result.message = "no refined grasp is reachable at the current base pose"
                 return result
+            self.get_logger().info(
+                f"selected refined grasp={selected.grasp_id} "
+                f"quality={selected.quality:.6f}"
+            )
             if not await self.command_gripper(
                 goal.active_arm, float(self.get_parameter("gripper_open_position").value)
             ):
                 return self.abort(goal_handle, 75, "failed to open gripper")
             pre_state, grasp_state = selected_states
-            if not await self.move_to_state(group, pre_state):
+            if not await self.move_to_state(group, pre_state, "pregrasp"):
                 self.get_logger().error("MoveIt pregrasp planning or execution failed")
                 return self.abort(goal_handle, 76, "pregrasp planning/execution failed", True)
-            if not await self.move_to_state(group, grasp_state):
+            if not await self.move_to_state(group, grasp_state, "grasp"):
                 self.get_logger().error("MoveIt final grasp planning or execution failed")
                 return self.abort(goal_handle, 77, "grasp planning/execution failed", True)
             if not await self.command_gripper(
@@ -574,10 +852,39 @@ class MoveItGraspExecutorNode(Node):
             if not await self.wait_for_verification(goal.target.object_id, goal.target.map_version):
                 self.get_logger().error("Independent grasp verification timed out")
                 return self.abort(goal_handle, 79, "independent grasp verification failed")
-            if not await self.attach_object(goal.target.object_id, link, goal.active_arm):
+            # ObjectMemory carries a PoseWithCovariance plus a separate
+            # header; pose_to_base() speaks PoseStamped (and needs the frame).
+            memory_pose = PoseStamped()
+            memory_pose.header = deepcopy(goal.target.header)
+            memory_pose.pose = deepcopy(goal.target.pose.pose)
+            object_pose = self.pose_to_base(memory_pose)
+            if object_pose is None:
+                return self.abort(goal_handle, 84, "cannot express the target pose in the base frame")
+            tcp_pose = await self.lookup_tcp_pose(link)
+            if tcp_pose is None:
+                return self.abort(goal_handle, 85, f"cannot resolve attached frame {link}")
+            if not await self.attach_object(
+                goal.target.object_id, link, goal.active_arm, object_pose, tcp_pose
+            ):
                 return self.abort(goal_handle, 80, "failed to attach object in planning scene")
             self.object_attached = True
-            if not await self.move_to_state(group, self.transport_state(goal.active_arm, group)):
+            self.scene_attachment = (goal.target.object_id, link, goal.active_arm)
+            transport_target = self.transport_state(goal.active_arm, group)
+            if bool(self.get_parameter("require_transport_start_valid").value):
+                valid, detail = await self.transportation_start_valid(group, transport_target)
+                if not valid:
+                    await self.detach_object(goal.target.object_id, link, goal.active_arm)
+                    self.object_attached = False
+                    return self.abort(
+                        goal_handle,
+                        83,
+                        f"transport posture invalid with attached object: {detail}",
+                    )
+            if not await self.move_to_state(
+                group,
+                transport_target,
+                "transport",
+            ):
                 return self.abort(goal_handle, 81, "transport-pose execution failed")
             goal_handle.succeed()
             result = ExecuteMoveItGrasp.Result()

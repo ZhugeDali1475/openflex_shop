@@ -1,0 +1,26 @@
+135:[sim_mission_client-16] [INFO] [1793844562.335914312] [thesis_mujoco_mission_client]: phase=1 detail=Nav2 to shelf observation/handoff zone
+136:[sim_mission_client-16] [INFO] [1793844562.336476998] [thesis_mujoco_mission_client]: phase=2 detail=confirm measured base stop
+137:[sim_mission_client-16] [INFO] [1793844562.863616990] [thesis_mujoco_mission_client]: phase=3 detail=wait for fresh target observation
+138:[sim_mission_client-16] [INFO] [1793844562.864051631] [thesis_mujoco_mission_client]: phase=4 detail=first AnyGrasp Top-K from observation zone
+139:[sim_mission_client-16] [INFO] [1793844562.883920152] [thesis_mujoco_mission_client]: phase=5 detail=jointly score base, lift+arm IK stratum and grasp
+221:[sim_mission_client-16] [INFO] [1793844589.565476228] [thesis_mujoco_mission_client]: phase=6 detail=ACT base-only alignment into bound ready region
+222:[sim_mission_client-16] [INFO] [1793844593.238457739] [thesis_mujoco_mission_client]: phase=7 detail=ready reached; cancel ACT and confirm locked base
+223:[sim_mission_client-16] [INFO] [1793844593.772494695] [thesis_mujoco_mission_client]: phase=8 detail=second AnyGrasp updates grasp from near-field point cloud
+224:[sim_mission_client-16] [INFO] [1793844593.791326992] [thesis_mujoco_mission_client]: phase=9 detail=validate refined grasps at current base, then jointly execute lift+arm
+273:[mujoco_bridge-1] [INFO] [1793844639.695129696] [openflex_thesis_mujoco_bridge]: simulated grasp attached thesis_item_01 to right TCP at distance 0.003 m (object in TCP frame (-0.0014, 0.0006, 0.0028))
+280:[moveit_grasp_executor-11] [INFO] [1793844643.748359707] [moveit_grasp_executor]: transport target joints: {'lift_joint': -0.1, 'openarmx_right_joint1': 0.0, 'openarmx_right_joint2': 0.0, 'openarmx_right_joint3': 0.0, 'openarmx_right_joint4': 1.8, 'openarmx_right_joint5': 0.0, 'openarmx_right_joint6': 0.0, 'openarmx_right_joint7': 0.0}
+332:[moveit_grasp_executor-11] [INFO] [1793844677.567246607] [moveit_grasp_executor]: transport result success=True: {'lift_joint': -0.105653, 'openarmx_right_joint1': 0.004265, 'openarmx_right_joint2': 0.023109, 'openarmx_right_joint3': 0.021713, 'openarmx_right_joint4': 1.795751, 'openarmx_right_joint5': -0.012998, 'openarmx_right_joint6': 0.009064, 'openarmx_right_joint7': 0.008729}
+333:[sim_mission_client-16] [INFO] [1793844677.606876934] [thesis_mujoco_mission_client]: phase=10 detail=independent grasp verification passed
+334:[sim_mission_client-16] [INFO] [1793844677.607422440] [thesis_mujoco_mission_client]: phase=11 detail=object attached; lift+arm in transport pose
+336:[sim_mission_client-16] [INFO] [1793844678.146644027] [thesis_mujoco_mission_client]: phase=12 detail=Nav2 transports grasped object
+344:[sim_mission_client-16] [INFO] [1793844685.004806502] [thesis_mujoco_mission_client]: phase=13 detail=execute fixed delivery action
+345:[moveit_grasp_executor-11] [INFO] [1793844685.065166241] [moveit_grasp_executor]: removed attached object for thesis_item_01 from the planning scene
+346:[sim_mission_client-16] [INFO] [1793844685.150223821] [thesis_mujoco_mission_client]: phase=16 detail=no object is attached in MuJoCo
+347:[sim_mission_client-16] [ERROR] [1793844685.197464026] [thesis_mujoco_mission_client]: MUJOCO_MISSION_FAILED code=60 message=no object is attached in MuJoCo
+348:[mission_orchestrator-13] [WARN] [1793844685.225090406] [mission_orchestrator]: Ignoring unexpected goal response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+349:[mission_orchestrator-13] [WARN] [1793844685.225687081] [mission_orchestrator]: Ignoring unexpected goal response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+350:[mission_orchestrator-13] [WARN] [1793844685.226535287] [mission_orchestrator]: Ignoring unexpected result response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+351:[mission_orchestrator-13] [WARN] [1793844685.226651275] [mission_orchestrator]: Ignoring unexpected goal response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+352:[mission_orchestrator-13] [WARN] [1793844685.227248079] [mission_orchestrator]: Ignoring unexpected result response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+353:[mission_orchestrator-13] [WARN] [1793844685.227687257] [mission_orchestrator]: Ignoring unexpected goal response. There may be more than one action server for the action '/thesis/execute_fixed_place'
+354:[mission_orchestrator-13] [WARN] [1793844685.227883714] [mission_orchestrator]: Ignoring unexpected result response. There may be more than one action server for the action '/thesis/execute_fixed_place'

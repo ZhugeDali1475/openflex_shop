@@ -12,10 +12,20 @@ openflex_thesis_mujoco_bridge:
     max_angular_rps: 0.80
     object_id: thesis_item_01
     initial_base_pose: [0.0, 0.0, 0.0]
-    # Joint margin maximizer validated on 2026-11-04 against ten real
-    # right-arm candidate lift solutions plus -0.15, 0.00 and +0.15 m.
-    # Evidence: migration_records/2026-11-04/G3_LEFT_PARK_SEARCH.json
-    inactive_arm_park_positions: [0.2, -0.15, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # Joint margin maximizer re-searched on 2026-11-05 against real TC-WAM
+    # right-arm candidates with the shelf scene placed correctly in base_link
+    # (0.17 m base mount height) *and* the floor plane included as an obstacle.
+    # The previous hanging pose [0.2, -0.15, 0, 0, 0, 0, 0] pressed the parked
+    # left gripper into the floor at lift <= -0.36 m and dragged lift_joint
+    # ~28 mm off command. This pose keeps the deepest left-arm point at
+    # +0.309 m above the floor even at lift = -0.65 m.
+    # Evidence: migration_records/2026-11-05/G3_LEFT_PARK_SEARCH.json
+    inactive_arm_park_positions: [-0.7, -1.2, 0.4, 1.2, 0.0, 0.0, 0.0]
+    hold_left_arm_park: true
+    # Feed the gravity/Coriolis bias forward for the actuated joints. The
+    # converted MJCF PD servos otherwise droop 60-120 mm at the grasp pose,
+    # which is larger than the object and makes every grasp miss.
+    gravity_compensation: true
     inactive_gripper_open_position: 0.04
     # [x, y, z, yaw], object +x points from the shelf toward free space.
     object_nominal_pose: [1.12, 0.0, 0.84, 3.141592653589793]

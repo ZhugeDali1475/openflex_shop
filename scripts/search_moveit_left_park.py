@@ -33,8 +33,27 @@ import yaml
 LEFT_JOINT_NAMES = [
     f"openarmx_left_joint{index}" for index in range(1, 8)
 ]
-LEFT_LOWER = [-3.14, -2.60, -3.14, -2.80, -3.14, -2.20, -3.14]
-LEFT_UPPER = [3.14, 2.60, 3.14, 2.80, 3.14, 2.20, 3.14]
+# Real joint limits, taken from the converted URDF/MJCF (`<joint range=...>` in
+# openflex_mujoco.xml). The previous constants were wider than the hardware and
+# therefore scored poses as "high margin" while sitting on a real limit.
+LEFT_LOWER = [-3.3444, -3.2708, -1.57, 0.0, -1.5, -0.75, -1.4]
+LEFT_UPPER = [0.905604, 0.129204, 1.57, 1.8, 1.5, 0.75, 1.4]
+
+# The chassis rides `base_mount_height_m` above the floor plane that `map` and
+# the planar candidate base poses use, so every conversion from `map` into
+# candidate `base_link` must remove that height (same fix as
+# moveit_evaluator_node.base_link_position).
+DEFAULT_BASE_MOUNT_HEIGHT_M = 0.17
+# Floor plane, expressed in `map`; without it the search cannot see that the
+# parked left gripper is below ground at low lift values (G5 defect of
+# 2026-11-05).
+FLOOR_SCENE_OBJECT = {
+    "id": "mujoco_floor",
+    "shape": "box",
+    "dimensions": [8.0, 8.0, 0.10],
+    "position": [0.5, 0.0, -0.05],
+    "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+}
 
 
 def pose_components(pose):
@@ -72,6 +91,8 @@ class LeftParkSearch(Node):
         shelf_scene_file: str,
         base_frame: str,
         candidate_timeout_sec: float,
+        base_mount_height_m: float = DEFAULT_BASE_MOUNT_HEIGHT_M,
+        include_floor: bool = True,
     ):
         super().__init__("moveit_left_park_search")
         self.base_frame = base_frame
@@ -98,8 +119,15 @@ class LeftParkSearch(Node):
             GetStateValidity, validity_service
         )
         self.scene_client = self.create_client(ApplyPlanningScene, scene_service)
+        self.base_mount_height_m = float(base_mount_height_m)
         with open(shelf_scene_file, "r", encoding="utf-8") as stream:
             self.shelf_scene = yaml.safe_load(stream) or {}
+        if include_floor:
+            objects = self.shelf_scene.setdefault("collision_objects", [])
+            if not any(
+                str(item.get("id", "")) == FLOOR_SCENE_OBJECT["id"] for item in objects
+            ):
+                objects.append(dict(FLOOR_SCENE_OBJECT))
 
     def on_joint_state(self, message: JointState) -> None:
         self.joint_state = deepcopy(message)
@@ -167,6 +195,11 @@ class LeftParkSearch(Node):
                 f"shelf scene frame must be 'map', got '{scene_frame}'"
             )
         base_position, base_rotation = pose_components(candidate_pose)
+        base_position = (
+            base_position[0],
+            base_position[1],
+            base_position[2] + self.base_mount_height_m,
+        )
         base_inverse = quaternion_conjugate(base_rotation)
         output = []
         for specification in self.shelf_scene.get("collision_objects", []):
@@ -306,13 +339,29 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--shelf-scene-file", default=default_scene)
     parser.add_argument("--base-frame", default="base_link")
+    parser.add_argument(
+        "--base-mount-height-m", type=float, default=DEFAULT_BASE_MOUNT_HEIGHT_M
+    )
+    parser.add_argument(
+        "--no-floor",
+        dest="include_floor",
+        action="store_false",
+        default=True,
+        help="skip the floor plane in the collision scene (legacy behaviour)",
+    )
     parser.add_argument("--active-arm", type=int, default=2)
     parser.add_argument("--maximum-candidates", type=int, default=12)
     parser.add_argument("--minimum-candidate-score", type=float, default=0.0)
     parser.add_argument("--candidate-timeout-sec", type=float, default=30.0)
     parser.add_argument("--service-timeout-sec", type=float, default=3.0)
     parser.add_argument(
-        "--lift-values", nargs="+", type=float, default=[-0.15, 0.0, 0.15]
+        # TC-WAM lift seeds plus the three acceptance heights. The candidate's
+        # own real lift solution is added to this set in main(); the parked arm
+        # is checked against the floor at every value tested.
+        "--lift-values",
+        nargs="+",
+        type=float,
+        default=[-0.45, -0.15, 0.0, 0.15],
     )
     parser.add_argument(
         "--q1-values",
@@ -352,6 +401,8 @@ def main() -> int:
         args.shelf_scene_file,
         args.base_frame,
         args.candidate_timeout_sec,
+        args.base_mount_height_m,
+        args.include_floor,
     )
     try:
         node.wait_until_ready()

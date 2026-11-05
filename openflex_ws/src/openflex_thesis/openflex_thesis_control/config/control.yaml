@@ -47,6 +47,7 @@ moveit_grasp_executor:
     right_gripper_action: /right_gripper_controller/gripper_cmd
     joint_state_topic: /joint_states
     grasp_status_topic: /thesis/grasp_status
+    place_status_topic: /thesis/place/status
     memory_topic: /thesis/object_memory
     control_mode_topic: /thesis/control_mode
     measured_velocity_topic: /swerve_drive_controller/odom
@@ -64,6 +65,24 @@ moveit_grasp_executor:
     require_calibrated_object_geometry: true
     require_physical_plan: true
     object_geometry_calibrated: false
+    # G5 fix: the attachment pose is computed from the object's real pose
+    # relative to the TCP. The old identity pose rotated the 0.16 m axis onto
+    # the approach axis and made the box overlap link7 by 10.4 mm.
+    tcp_lookup_timeout_sec: 1.0
+    require_transport_start_valid: true
+    detach_after_place: true
+    # The attached object is a simplified box at the TCP. Its permitted
+    # contact region includes the final wrist link and the gripper only.
+    left_touch_links:
+      - openarmx_left_link7
+      - openarmx_left_hand
+      - openarmx_left_left_finger
+      - openarmx_left_right_finger
+    right_touch_links:
+      - openarmx_right_link7
+      - openarmx_right_hand
+      - openarmx_right_left_finger
+      - openarmx_right_right_finger
 
 fixed_place_supervisor:
   ros__parameters:

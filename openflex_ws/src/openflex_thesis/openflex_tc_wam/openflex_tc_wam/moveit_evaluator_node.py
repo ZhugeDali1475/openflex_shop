@@ -56,6 +56,13 @@ class MoveItEvaluatorNode(Node):
         self.declare_parameter("apply_planning_scene_service", "/apply_planning_scene")
         self.declare_parameter("joint_state_topic", "/joint_states")
         self.declare_parameter("base_frame", "base_link")
+        # Height of base_link above the floor plane the map frame uses. The
+        # URDF states it directly: base_footprint_joint is base_link ->
+        # base_footprint at xyz="0 0 -0.17". TC-WAM candidate base poses are
+        # planar (z=0) poses of that floor plane, so every conversion into
+        # base_link must remove this height; leaving it in placed all Cartesian
+        # targets 0.17 m too high.
+        self.declare_parameter("base_mount_height_m", 0.17)
         self.declare_parameter("planning_groups_file", default_groups)
         self.declare_parameter("shelf_scene_file", default_scene)
         self.declare_parameter("require_calibrated_scene", True)
@@ -150,7 +157,7 @@ class MoveItEvaluatorNode(Node):
             raise ValueError(
                 f"grasp frame '{pose_stamped.header.frame_id}' must be '{expected_frame}'"
             )
-        base_position, base_rotation = self.pose_components(candidate_pose)
+        base_position, base_rotation = self.base_link_position(candidate_pose)
         world_position, world_rotation = self.pose_components(pose_stamped.pose)
         world_position = (
             world_position[0] + perturbation[0],
@@ -226,13 +233,24 @@ class MoveItEvaluatorNode(Node):
         response = await self.validity_client.call_async(request)
         return bool(response is not None and response.valid)
 
+    def base_link_position(self, candidate_pose):
+        """Map-frame position of base_link for a candidate base pose.
+
+        A candidate base pose is a planar pose on the floor plane the map frame
+        uses, while the conversions below produce poses expressed in
+        base_link, which sits base_mount_height_m above that plane.
+        """
+        position, rotation = self.pose_components(candidate_pose)
+        height = float(self.get_parameter("base_mount_height_m").value)
+        return (position[0], position[1], position[2] + height), rotation
+
     def shelf_objects_in_candidate_base(self, candidate_pose, target_frame: str):
         scene_frame = str(self.shelf_scene.get("frame_id", ""))
         if not scene_frame or scene_frame != target_frame:
             raise ValueError(
                 f"shelf scene frame '{scene_frame}' must match target frame '{target_frame}'"
             )
-        base_position, base_rotation = self.pose_components(candidate_pose)
+        base_position, base_rotation = self.base_link_position(candidate_pose)
         base_inverse = quaternion_conjugate(base_rotation)
         objects = []
         for specification in self.shelf_scene.get("collision_objects", []):
