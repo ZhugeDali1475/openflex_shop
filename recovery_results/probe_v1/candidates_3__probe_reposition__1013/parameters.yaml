@@ -1,0 +1,51 @@
+mission_orchestrator:
+  ros__parameters:
+    enable_recovery_research: true
+    moveit_grasp_timeout_sec: 120.0
+    recovery_budget_sec: 420.0
+    recovery_evidence_class: mujoco_oracle_geometry_proxy
+    recovery_forced_action: reposition
+    recovery_grasp_reserve_sec: 90.0
+    recovery_local_only: true
+    recovery_log_path: /home/wgb/openflex_shop/recovery_results/probe_v1/candidates_3__probe_reposition__1013/recovery.jsonl
+    recovery_method: random
+    recovery_model_path: ''
+    recovery_partition: development
+    recovery_scenario_id: candidates_3
+    recovery_seed: 1013
+    reobserve_cost_sec: 35.0
+    reposition_cost_sec: 35.0
+mujoco_oracle_anygrasp:
+  ros__parameters:
+    refined_candidate_offsets_m:
+    - 0.1
+    - 0.1
+    - 0.1
+    refined_lateral_spread_m: 0.01
+openflex_thesis_mujoco_bridge:
+  ros__parameters:
+    object_nominal_pose:
+    - 1.12
+    - 0.0
+    - 0.84
+    - 3.141592653589793
+    observation_position_noise_std_m: 0.0
+    random_seed: 1013
+tc_wam_server:
+  ros__parameters:
+    distance_max_m: 1.0
+    distance_min_m: 0.6
+    distance_step_m: 0.2
+    lateral_max_m: 0.3
+    lateral_min_m: -0.3
+    lateral_step_m: 0.15
+thesis_mujoco_mission_client:
+  ros__parameters:
+    coarse_top_k: 3
+    max_recovery_attempts: 1
+    pickup_observation_pose:
+    - 0.0
+    - 0.0
+    - 0.0
+    refined_top_k: 3
+    task_id: candidates_3__probe_reposition__1013

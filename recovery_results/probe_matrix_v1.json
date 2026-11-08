@@ -1,0 +1,752 @@
+[
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_0",
+      "family": "observation",
+      "observation_noise_m": 0.005,
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1000,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_0",
+      "family": "observation",
+      "observation_noise_m": 0.005,
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1000,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_0",
+      "family": "observation",
+      "observation_noise_m": 0.005,
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1000,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_1",
+      "family": "observation",
+      "observation_noise_m": 0.01,
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1001,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_1",
+      "family": "observation",
+      "observation_noise_m": 0.01,
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1001,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_1",
+      "family": "observation",
+      "observation_noise_m": 0.01,
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1001,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_2",
+      "family": "observation",
+      "observation_noise_m": 0.02,
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1002,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_2",
+      "family": "observation",
+      "observation_noise_m": 0.02,
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1002,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_2",
+      "family": "observation",
+      "observation_noise_m": 0.02,
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1002,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_3",
+      "family": "observation",
+      "observation_noise_m": 0.035,
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1003,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_3",
+      "family": "observation",
+      "observation_noise_m": 0.035,
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1003,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_3",
+      "family": "observation",
+      "observation_noise_m": 0.035,
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1003,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_4",
+      "family": "observation",
+      "observation_noise_m": 0.05,
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1004,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_4",
+      "family": "observation",
+      "observation_noise_m": 0.05,
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1004,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "observation_4",
+      "family": "observation",
+      "observation_noise_m": 0.05,
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1004,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_0",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1005,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_0",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1005,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_0",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1005,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_1",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1006,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_1",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1006,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_1",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        -0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1006,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_2",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1007,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_2",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1007,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_2",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.1,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1007,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_3",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1008,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_3",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1008,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_3",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.2,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1008,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_4",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.3,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1009,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_4",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.3,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1009,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "base_4",
+      "family": "base",
+      "pickup_pose": [
+        0.0,
+        0.3,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1009,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_0",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.03,
+        0.08,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1010,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_0",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.03,
+        0.08,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1010,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_0",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.03,
+        0.08,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1010,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_1",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.15,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1011,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_1",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.15,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1011,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_1",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.15,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1011,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_2",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.25,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1012,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_2",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.25,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1012,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_2",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.0,
+        0.25,
+        0.0
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1012,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_3",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1013,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_3",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1013,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_3",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1013,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_4",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reobserve",
+    "seed": 1014,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_4",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "partition": "development"
+    },
+    "method": "probe_switch_grasp",
+    "seed": 1014,
+    "model_path": ""
+  },
+  {
+    "scenario": {
+      "budget_sec": 420.0,
+      "max_recovery_attempts": 1,
+      "top_k": 3,
+      "scenario_id": "candidates_4",
+      "family": "candidates",
+      "candidate_offsets_m": [
+        0.25,
+        0.25,
+        0.25
+      ],
+      "partition": "development"
+    },
+    "method": "probe_reposition",
+    "seed": 1014,
+    "model_path": ""
+  }
+]

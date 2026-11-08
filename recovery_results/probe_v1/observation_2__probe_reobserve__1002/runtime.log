@@ -1,0 +1,332 @@
+[INFO] [launch]: All log files can be found below /home/wgb/.ros/log/2026-11-07-17-10-18-023298-wgb-GeekPro-17IRR-845170
+[INFO] [launch]: Default logging verbosity is set to INFO
+WARNING:root:[33;21mCannot infer URDF from `/home/wgb/openflex_shop/openflex_ws/install_v2/openarmx_integrated_moveit_config/share/openarmx_integrated_moveit_config`. -- using config/openarmx_integrated.urdf[0m
+WARNING:root:[33;21mCannot infer SRDF from `/home/wgb/openflex_shop/openflex_ws/install_v2/openarmx_integrated_moveit_config/share/openarmx_integrated_moveit_config`. -- using config/openarmx_integrated.srdf[0m
+WARNING:root:[33;21mCannot infer URDF from `/home/wgb/openflex_shop/openflex_ws/install_v2/openarmx_integrated_moveit_config/share/openarmx_integrated_moveit_config`. -- using config/openarmx_integrated.urdf[0m
+WARNING:root:[33;21mCannot infer SRDF from `/home/wgb/openflex_shop/openflex_ws/install_v2/openarmx_integrated_moveit_config/share/openarmx_integrated_moveit_config`. -- using config/openarmx_integrated.srdf[0m
+[INFO] [mujoco_bridge-1]: process started with pid [845188]
+[INFO] [robot_state_publisher-2]: process started with pid [845190]
+[INFO] [move_group-3]: process started with pid [845192]
+[INFO] [object_memory-4]: process started with pid [845194]
+[INFO] [anygrasp_gateway-5]: process started with pid [845196]
+[INFO] [oracle_anygrasp-6]: process started with pid [845198]
+[INFO] [moveit_evaluator-7]: process started with pid [845200]
+[INFO] [tc_wam_server-8]: process started with pid [845202]
+[INFO] [velocity_arbiter-9]: process started with pid [845204]
+[INFO] [local_alignment_supervisor-10]: process started with pid [845206]
+[INFO] [moveit_grasp_executor-11]: process started with pid [845208]
+[INFO] [fixed_place_supervisor-12]: process started with pid [845210]
+[INFO] [mission_orchestrator-13]: process started with pid [845212]
+[INFO] [scripted_local_policy-14]: process started with pid [845214]
+[INFO] [sim_navigation-15]: process started with pid [845216]
+[INFO] [sim_mission_client-16]: process started with pid [845218]
+[robot_state_publisher-2] [WARN] [1794042618.809277581] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[robot_state_publisher-2] [INFO] [1794042618.809472638] [thesis_mujoco_robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-2] [INFO] [1794042618.809535825] [thesis_mujoco_robot_state_publisher]: got segment base_link
+[robot_state_publisher-2] [INFO] [1794042618.809544275] [thesis_mujoco_robot_state_publisher]: got segment bl_steering_link
+[robot_state_publisher-2] [INFO] [1794042618.809550962] [thesis_mujoco_robot_state_publisher]: got segment bl_wheel_link
+[robot_state_publisher-2] [INFO] [1794042618.809557213] [thesis_mujoco_robot_state_publisher]: got segment br_steering_link
+[robot_state_publisher-2] [INFO] [1794042618.809563365] [thesis_mujoco_robot_state_publisher]: got segment br_wheel_link
+[robot_state_publisher-2] [INFO] [1794042618.809569237] [thesis_mujoco_robot_state_publisher]: got segment camera_depth_frame
+[robot_state_publisher-2] [INFO] [1794042618.809575183] [thesis_mujoco_robot_state_publisher]: got segment camera_depth_optical_frame
+[robot_state_publisher-2] [INFO] [1794042618.809581350] [thesis_mujoco_robot_state_publisher]: got segment camera_link
+[robot_state_publisher-2] [INFO] [1794042618.809587317] [thesis_mujoco_robot_state_publisher]: got segment camera_rgb_frame
+[robot_state_publisher-2] [INFO] [1794042618.809593152] [thesis_mujoco_robot_state_publisher]: got segment camera_rgb_optical_frame
+[robot_state_publisher-2] [INFO] [1794042618.809598855] [thesis_mujoco_robot_state_publisher]: got segment chest_link
+[robot_state_publisher-2] [INFO] [1794042618.809604540] [thesis_mujoco_robot_state_publisher]: got segment d435_color_frame
+[robot_state_publisher-2] [INFO] [1794042618.809610196] [thesis_mujoco_robot_state_publisher]: got segment d435_color_optical_frame
+[robot_state_publisher-2] [INFO] [1794042618.809615899] [thesis_mujoco_robot_state_publisher]: got segment d435_depth_frame
+[robot_state_publisher-2] [INFO] [1794042618.809621538] [thesis_mujoco_robot_state_publisher]: got segment d435_depth_optical_frame
+[robot_state_publisher-2] [INFO] [1794042618.809627589] [thesis_mujoco_robot_state_publisher]: got segment d435_link
+[robot_state_publisher-2] [INFO] [1794042618.809633375] [thesis_mujoco_robot_state_publisher]: got segment fl_steering_link
+[robot_state_publisher-2] [INFO] [1794042618.809639295] [thesis_mujoco_robot_state_publisher]: got segment fl_wheel_link
+[robot_state_publisher-2] [INFO] [1794042618.809645249] [thesis_mujoco_robot_state_publisher]: got segment fr_steering_link
+[robot_state_publisher-2] [INFO] [1794042618.809651132] [thesis_mujoco_robot_state_publisher]: got segment fr_wheel_link
+[robot_state_publisher-2] [INFO] [1794042618.809656929] [thesis_mujoco_robot_state_publisher]: got segment gps_link
+[robot_state_publisher-2] [INFO] [1794042618.809662744] [thesis_mujoco_robot_state_publisher]: got segment head_base_link
+[robot_state_publisher-2] [INFO] [1794042618.809668564] [thesis_mujoco_robot_state_publisher]: got segment head_pitch_link
+[robot_state_publisher-2] [INFO] [1794042618.809674440] [thesis_mujoco_robot_state_publisher]: got segment head_yaw_link
+[robot_state_publisher-2] [INFO] [1794042618.809680115] [thesis_mujoco_robot_state_publisher]: got segment imu_link
+[robot_state_publisher-2] [INFO] [1794042618.809685770] [thesis_mujoco_robot_state_publisher]: got segment left_camera_link
+[robot_state_publisher-2] [INFO] [1794042618.809691459] [thesis_mujoco_robot_state_publisher]: got segment left_link0_base
+[robot_state_publisher-2] [INFO] [1794042618.809697150] [thesis_mujoco_robot_state_publisher]: got segment lift_base_link
+[robot_state_publisher-2] [INFO] [1794042618.809702959] [thesis_mujoco_robot_state_publisher]: got segment lift_carriage_link
+[robot_state_publisher-2] [INFO] [1794042618.809708754] [thesis_mujoco_robot_state_publisher]: got segment livox_frame
+[robot_state_publisher-2] [INFO] [1794042618.809714717] [thesis_mujoco_robot_state_publisher]: got segment mid360_link
+[robot_state_publisher-2] [INFO] [1794042618.809720470] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_hand
+[robot_state_publisher-2] [INFO] [1794042618.809726379] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_hand_tcp
+[robot_state_publisher-2] [INFO] [1794042618.809732312] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_left_finger
+[robot_state_publisher-2] [INFO] [1794042618.809738091] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link0
+[robot_state_publisher-2] [INFO] [1794042618.809744033] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link1
+[robot_state_publisher-2] [INFO] [1794042618.809749986] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link2
+[robot_state_publisher-2] [INFO] [1794042618.809755666] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link3
+[robot_state_publisher-2] [INFO] [1794042618.809761537] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link4
+[robot_state_publisher-2] [INFO] [1794042618.809789588] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link4_ext
+[robot_state_publisher-2] [INFO] [1794042618.809797828] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link5
+[robot_state_publisher-2] [INFO] [1794042618.809804363] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link6
+[robot_state_publisher-2] [INFO] [1794042618.809810326] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link7
+[robot_state_publisher-2] [INFO] [1794042618.809816245] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_link7_pico
+[robot_state_publisher-2] [INFO] [1794042618.809822063] [thesis_mujoco_robot_state_publisher]: got segment openarmx_left_right_finger
+[robot_state_publisher-2] [INFO] [1794042618.809827894] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_hand
+[robot_state_publisher-2] [INFO] [1794042618.809833802] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_hand_tcp
+[robot_state_publisher-2] [INFO] [1794042618.809839841] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint1_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809846224] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint2_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809852310] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint3_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809858334] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint4_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809864238] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint5_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809870152] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint6_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809876086] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_joint7_calibrated_axis_link
+[robot_state_publisher-2] [INFO] [1794042618.809881842] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_left_finger
+[robot_state_publisher-2] [INFO] [1794042618.809888033] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link0
+[robot_state_publisher-2] [INFO] [1794042618.809894056] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link1
+[robot_state_publisher-2] [INFO] [1794042618.809899995] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link2
+[robot_state_publisher-2] [INFO] [1794042618.809905991] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link3
+[robot_state_publisher-2] [INFO] [1794042618.809916839] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link4
+[robot_state_publisher-2] [INFO] [1794042618.809923134] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link4_ext
+[robot_state_publisher-2] [INFO] [1794042618.809929101] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link5
+[robot_state_publisher-2] [INFO] [1794042618.809935061] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link6
+[robot_state_publisher-2] [INFO] [1794042618.809940968] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link7
+[robot_state_publisher-2] [INFO] [1794042618.809946710] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_link7_pico
+[robot_state_publisher-2] [INFO] [1794042618.809952652] [thesis_mujoco_robot_state_publisher]: got segment openarmx_right_right_finger
+[robot_state_publisher-2] [INFO] [1794042618.809958655] [thesis_mujoco_robot_state_publisher]: got segment right_camera_link
+[robot_state_publisher-2] [INFO] [1794042618.809964614] [thesis_mujoco_robot_state_publisher]: got segment right_link0_base
+[move_group-3] [INFO] [1794042618.838205656] [moveit_rdf_loader.rdf_loader]: Loaded robot model in 0 seconds
+[move_group-3] [INFO] [1794042618.838284330] [moveit_robot_model.robot_model]: Loading robot model 'openarmx_integrated'...
+[move_group-3] [WARN] [1794042618.880881183] [moveit_robot_model.robot_model]: Link d435_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[oracle_anygrasp-6] [WARN] [1794042619.535556379] [mujoco_oracle_anygrasp]: MUJOCO ORACLE AnyGrasp backend active; physical_perception is always false
+[scripted_local_policy-14] [WARN] [1794042619.570996414] [scripted_local_alignment_baseline]: SCRIPTED proportional local policy active. It is a baseline, not ACT, and its trials must be labeled separately.
+[move_group-3] [WARN] [1794042619.628852597] [moveit_robot_model.robot_model]: Link chest_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[move_group-3] [WARN] [1794042619.628875277] [moveit_robot_model.robot_model]: Link head_base_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[move_group-3] [WARN] [1794042619.628881420] [moveit_robot_model.robot_model]: Link head_pitch_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[move_group-3] [WARN] [1794042619.628885421] [moveit_robot_model.robot_model]: Link head_yaw_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[sim_navigation-15] [WARN] [1794042619.636894478] [sim_navigation_baseline_not_nav2]: SIM NAVIGATION BASELINE active: proportional, collision-unaware and NOT Nav2
+[move_group-3] [WARN] [1794042619.690534414] [moveit_robot_model.robot_model]: Link mid360_link has visual geometry but no collision geometry. Collision geometry will be left empty. Fix your URDF file by explicitly specifying collision geometry.
+[move_group-3] [INFO] [1794042619.695674597] [openflex_kinematics]: Openflex analytic lift IK ready for 'lift_base_link' -> 'lift_carriage_link'
+[move_group-3] [WARN] [1794042619.697554558] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.697774766] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [INFO] [1794042619.698024789] [openflex_kinematics]: Openflex IK ready for 'left_arm_with_lift': fixed-seed 7-DOF KDL, then full 8-DOF KDL
+[move_group-3] [WARN] [1794042619.698904951] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.699005460] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [INFO] [1794042619.699227475] [openflex_kinematics]: Openflex IK ready for 'right_arm_with_lift': fixed-seed 7-DOF KDL, then full 8-DOF KDL
+[move_group-3] [WARN] [1794042619.699289734] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.699362772] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.700821689] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.700916573] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [INFO] [1794042619.701313836] [openflex_kinematics]: Openflex whole-body IK ready for 'left_whole_body': Stage 0 route, KDL Stage A/B, PickIK analytic Stage C
+[move_group-3] [WARN] [1794042619.702244607] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [WARN] [1794042619.702344961] [kdl_parser]: The root link base_link has an inertia specified in the URDF, but KDL does not support a root link with an inertia.  As a workaround, you can add an extra dummy link to your URDF.
+[move_group-3] [INFO] [1794042619.702700192] [openflex_kinematics]: Openflex whole-body IK ready for 'right_whole_body': Stage 0 route, KDL Stage A/B, PickIK analytic Stage C
+[move_group-3] [INFO] [1794042620.564179256] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-3] [INFO] [1794042620.564310647] [moveit.ros_planning_interface.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-3] [INFO] [1794042620.565269213] [moveit_ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-3] [INFO] [1794042620.565474642] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Listening to '/attached_collision_object' for attached collision objects
+[move_group-3] [INFO] [1794042620.565482790] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Starting planning scene monitor
+[move_group-3] [INFO] [1794042620.565636706] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Listening to '/planning_scene'
+[move_group-3] [INFO] [1794042620.565641964] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-3] [INFO] [1794042620.565804910] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-3] [INFO] [1794042620.565973237] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-3] [WARN] [1794042620.566109832] [moveit.ros.occupancy_map_monitor.middleware_handle]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[move_group-3] [ERROR] [1794042620.566153467] [moveit.ros.occupancy_map_monitor.middleware_handle]: Exception while loading octomap updater 'occupancy_map_monitor/DepthImageOctomapUpdater': According to the loaded plugin descriptions the class occupancy_map_monitor/DepthImageOctomapUpdater with base class type occupancy_map_monitor::OccupancyMapUpdater does not exist. Declared types are 
+[move_group-3] 
+[move_group-3] [ERROR] [1794042620.566163076] [moveit.ros.occupancy_map_monitor]: Failed to load sensor: `default_sensor` of type: `occupancy_map_monitor/DepthImageOctomapUpdater`
+[move_group-3] [WARN] [1794042620.575550649] [moveit_ros.current_state_monitor]: Unable to update multi-DOF joint 'base_planar_joint':Failure to lookup transform between 'odom'and 'base_link' with TF exception: "odom" passed to lookupTransform argument target_frame does not exist. 
+[mujoco_bridge-1] [WARN] [1794042622.209933488] [openflex_thesis_mujoco_bridge]: MUJOCO DIGITAL EXPERIMENT active: ground-truth observations and oracle grasps are non-physical evidence
+[mujoco_bridge-1] [INFO] [1794042622.210143532] [openflex_thesis_mujoco_bridge]: loaded derived model: /tmp/openflex_thesis_mujoco_scene.xml
+[sim_mission_client-16] [INFO] [1794042622.469726877] [thesis_mujoco_mission_client]: phase=1 detail=Nav2 to shelf observation/handoff zone
+[sim_mission_client-16] [INFO] [1794042622.470145330] [thesis_mujoco_mission_client]: phase=2 detail=confirm measured base stop
+[sim_mission_client-16] [INFO] [1794042622.998283040] [thesis_mujoco_mission_client]: phase=4 detail=generate recovery grasp candidates
+[sim_mission_client-16] [INFO] [1794042623.057370001] [thesis_mujoco_mission_client]: phase=5 detail=evaluate recovery candidates
+[move_group-3] [INFO] [1794042625.061322463] [moveit.ros_planning_interface.moveit_cpp]: Loading planning pipeline 'ompl'
+[move_group-3] [INFO] [1794042625.067827216] [moveit.ros_planning.planning_pipeline]: Using planning interface 'OMPL'
+[move_group-3] [INFO] [1794042625.069225091] [moveit_ros.add_time_optimal_parameterization]: Param 'ompl.path_tolerance' was not set. Using default value: 0.100000
+[move_group-3] [INFO] [1794042625.069233156] [moveit_ros.add_time_optimal_parameterization]: Param 'ompl.resample_dt' was not set. Using default value: 0.100000
+[move_group-3] [INFO] [1794042625.069236018] [moveit_ros.add_time_optimal_parameterization]: Param 'ompl.min_angle_change' was not set. Using default value: 0.001000
+[move_group-3] [INFO] [1794042625.069248395] [moveit_ros.fix_workspace_bounds]: Param 'ompl.default_workspace_bounds' was not set. Using default value: 10.000000
+[move_group-3] [INFO] [1794042625.069256607] [moveit_ros.fix_start_state_bounds]: Param 'ompl.start_state_max_bounds_error' was set to 0.100000
+[move_group-3] [INFO] [1794042625.069260400] [moveit_ros.fix_start_state_bounds]: Param 'ompl.start_state_max_dt' was not set. Using default value: 0.500000
+[move_group-3] [INFO] [1794042625.069266853] [moveit_ros.fix_start_state_collision]: Param 'ompl.start_state_max_dt' was not set. Using default value: 0.500000
+[move_group-3] [INFO] [1794042625.069269527] [moveit_ros.fix_start_state_collision]: Param 'ompl.jiggle_fraction' was set to 0.050000
+[move_group-3] [INFO] [1794042625.069272325] [moveit_ros.fix_start_state_collision]: Param 'ompl.max_sampling_attempts' was not set. Using default value: 100
+[move_group-3] [INFO] [1794042625.069293586] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Add Time Optimal Parameterization'
+[move_group-3] [INFO] [1794042625.069295856] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Resolve constraint frames to robot links'
+[move_group-3] [INFO] [1794042625.069297535] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Workspace Bounds'
+[move_group-3] [INFO] [1794042625.069299234] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State Bounds'
+[move_group-3] [INFO] [1794042625.069300836] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State In Collision'
+[move_group-3] [INFO] [1794042625.069302408] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State Path Constraints'
+[move_group-3] [INFO] [1794042625.070613527] [moveit.ros_planning_interface.moveit_cpp]: Loading planning pipeline 'pilz_industrial_motion_planner'
+[move_group-3] [INFO] [1794042625.072000374] [moveit.pilz_industrial_motion_planner.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-3] [WARN] [1794042625.072305480] [moveit.pilz_industrial_motion_planner.joint_limits_aggregator]: Multi-DOF-Joint 'base_planar_joint' not supported.
+[move_group-3] [WARN] [1794042625.072315678] [moveit.pilz_industrial_motion_planner.joint_limits_aggregator]: Multi-DOF-Joint 'base_planar_joint' not supported.
+[move_group-3] [INFO] [1794042625.077335653] [moveit.pilz_industrial_motion_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-3] [INFO] [1794042625.077345348] [moveit.pilz_industrial_motion_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-3] [INFO] [1794042625.078056691] [moveit.pilz_industrial_motion_planner]: Registered Algorithm [CIRC]
+[move_group-3] [INFO] [1794042625.078064398] [moveit.pilz_industrial_motion_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-3] [INFO] [1794042625.078560776] [moveit.pilz_industrial_motion_planner]: Registered Algorithm [LIN]
+[move_group-3] [INFO] [1794042625.078566810] [moveit.pilz_industrial_motion_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-3] [INFO] [1794042625.079022014] [moveit.pilz_industrial_motion_planner]: Registered Algorithm [PTP]
+[move_group-3] [INFO] [1794042625.079032802] [moveit.ros_planning.planning_pipeline]: Using planning interface 'Pilz Industrial Motion Planner'
+[move_group-3] [INFO] [1794042625.079475282] [moveit.ros_planning_interface.moveit_cpp]: Loading planning pipeline 'chomp'
+[move_group-3] [INFO] [1794042625.081368757] [moveit.ros_planning.planning_pipeline]: Using planning interface 'CHOMP'
+[move_group-3] [INFO] [1794042625.082212616] [moveit_ros.add_time_optimal_parameterization]: Param 'chomp.path_tolerance' was not set. Using default value: 0.100000
+[move_group-3] [INFO] [1794042625.082225913] [moveit_ros.add_time_optimal_parameterization]: Param 'chomp.resample_dt' was not set. Using default value: 0.100000
+[move_group-3] [INFO] [1794042625.082231679] [moveit_ros.add_time_optimal_parameterization]: Param 'chomp.min_angle_change' was not set. Using default value: 0.001000
+[move_group-3] [INFO] [1794042625.082251831] [moveit_ros.fix_workspace_bounds]: Param 'chomp.default_workspace_bounds' was not set. Using default value: 10.000000
+[move_group-3] [INFO] [1794042625.082266633] [moveit_ros.fix_start_state_bounds]: Param 'chomp.start_state_max_bounds_error' was set to 0.100000
+[move_group-3] [INFO] [1794042625.082276314] [moveit_ros.fix_start_state_bounds]: Param 'chomp.start_state_max_dt' was not set. Using default value: 0.500000
+[move_group-3] [INFO] [1794042625.082288722] [moveit_ros.fix_start_state_collision]: Param 'chomp.start_state_max_dt' was not set. Using default value: 0.500000
+[move_group-3] [INFO] [1794042625.082299292] [moveit_ros.fix_start_state_collision]: Param 'chomp.jiggle_fraction' was set to 0.050000
+[move_group-3] [INFO] [1794042625.082302594] [moveit_ros.fix_start_state_collision]: Param 'chomp.max_sampling_attempts' was not set. Using default value: 100
+[move_group-3] [INFO] [1794042625.082310865] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Add Time Optimal Parameterization'
+[move_group-3] [INFO] [1794042625.082329437] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Resolve constraint frames to robot links'
+[move_group-3] [INFO] [1794042625.082331515] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Workspace Bounds'
+[move_group-3] [INFO] [1794042625.082333226] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State Bounds'
+[move_group-3] [INFO] [1794042625.082334987] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State In Collision'
+[move_group-3] [INFO] [1794042625.082337210] [moveit.ros_planning.planning_pipeline]: Using planning request adapter 'Fix Start State Path Constraints'
+[move_group-3] [WARN] [1794042625.083640403] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-3] [INFO] [1794042625.112104784] [moveit_ros.trajectory_execution_manager]: Trajectory execution is not managing controllers
+[move_group-3] [INFO] [1794042625.112121471] [move_group.move_group]: MoveGroup debug mode is ON
+[move_group-3] [INFO] [1794042625.123079497] [move_group.move_group]: 
+[move_group-3] 
+[move_group-3] ********************************************************
+[move_group-3] * MoveGroup using: 
+[move_group-3] *     - ApplyPlanningSceneService
+[move_group-3] *     - ClearOctomapService
+[move_group-3] *     - CartesianPathService
+[move_group-3] *     - ExecuteTrajectoryAction
+[move_group-3] *     - GetPlanningSceneService
+[move_group-3] *     - KinematicsService
+[move_group-3] *     - MoveAction
+[move_group-3] *     - MotionPlanService
+[move_group-3] *     - QueryPlannersService
+[move_group-3] *     - StateValidationService
+[move_group-3] ********************************************************
+[move_group-3] 
+[move_group-3] [INFO] [1794042625.123107301] [moveit_move_group_capabilities_base.move_group_context]: MoveGroup context using planning plugin ompl_interface/OMPLPlanner
+[move_group-3] [INFO] [1794042625.123112996] [moveit_move_group_capabilities_base.move_group_context]: MoveGroup context initialization complete
+[move_group-3] [96mLoading 'move_group/ApplyPlanningSceneService'...
+[move_group-3] [0m[96mLoading 'move_group/ClearOctomapService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupCartesianPathService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupGetPlanningSceneService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupKinematicsService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupMoveAction'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupPlanService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupQueryPlannersService'...
+[move_group-3] [0m[96mLoading 'move_group/MoveGroupStateValidationService'...
+[move_group-3] [0m[92m
+[move_group-3] You can start planning now!
+[move_group-3] 
+[move_group-3] [WARN] [1794042632.082173178] [openflex_kinematics]: Clamping an out-of-bounds IK seed to its nearest joint bound (first occurrence: openarmx_right_joint4 -0.000000 -> 0.000000)
+[sim_mission_client-16] [INFO] [1794042640.014535156] [thesis_mujoco_mission_client]: phase=6 detail=align to selected recovery region
+[sim_mission_client-16] [INFO] [1794042644.255173118] [thesis_mujoco_mission_client]: phase=8 detail=near-field recovery observation
+[sim_mission_client-16] [INFO] [1794042644.355283697] [thesis_mujoco_mission_client]: phase=9 detail=fixed MoveIt grasp attempt
+[moveit_grasp_executor-11] [INFO] [1794042644.394166244] [moveit_grasp_executor]: G5DBG pose_to_base frame=map->base_link in=(0.9974, -0.0003, 0.8373) T=(-0.3249, -0.4685, -0.1700) q=(0.0000, 0.0000, 0.2180, 0.9759)
+[moveit_grasp_executor-11] [INFO] [1794042644.501587838] [moveit_grasp_executor]: selected refined grasp=200101 quality=0.980000
+[moveit_grasp_executor-11] [INFO] [1794042644.560254084] [moveit_grasp_executor]: pregrasp target joints: {'lift_joint': -0.64542, 'openarmx_right_joint1': 2.42307, 'openarmx_right_joint2': 0.263696, 'openarmx_right_joint3': -1.271913, 'openarmx_right_joint4': 0.964558, 'openarmx_right_joint5': -1.5, 'openarmx_right_joint6': 0.429779, 'openarmx_right_joint7': 0.921729}
+[move_group-3] [INFO] [1794042644.560941508] [moveit_move_group_default_capabilities.move_action_capability]: Received request
+[move_group-3] [INFO] [1794042644.561058960] [moveit_move_group_default_capabilities.move_action_capability]: executing..
+[move_group-3] [INFO] [1794042644.561133786] [moveit_move_group_default_capabilities.move_action_capability]: Combined planning and execution request received for MoveGroup action. Forwarding to planning and execution pipeline.
+[move_group-3] [INFO] [1794042644.561181936] [moveit_ros.plan_execution]: Planning attempt 1 of at most 1
+[move_group-3] [INFO] [1794042644.562099675] [moveit.ompl_planning.model_based_planning_context]: Planner configuration 'right_arm_with_lift' will use planner 'geometric::RRTConnect'. Additional configuration parameters will be set when the planner is constructed.
+[move_group-3] [WARN] [1794042644.592774209] [moveit_trajectory_processing.time_optimal_trajectory_generation]: Joint acceleration limits are not defined. Using the default 1 rad/s^2. You can define acceleration limits in the URDF or joint_limits.yaml.
+[move_group-3] [INFO] [1794042644.670276149] [moveit_ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-3] [INFO] [1794042644.670530638] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to lift_joint_controller
+[move_group-3] [INFO] [1794042644.680628675] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: lift_joint_controller started execution
+[move_group-3] [INFO] [1794042644.680650573] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[move_group-3] [INFO] [1794042644.680744600] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to right_joint_trajectory_controller
+[move_group-3] [INFO] [1794042644.686998084] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: right_joint_trajectory_controller started execution
+[move_group-3] [INFO] [1794042644.687024420] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[mujoco_bridge-1] [INFO] [1794042668.448244747] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.300 m from the TCP (object in TCP frame (0.2777, 0.0822, -0.0782), gripper command 0.0440, attached=None) contacts=openarmx_left_link4--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042669.450105201] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.271 m from the TCP (object in TCP frame (0.2468, 0.0848, -0.0715), gripper command 0.0440, attached=None) contacts=openarmx_left_link4--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042670.452081666] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.243 m from the TCP (object in TCP frame (0.2167, 0.0857, -0.0672), gripper command 0.0440, attached=None) contacts=openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042671.452128275] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.226 m from the TCP (object in TCP frame (0.1935, 0.0952, -0.0685), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_left_finger--thesis_shelf;openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;openarmx_right_hand--thesis_shelf;openarmx_right_left_finger--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042672.452153519] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.222 m from the TCP (object in TCP frame (0.1771, 0.1121, -0.0732), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_left_finger--thesis_shelf;openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042676.376512614] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.298 m from the TCP (object in TCP frame (0.2627, 0.1276, -0.0614), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;openarmx_left_link6--thesis_shelf;openarmx_left_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042677.376899840] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.231 m from the TCP (object in TCP frame (0.146, 0.16, -0.0808), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;openarmx_left_link6--thesis_shelf;openarmx_left_link7--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042678.377059566] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.298 m from the TCP (object in TCP frame (0.2476, 0.152, -0.0681), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_link4--thesis_shelf;openarmx_left_link5--thesis_shelf;openarmx_left_link6--thesis_shelf;openarmx_left_link7--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042685.132247475] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.300 m from the TCP (object in TCP frame (0.1863, 0.224, -0.0715), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_right_finger--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042686.134462889] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.289 m from the TCP (object in TCP frame (0.1576, 0.2306, -0.0752), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_right_finger--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042687.134529653] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.279 m from the TCP (object in TCP frame (0.128, 0.2342, -0.0796), gripper command 0.0440, attached=None) contacts=openarmx_left_hand--thesis_shelf;openarmx_left_right_finger--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042688.136682590] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.267 m from the TCP (object in TCP frame (0.0952, 0.234, -0.0848), gripper command 0.0440, attached=None) contacts=openarmx_left_right_finger--thesis_shelf;openarmx_right_hand--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042689.136813649] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.260 m from the TCP (object in TCP frame (0.0733, 0.2344, -0.0861), gripper command 0.0440, attached=None) contacts=openarmx_right_hand--thesis_shelf;openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042690.138117832] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.255 m from the TCP (object in TCP frame (0.0569, 0.2336, -0.0842), gripper command 0.0440, attached=None) contacts=openarmx_right_hand--thesis_shelf;openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042691.138162129] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.249 m from the TCP (object in TCP frame (0.04, 0.2319, -0.0816), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042692.140245586] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.248 m from the TCP (object in TCP frame (0.0212, 0.2323, -0.0855), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042693.142122631] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.251 m from the TCP (object in TCP frame (0.0034, 0.2334, -0.0915), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042694.142124850] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.253 m from the TCP (object in TCP frame (-0.0135, 0.2335, -0.0972), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042695.144126269] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.256 m from the TCP (object in TCP frame (-0.0301, 0.2325, -0.1026), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042696.146057065] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.258 m from the TCP (object in TCP frame (-0.0465, 0.2303, -0.1076), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042697.146111253] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.261 m from the TCP (object in TCP frame (-0.0627, 0.2266, -0.1123), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042698.148134852] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.262 m from the TCP (object in TCP frame (-0.0788, 0.2216, -0.1165), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042699.150094299] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.264 m from the TCP (object in TCP frame (-0.0946, 0.215, -0.12), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042700.150132108] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.264 m from the TCP (object in TCP frame (-0.1106, 0.2059, -0.1222), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042701.150201367] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.264 m from the TCP (object in TCP frame (-0.1254, 0.1957, -0.1242), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042702.152284559] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.259 m from the TCP (object in TCP frame (-0.1402, 0.1811, -0.1215), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042703.154438772] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.254 m from the TCP (object in TCP frame (-0.1535, 0.1645, -0.1183), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042704.154595820] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.245 m from the TCP (object in TCP frame (-0.1643, 0.1447, -0.1097), gripper command 0.0440, attached=None) contacts=openarmx_right_link6--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042705.157356734] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.216 m from the TCP (object in TCP frame (-0.1647, 0.1117, -0.0851), gripper command 0.0440, attached=None) contacts=openarmx_right_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042706.158164050] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.211 m from the TCP (object in TCP frame (-0.1709, 0.0965, -0.0779), gripper command 0.0440, attached=None) contacts=openarmx_right_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042707.160114157] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.206 m from the TCP (object in TCP frame (-0.1759, 0.0827, -0.0689), gripper command 0.0440, attached=None) contacts=openarmx_right_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[mujoco_bridge-1] [INFO] [1794042708.162186159] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.201 m from the TCP (object in TCP frame (-0.1798, 0.0695, -0.0583), gripper command 0.0440, attached=None) contacts=openarmx_right_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[move_group-3] [INFO] [1794042708.563197900] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'lift_joint_controller' successfully finished
+[move_group-3] [INFO] [1794042708.564182053] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'right_joint_trajectory_controller' successfully finished
+[move_group-3] [INFO] [1794042708.564211193] [moveit_ros.trajectory_execution_manager]: Not waiting for trajectory completion
+[move_group-3] [INFO] [1794042708.564225997] [moveit_ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-3] [INFO] [1794042708.570583034] [moveit_move_group_default_capabilities.move_action_capability]: Solution was found and executed.
+[moveit_grasp_executor-11] [INFO] [1794042708.617816597] [moveit_grasp_executor]: pregrasp result success=False: {'lift_joint': -0.648144, 'openarmx_right_joint1': 2.117583, 'openarmx_right_joint2': 0.271974, 'openarmx_right_joint3': -1.407804, 'openarmx_right_joint4': 0.970412, 'openarmx_right_joint5': -1.474949, 'openarmx_right_joint6': 0.42834, 'openarmx_right_joint7': 0.953757}
+[moveit_grasp_executor-11] [ERROR] [1794042708.638364554] [moveit_grasp_executor]: MoveIt pregrasp planning or execution failed
+[sim_mission_client-16] [INFO] [1794042708.751929270] [thesis_mujoco_mission_client]: phase=16 detail=planning/execution failed; safety park attempted
+[sim_mission_client-16] [INFO] [1794042708.757336858] [thesis_mujoco_mission_client]: RECOVERY_TASK_RESULT {"task_id": "observation_2__probe_reobserve__1002", "success": false, "error_code": 53, "duration_sec": 86.29303741455078, "recovery_attempts": 0, "message": "planning/execution failed; safety park attempted"}
+[sim_mission_client-16] [ERROR] [1794042708.757658358] [thesis_mujoco_mission_client]: MUJOCO_MISSION_FAILED code=53 message=planning/execution failed; safety park attempted
+[INFO] [sim_mission_client-16]: process has finished cleanly [pid 845218]
+[mujoco_bridge-1] [INFO] [1794042709.163350893] [openflex_thesis_mujoco_bridge]: grasp proximity on right: object 0.196 m from the TCP (object in TCP frame (-0.182, 0.0553, -0.0486), gripper command 0.0440, attached=None) contacts=openarmx_right_link7--thesis_shelf;thesis_object--thesis_shelf;thesis_occluder--world
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [sim_navigation-15]: sending signal 'SIGINT' to process[sim_navigation-15]
+[INFO] [scripted_local_policy-14]: sending signal 'SIGINT' to process[scripted_local_policy-14]
+[INFO] [mission_orchestrator-13]: sending signal 'SIGINT' to process[mission_orchestrator-13]
+[INFO] [fixed_place_supervisor-12]: sending signal 'SIGINT' to process[fixed_place_supervisor-12]
+[INFO] [moveit_grasp_executor-11]: sending signal 'SIGINT' to process[moveit_grasp_executor-11]
+[INFO] [local_alignment_supervisor-10]: sending signal 'SIGINT' to process[local_alignment_supervisor-10]
+[INFO] [velocity_arbiter-9]: sending signal 'SIGINT' to process[velocity_arbiter-9]
+[ERROR] [sim_navigation-15]: process has died [pid 845216, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/lib/openflex_thesis_mujoco/sim_navigation --ros-args -r __node:=sim_navigation_baseline_not_nav2 --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/share/openflex_thesis_mujoco/config/mujoco.yaml --params-file /tmp/launch_params_2kyngf7c'].
+[INFO] [tc_wam_server-8]: sending signal 'SIGINT' to process[tc_wam_server-8]
+[ERROR] [fixed_place_supervisor-12]: process has died [pid 845210, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/lib/openflex_thesis_control/fixed_place_supervisor --ros-args -r __node:=fixed_place_supervisor --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/share/openflex_thesis_control/config/control.yaml --params-file /tmp/launch_params_e_wq3zea'].
+[ERROR] [mission_orchestrator-13]: process has died [pid 845212, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/lib/openflex_thesis_control/mission_orchestrator --ros-args -r __node:=mission_orchestrator --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/share/openflex_thesis_control/config/control.yaml --params-file /tmp/launch_params_47ca5e3c --params-file /home/wgb/openflex_shop/recovery_results/probe_v1/observation_2__probe_reobserve__1002/parameters.yaml'].
+[INFO] [moveit_evaluator-7]: sending signal 'SIGINT' to process[moveit_evaluator-7]
+[ERROR] [velocity_arbiter-9]: process has died [pid 845204, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/lib/openflex_thesis_control/velocity_arbiter --ros-args -r __node:=velocity_arbiter --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/share/openflex_thesis_control/config/control.yaml --params-file /tmp/launch_params_6z4g1coa'].
+[INFO] [oracle_anygrasp-6]: sending signal 'SIGINT' to process[oracle_anygrasp-6]
+[ERROR] [moveit_grasp_executor-11]: process has died [pid 845208, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/lib/openflex_thesis_control/moveit_grasp_executor --ros-args -r __node:=moveit_grasp_executor --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/share/openflex_thesis_control/config/control.yaml --params-file /tmp/launch_params_ae0clwc1'].
+[ERROR] [local_alignment_supervisor-10]: process has died [pid 845206, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/lib/openflex_thesis_control/local_alignment_supervisor --ros-args -r __node:=local_alignment_supervisor --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_control/share/openflex_thesis_control/config/control.yaml --params-file /tmp/launch_params_d6yr43h0'].
+[INFO] [anygrasp_gateway-5]: sending signal 'SIGINT' to process[anygrasp_gateway-5]
+[ERROR] [tc_wam_server-8]: process has died [pid 845202, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/lib/openflex_tc_wam/tc_wam_server --ros-args -r __node:=tc_wam_server --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/share/openflex_tc_wam/config/tc_wam.yaml --params-file /tmp/launch_params_4hp7e874 --params-file /home/wgb/openflex_shop/recovery_results/probe_v1/observation_2__probe_reobserve__1002/parameters.yaml'].
+[INFO] [object_memory-4]: sending signal 'SIGINT' to process[object_memory-4]
+[INFO] [move_group-3]: sending signal 'SIGINT' to process[move_group-3]
+[INFO] [robot_state_publisher-2]: sending signal 'SIGINT' to process[robot_state_publisher-2]
+[ERROR] [moveit_evaluator-7]: process has died [pid 845200, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/lib/openflex_tc_wam/moveit_evaluator --ros-args -r __node:=moveit_evaluator --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/share/openflex_tc_wam/config/tc_wam.yaml --params-file /tmp/launch_params_be8yci4q'].
+[ERROR] [oracle_anygrasp-6]: process has died [pid 845198, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/lib/openflex_thesis_mujoco/oracle_anygrasp --ros-args -r __node:=mujoco_oracle_anygrasp --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/share/openflex_thesis_mujoco/config/mujoco.yaml --params-file /tmp/launch_params_k5v4f7q4 --params-file /home/wgb/openflex_shop/recovery_results/probe_v1/observation_2__probe_reobserve__1002/parameters.yaml'].
+[INFO] [mujoco_bridge-1]: sending signal 'SIGINT' to process[mujoco_bridge-1]
+[ERROR] [anygrasp_gateway-5]: process has died [pid 845196, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/lib/openflex_tc_wam/anygrasp_gateway --ros-args -r __node:=anygrasp_gateway --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/share/openflex_tc_wam/config/tc_wam.yaml --params-file /tmp/launch_params_8_qfni6c'].
+[move_group-3] [INFO] [1794042709.170124176] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ERROR] [object_memory-4]: process has died [pid 845194, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/lib/openflex_tc_wam/object_memory --ros-args -r __node:=object_memory --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_tc_wam/share/openflex_tc_wam/config/tc_wam.yaml --params-file /tmp/launch_params_7_s9j812'].
+[ERROR] [robot_state_publisher-2]: process has died [pid 845190, exit code -2, cmd '/opt/ros/humble/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=thesis_mujoco_robot_state_publisher --params-file /tmp/launch_params_36hrm3yu'].
+[robot_state_publisher-2] [INFO] [1794042709.170144584] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[scripted_local_policy-14] Traceback (most recent call last):
+[scripted_local_policy-14]   File "/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/lib/openflex_thesis_mujoco/scripted_local_policy", line 33, in <module>
+[scripted_local_policy-14]     sys.exit(load_entry_point('openflex-thesis-mujoco', 'console_scripts', 'scripted_local_policy')())
+[scripted_local_policy-14]   File "/home/wgb/openflex_shop/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/scripted_local_policy_node.py", line 125, in main
+[scripted_local_policy-14]     node.destroy_node()
+[scripted_local_policy-14]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 1696, in destroy_node
+[scripted_local_policy-14]     self.__node.destroy_when_not_in_use()
+[scripted_local_policy-14] KeyboardInterrupt
+[move_group-3] [INFO] [1794042709.199019922] [moveit.ros_planning_interface.moveit_cpp]: Deleting MoveItCpp
+[move_group-3] [INFO] [1794042709.199737101] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_group-3] [INFO] [1794042709.201725635] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Stopping world geometry monitor
+[move_group-3] [INFO] [1794042709.202100327] [moveit_ros.planning_scene_monitor.planning_scene_monitor]: Stopping planning scene monitor
+[move_group-3] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[move_group-3]          at line 127 in ./src/class_loader.cpp
+[move_group-3] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[move_group-3]          at line 127 in ./src/class_loader.cpp
+[ERROR] [scripted_local_policy-14]: process has died [pid 845214, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/lib/openflex_thesis_mujoco/scripted_local_policy --ros-args -r __node:=scripted_local_alignment_baseline --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/share/openflex_thesis_mujoco/config/mujoco.yaml --params-file /tmp/launch_params_fq0hwjug'].
+[ERROR] [move_group-3]: process has died [pid 845192, exit code -2, cmd '/opt/ros/humble/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group --params-file /tmp/launch_params_imkg5mgg --params-file /tmp/launch_params_k8ni6e0r'].
+[move_group-3] [0m
+[ERROR] [mujoco_bridge-1]: process has died [pid 845188, exit code -2, cmd '/home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/lib/openflex_thesis_mujoco/mujoco_bridge --ros-args -r __node:=openflex_thesis_mujoco_bridge --params-file /home/wgb/openflex_shop/openflex_ws/install_v2/openflex_thesis_mujoco/share/openflex_thesis_mujoco/config/mujoco.yaml --params-file /tmp/launch_params_sk2403i6 --params-file /home/wgb/openflex_shop/recovery_results/probe_v1/observation_2__probe_reobserve__1002/parameters.yaml'].

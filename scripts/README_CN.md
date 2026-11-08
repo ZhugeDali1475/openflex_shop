@@ -47,4 +47,9 @@ export MUJOCO_GL=egl
 | `clean_generated_artifacts.sh` | 清理可再生缓存和历史运行日志 |
 
 清理脚本不会删除源码、构建产品、模型、地图、实验数据和数据库。
+# 局部恢复研究入口
+
+`bash scripts/run_recovery_research.sh` 提供 setup、test、matrix、run、train、report 子命令。
+完整使用和证据边界见仓库根目录 `RECOVERY_RUNBOOK_CN.md`。
+默认不改变原任务编排，研究运行通过独立 experiment_config 显式启用。
 

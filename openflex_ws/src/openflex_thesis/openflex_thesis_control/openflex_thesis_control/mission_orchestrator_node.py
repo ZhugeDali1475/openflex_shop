@@ -1,6 +1,7 @@
 """Final thesis mission: Nav2 -> AnyGrasp/TC-WAM -> ACT -> AnyGrasp/MoveIt."""
 
 from copy import deepcopy
+import math
 import time
 from typing import Optional, Tuple
 
@@ -23,14 +24,33 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from tf2_ros import Buffer, TransformListener
 
 from .async_tools import ros_sleep
+from .recovery_adapter import RecoveryMissionMixin
 
 
-class MissionOrchestratorNode(Node):
+class MissionOrchestratorNode(RecoveryMissionMixin, Node):
     def __init__(self) -> None:
         super().__init__("mission_orchestrator")
         self.declare_parameter("mission_action", "/thesis/run_pick_deliver")
+        self.declare_parameter("enable_recovery_research", False)
+        self.declare_parameter("recovery_local_only", False)
+        self.declare_parameter("recovery_forced_action", "")
+        self.declare_parameter("recovery_method", "heuristic_memory")
+        self.declare_parameter("recovery_model_path", "")
+        self.declare_parameter("recovery_log_path", "")
+        self.declare_parameter("recovery_scenario_id", "development")
+        self.declare_parameter("recovery_partition", "development")
+        self.declare_parameter("recovery_evidence_class", "unclassified")
+        self.declare_parameter("recovery_seed", 7)
+        self.declare_parameter("recovery_budget_sec", 300.0)
+        self.declare_parameter("recovery_grasp_reserve_sec", 45.0)
+        self.declare_parameter("reobserve_cost_sec", 140.0)
+        self.declare_parameter("switch_grasp_cost_sec", 5.0)
+        self.declare_parameter("reposition_cost_sec", 140.0)
+        self.declare_parameter("reobserve_window_sec", 0.75)
+        self.declare_parameter("recovery_min_base_shift_m", 0.08)
         self.declare_parameter("nav2_action", "/navigate_to_pose")
         self.declare_parameter("anygrasp_action", "/thesis/generate_grasps")
         self.declare_parameter("tc_wam_action", "/thesis/compute_tc_wam")
@@ -131,8 +151,11 @@ class MissionOrchestratorNode(Node):
         )
         self.latest_memory: Optional[ObjectMemory] = None
         self.latest_memory_receipt = 0.0
+        self.latest_observation_receipt = 0.0
         self.latest_odometry: Optional[Odometry] = None
         self.latest_odometry_receipt = 0.0
+        self.recovery_tf_buffer = Buffer()
+        self.recovery_tf_listener = TransformListener(self.recovery_tf_buffer, self)
         self.busy = False
         self.current_phase = MissionState.IDLE
         self.current_attempt = 0
@@ -140,10 +163,17 @@ class MissionOrchestratorNode(Node):
         self.current_ready_region_id = ""
 
     def on_memory(self, msg: ObjectMemory) -> None:
+        if self.latest_memory is None or msg.observation_sequence != self.latest_memory.observation_sequence:
+            self.latest_observation_receipt = time.monotonic()
         self.latest_memory = deepcopy(msg)
         self.latest_memory_receipt = time.monotonic()
 
     def on_odometry(self, msg: Odometry) -> None:
+        if getattr(self, "record_recovery_distance", False) and self.latest_odometry is not None:
+            previous = self.latest_odometry.pose.pose.position
+            current = msg.pose.pose.position
+            distance = math.hypot(current.x - previous.x, current.y - previous.y)
+            self.recovery_distance_m += distance
         self.latest_odometry = deepcopy(msg)
         self.latest_odometry_receipt = time.monotonic()
 
@@ -239,6 +269,23 @@ class MissionOrchestratorNode(Node):
             await ros_sleep(self, 0.05)
         return False
 
+    async def await_skill(self, handle, timeout_sec):
+        if not (bool(self.get_parameter("enable_recovery_research").value)
+                or bool(self.get_parameter("recovery_local_only").value)):
+            return (await handle.get_result_async()).result
+        deadline = time.monotonic() + timeout_sec
+        local_deadline = getattr(self, "local_deadline", None)
+        if local_deadline is not None:
+            deadline = min(deadline, local_deadline)
+        future = handle.get_result_async()
+        while not future.done():
+            if time.monotonic() >= deadline:
+                handle.cancel_goal_async()
+                await self.set_mode(ControlMode.HOLD, "skill deadline exceeded; no further recovery authorized")
+                raise TimeoutError("skill execution exceeded its time budget")
+            await ros_sleep(self, 0.05)
+        return future.result().result
+
     async def wait_for_object(self, goal_handle) -> Optional[ObjectMemory]:
         started = time.monotonic()
         timeout = float(self.get_parameter("observation_timeout_sec").value)
@@ -274,16 +321,22 @@ class MissionOrchestratorNode(Node):
         handle = await self.anygrasp_client.send_goal_async(goal)
         if handle is None or not handle.accepted:
             return None, "AnyGrasp goal rejected"
-        result = (await handle.get_result_async()).result
+        result = await self.await_skill(handle, goal.timeout_sec)
         return (result.grasps if result.success else None), result.message
 
-    async def compute_tc_wam(self, goal_handle, memory, grasps):
+    async def compute_tc_wam(self, goal_handle, memory, grasps, preferred_candidate=None, base_pose=None):
+        self.last_tc_failure_code = None
         wait = float(self.get_parameter("server_wait_timeout_sec").value)
         if not self.tc_wam_client.wait_for_server(timeout_sec=wait):
             return None, "TC-WAM action server unavailable"
         goal = ComputeTcWam.Goal()
         goal.target = deepcopy(memory)
         goal.grasps = deepcopy(grasps)
+        goal.select_candidate = preferred_candidate is not None
+        goal.preferred_candidate_id = int(preferred_candidate or 0)
+        goal.restrict_base = base_pose is not None
+        if base_pose is not None:
+            goal.requested_base_pose = deepcopy(base_pose)
         goal.active_arm = goal_handle.request.active_arm
         goal.evaluate_robustness = True
         goal.require_physical_evaluation = bool(
@@ -293,7 +346,8 @@ class MissionOrchestratorNode(Node):
         handle = await self.tc_wam_client.send_goal_async(goal)
         if handle is None or not handle.accepted:
             return None, "TC-WAM goal rejected"
-        result = (await handle.get_result_async()).result
+        result = await self.await_skill(handle, goal.timeout_sec)
+        self.last_tc_failure_code = int(result.error_code)
         return (result if result.success else None), result.message
 
     async def align_base(self, goal_handle, memory, tc_wam):
@@ -309,7 +363,7 @@ class MissionOrchestratorNode(Node):
         handle = await self.alignment_client.send_goal_async(goal)
         if handle is None or not handle.accepted:
             return None, "ACT alignment goal rejected"
-        result = (await handle.get_result_async()).result
+        result = await self.await_skill(handle, goal.timeout_sec)
         return result, result.message
 
     async def execute_moveit(self, goal_handle, memory, plan, refined):
@@ -328,7 +382,7 @@ class MissionOrchestratorNode(Node):
         handle = await self.moveit_client.send_goal_async(goal)
         if handle is None or not handle.accepted:
             return None, "MoveIt grasp goal rejected"
-        result = (await handle.get_result_async()).result
+        result = await self.await_skill(handle, goal.timeout_sec)
         return result, result.message
 
     async def execute_place(self, goal_handle):
@@ -344,10 +398,19 @@ class MissionOrchestratorNode(Node):
         handle = await self.place_client.send_goal_async(goal)
         if handle is None or not handle.accepted:
             return None, "fixed-place goal rejected"
-        result = (await handle.get_result_async()).result
+        result = await self.await_skill(handle, goal.timeout_sec)
         return result, result.message
 
     async def fail(self, goal_handle, started: float, code: int, detail: str):
+        journal = getattr(self, "recovery_journal", None)
+        if journal:
+            journal.finish(None if code == 99 else False, detail)
+            if self.local_deadline is not None:
+                journal.write("local_terminal", success=False, error_code=code)
+            if self.record_recovery_distance:
+                journal.write("base_motion", distance_m=self.recovery_distance_m)
+            self.record_recovery_distance = False
+            journal.write("task_terminal", success=False, error_code=code, message=detail)
         await self.set_mode(ControlMode.HOLD, "mission failure")
         self.publish_phase(goal_handle, MissionState.FAILED, detail, error_code=code)
         goal_handle.abort()
@@ -364,6 +427,9 @@ class MissionOrchestratorNode(Node):
         self.current_attempt = 0
         self.current_grasp_id = 0
         self.current_ready_region_id = ""
+        self.recovery_journal = None
+        self.local_deadline = None
+        self.record_recovery_distance = False
         started = time.monotonic()
         request = goal_handle.request
         try:
@@ -382,9 +448,17 @@ class MissionOrchestratorNode(Node):
                 return await self.fail(goal_handle, started, 42, "base did not settle after Nav2")
 
             retained_grasps = None
+            if (bool(self.get_parameter("enable_recovery_research").value)
+                    or bool(self.get_parameter("recovery_local_only").value)):
+                self.local_deadline = time.monotonic() + float(self.get_parameter("recovery_budget_sec").value)
             moveit_result = None
+            research = bool(self.get_parameter("enable_recovery_research").value)
+            if research:
+                moveit_result, code, detail = await self.run_recovery_pick(goal_handle)
+                if moveit_result is None:
+                    return await self.fail(goal_handle, started, code, detail)
             max_attempts = int(request.max_recovery_attempts)
-            while self.current_attempt <= max_attempts:
+            while not research and self.current_attempt <= max_attempts:
                 self.publish_phase(
                     goal_handle, MissionState.OBSERVE_OBJECT, "wait for fresh target observation"
                 )
@@ -508,6 +582,22 @@ class MissionOrchestratorNode(Node):
             self.publish_phase(
                 goal_handle, MissionState.TRANSPORT_SAFE, "object attached; lift+arm in transport pose"
             )
+            self.local_deadline = None
+            self.record_recovery_distance = False
+            if self.recovery_journal:
+                self.recovery_journal.write("base_motion", distance_m=self.recovery_distance_m)
+            if bool(self.get_parameter("recovery_local_only").value):
+                self.publish_phase(goal_handle, MissionState.SUCCEEDED, "local grasp benchmark completed; delivery excluded")
+                goal_handle.succeed()
+                result = RunPickDeliver.Result()
+                result.success = True
+                result.terminal_phase = MissionState.SUCCEEDED
+                result.message = "local verified grasp only; delivery excluded"
+                result.total_duration_sec = float(time.monotonic() - started)
+                result.recovery_attempts = self.current_attempt
+                if self.recovery_journal:
+                    self.recovery_journal.write("task_terminal", success=True, duration_sec=result.total_duration_sec)
+                return result
             if not await self.wait_for_stop(goal_handle):
                 return await self.fail(goal_handle, started, 55, "transport handoff base stop lost")
             accepted, detail = await self.set_mode(ControlMode.NAV2, "transport object to delivery")
@@ -538,7 +628,11 @@ class MissionOrchestratorNode(Node):
             result.message = "Nav2 + AnyGrasp-conditioned TC-WAM + ACT + MoveIt completed"
             result.total_duration_sec = float(time.monotonic() - started)
             result.recovery_attempts = self.current_attempt
+            if self.recovery_journal:
+                self.recovery_journal.write("task_terminal", success=True, duration_sec=result.total_duration_sec)
             return result
+        except TimeoutError as error:
+            return await self.fail(goal_handle, started, 91, str(error))
         except Exception as error:
             self.get_logger().error(f"mission raised: {error}")
             return await self.fail(goal_handle, started, 99, str(error))

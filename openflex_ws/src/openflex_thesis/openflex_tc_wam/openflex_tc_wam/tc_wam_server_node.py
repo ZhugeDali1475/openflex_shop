@@ -1,6 +1,7 @@
 """AnyGrasp-conditioned TC-WAM over base, lift stratum and grasp pose."""
 
 from copy import deepcopy
+from collections import Counter
 import math
 from typing import Dict, Optional, Sequence, Set, Tuple
 
@@ -211,6 +212,8 @@ class TcWamServerNode(Node):
             quaternion_to_yaw(orientation.x, orientation.y, orientation.z, orientation.w),
         )
         base_poses = generate_candidates(object_pose, self.generator_config)
+        if goal.restrict_base:
+            base_poses = [self.planar_from_pose(goal.requested_base_pose)]
         planning_group, ik_link = self.planning_contract(int(goal.active_arm))
         output = AffordanceCandidateArray()
         output.header = deepcopy(goal.target.header)
@@ -331,8 +334,15 @@ class TcWamServerNode(Node):
                 metrics[int(candidate.candidate_id)] = metric
                 scores[int(candidate.candidate_id)] = score
             best_score = select_best(list(scores.values()))
+            if request.select_candidate:
+                preferred = scores.get(int(request.preferred_candidate_id))
+                if preferred is None or not preferred.feasible:
+                    return self.fail(goal_handle, 15, "requested recovery candidate is not feasible")
+                best_score = preferred
             if best_score is None:
                 self.publish_map(evaluated, scores, set(), None)
+                self.get_logger().warn("recovery candidate rejection counts: " + str(Counter(
+                    candidate.rejection_reason for candidate in evaluated.candidates)))
                 return self.fail(goal_handle, 14, "no feasible (base, lift, grasp) candidate")
             ready_ids = set(
                 conditioned_ready_candidate_ids(

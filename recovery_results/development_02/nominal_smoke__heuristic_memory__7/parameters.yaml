@@ -1,0 +1,34 @@
+mission_orchestrator:
+  ros__parameters:
+    enable_recovery_research: true
+    recovery_budget_sec: 300.0
+    recovery_evidence_class: mujoco_oracle_geometry_proxy
+    recovery_log_path: /home/wgb/openflex_shop/recovery_results/development_02/nominal_smoke__heuristic_memory__7/recovery.jsonl
+    recovery_method: heuristic_memory
+    recovery_model_path: ''
+    recovery_scenario_id: nominal_smoke
+    recovery_seed: 7
+mujoco_oracle_anygrasp:
+  ros__parameters:
+    refined_candidate_offsets_m:
+    - 0.0
+    refined_lateral_spread_m: 0.01
+openflex_thesis_mujoco_bridge:
+  ros__parameters:
+    object_nominal_pose:
+    - 1.12
+    - 0.0
+    - 0.84
+    - 3.141592653589793
+    observation_position_noise_std_m: 0.0
+    random_seed: 7
+thesis_mujoco_mission_client:
+  ros__parameters:
+    coarse_top_k: 3
+    max_recovery_attempts: 2
+    pickup_observation_pose:
+    - 0.0
+    - 0.0
+    - 0.0
+    refined_top_k: 3
+    task_id: nominal_smoke__heuristic_memory__7

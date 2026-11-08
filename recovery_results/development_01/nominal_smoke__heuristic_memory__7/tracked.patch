@@ -1,0 +1,422 @@
+diff --git a/openflex_ws/src/openflex_thesis/openflex_tc_wam/openflex_tc_wam/tc_wam_server_node.py b/openflex_ws/src/openflex_thesis/openflex_tc_wam/openflex_tc_wam/tc_wam_server_node.py
+index 0373290..f734938 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_tc_wam/openflex_tc_wam/tc_wam_server_node.py
++++ b/openflex_ws/src/openflex_thesis/openflex_tc_wam/openflex_tc_wam/tc_wam_server_node.py
+@@ -331,6 +331,11 @@ class TcWamServerNode(Node):
+                 metrics[int(candidate.candidate_id)] = metric
+                 scores[int(candidate.candidate_id)] = score
+             best_score = select_best(list(scores.values()))
++            if request.select_candidate:
++                preferred = scores.get(int(request.preferred_candidate_id))
++                if preferred is None or not preferred.feasible:
++                    return self.fail(goal_handle, 15, "requested recovery candidate is not feasible")
++                best_score = preferred
+             if best_score is None:
+                 self.publish_map(evaluated, scores, set(), None)
+                 return self.fail(goal_handle, 14, "no feasible (base, lift, grasp) candidate")
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/mission_orchestrator_node.py b/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/mission_orchestrator_node.py
+index 6d3113f..03daf2e 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/mission_orchestrator_node.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/mission_orchestrator_node.py
+@@ -25,12 +25,27 @@ from rclpy.node import Node
+ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+ 
+ from .async_tools import ros_sleep
++from .recovery_adapter import RecoveryMissionMixin
+ 
+ 
+-class MissionOrchestratorNode(Node):
++class MissionOrchestratorNode(RecoveryMissionMixin, Node):
+     def __init__(self) -> None:
+         super().__init__("mission_orchestrator")
+         self.declare_parameter("mission_action", "/thesis/run_pick_deliver")
++        self.declare_parameter("enable_recovery_research", False)
++        self.declare_parameter("recovery_method", "heuristic_memory")
++        self.declare_parameter("recovery_model_path", "")
++        self.declare_parameter("recovery_log_path", "")
++        self.declare_parameter("recovery_scenario_id", "development")
++        self.declare_parameter("recovery_evidence_class", "unclassified")
++        self.declare_parameter("recovery_seed", 7)
++        self.declare_parameter("recovery_budget_sec", 300.0)
++        self.declare_parameter("recovery_grasp_reserve_sec", 45.0)
++        self.declare_parameter("reobserve_cost_sec", 140.0)
++        self.declare_parameter("switch_grasp_cost_sec", 5.0)
++        self.declare_parameter("reposition_cost_sec", 140.0)
++        self.declare_parameter("reobserve_window_sec", 0.75)
++        self.declare_parameter("recovery_min_base_shift_m", 0.08)
+         self.declare_parameter("nav2_action", "/navigate_to_pose")
+         self.declare_parameter("anygrasp_action", "/thesis/generate_grasps")
+         self.declare_parameter("tc_wam_action", "/thesis/compute_tc_wam")
+@@ -277,13 +292,15 @@ class MissionOrchestratorNode(Node):
+         result = (await handle.get_result_async()).result
+         return (result.grasps if result.success else None), result.message
+ 
+-    async def compute_tc_wam(self, goal_handle, memory, grasps):
++    async def compute_tc_wam(self, goal_handle, memory, grasps, preferred_candidate=None):
+         wait = float(self.get_parameter("server_wait_timeout_sec").value)
+         if not self.tc_wam_client.wait_for_server(timeout_sec=wait):
+             return None, "TC-WAM action server unavailable"
+         goal = ComputeTcWam.Goal()
+         goal.target = deepcopy(memory)
+         goal.grasps = deepcopy(grasps)
++        goal.select_candidate = preferred_candidate is not None
++        goal.preferred_candidate_id = int(preferred_candidate or 0)
+         goal.active_arm = goal_handle.request.active_arm
+         goal.evaluate_robustness = True
+         goal.require_physical_evaluation = bool(
+@@ -348,6 +365,10 @@ class MissionOrchestratorNode(Node):
+         return result, result.message
+ 
+     async def fail(self, goal_handle, started: float, code: int, detail: str):
++        journal = getattr(self, "recovery_journal", None)
++        if journal:
++            journal.finish(None if code == 99 else False, detail)
++            journal.write("task_terminal", success=False, error_code=code, message=detail)
+         await self.set_mode(ControlMode.HOLD, "mission failure")
+         self.publish_phase(goal_handle, MissionState.FAILED, detail, error_code=code)
+         goal_handle.abort()
+@@ -364,6 +385,7 @@ class MissionOrchestratorNode(Node):
+         self.current_attempt = 0
+         self.current_grasp_id = 0
+         self.current_ready_region_id = ""
++        self.recovery_journal = None
+         started = time.monotonic()
+         request = goal_handle.request
+         try:
+@@ -383,8 +405,13 @@ class MissionOrchestratorNode(Node):
+ 
+             retained_grasps = None
+             moveit_result = None
++            research = bool(self.get_parameter("enable_recovery_research").value)
++            if research:
++                moveit_result, code, detail = await self.run_recovery_pick(goal_handle)
++                if moveit_result is None:
++                    return await self.fail(goal_handle, started, code, detail)
+             max_attempts = int(request.max_recovery_attempts)
+-            while self.current_attempt <= max_attempts:
++            while not research and self.current_attempt <= max_attempts:
+                 self.publish_phase(
+                     goal_handle, MissionState.OBSERVE_OBJECT, "wait for fresh target observation"
+                 )
+@@ -538,6 +565,8 @@ class MissionOrchestratorNode(Node):
+             result.message = "Nav2 + AnyGrasp-conditioned TC-WAM + ACT + MoveIt completed"
+             result.total_duration_sec = float(time.monotonic() - started)
+             result.recovery_attempts = self.current_attempt
++            if self.recovery_journal:
++                self.recovery_journal.write("task_terminal", success=True, duration_sec=result.total_duration_sec)
+             return result
+         except Exception as error:
+             self.get_logger().error(f"mission raised: {error}")
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/moveit_grasp_executor_node.py b/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/moveit_grasp_executor_node.py
+index 0634023..b1c721c 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/moveit_grasp_executor_node.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_control/openflex_thesis_control/moveit_grasp_executor_node.py
+@@ -435,12 +435,14 @@ class MoveItGraspExecutorNode(Node):
+         request.ik_request.timeout.nanosec = int((timeout - int(timeout)) * 1.0e9)
+         response = await self.ik_client.call_async(request)
+         if response is None or response.error_code.val != MoveItErrorCodes.SUCCESS:
++            self.last_validation_failure = "ik_timeout" if response and response.error_code.val == MoveItErrorCodes.TIMED_OUT else "ik_collision"
+             return False, None
+         validity = GetStateValidity.Request()
+         validity.robot_state = response.solution
+         validity.group_name = group
+         checked = await self.validity_client.call_async(validity)
+         if checked is None or not checked.valid:
++            self.last_validation_failure = "collision" if checked else "infrastructure"
+             return False, None
+         return True, response.solution
+ 
+@@ -513,6 +515,10 @@ class MoveItGraspExecutorNode(Node):
+                 and wrapper.result.error_code.val == MoveItErrorCodes.SUCCESS
+                 and self.hardware_guard_valid()
+             )
++            self.last_move_failure = (
++                "planning_timeout" if wrapper.result.error_code.val == MoveItErrorCodes.TIMED_OUT
++                else "planning_or_execution"
++            )
+             if self.joint_state is not None:
+                 actual = dict(
+                     zip(self.joint_state.name, self.joint_state.position)
+@@ -772,6 +778,12 @@ class MoveItGraspExecutorNode(Node):
+         self.active_object_id = goal.target.object_id
+         self.active_map_version = goal.target.map_version
+         self.object_attached = False
++        self.tested_grasp_ids = []
++        self.grasp_failure_reasons = []
++        self.last_validation_failure = "ik_collision"
++        self.last_move_failure = "planning_or_execution"
++        self.failure_stage = "precondition"
++        self.selected_grasp_id = 0
+         try:
+             if not self.hardware_guard_valid():
+                 return self.abort(goal_handle, 70, "MoveIt ownership/base-stop guard invalid")
+@@ -811,6 +823,7 @@ class MoveItGraspExecutorNode(Node):
+             selected = None
+             selected_states = None
+             for index, grasp in enumerate(ordered):
++                self.failure_stage = "validation"
+                 feedback = ExecuteMoveItGrasp.Feedback()
+                 feedback.phase = "current_base_ik_collision_validation"
+                 feedback.tested_grasps = index + 1
+@@ -818,6 +831,8 @@ class MoveItGraspExecutorNode(Node):
+                 feedback.elapsed_sec = float(time.monotonic() - started)
+                 goal_handle.publish_feedback(feedback)
+                 pair = await self.feasible_pair(group, link, grasp)
++                self.tested_grasp_ids.append(grasp.grasp_id)
++                self.grasp_failure_reasons.append("feasible_not_executed" if pair else self.last_validation_failure)
+                 if pair is not None:
+                     selected = grasp
+                     selected_states = pair
+@@ -828,7 +843,13 @@ class MoveItGraspExecutorNode(Node):
+                 result.reposition_required = True
+                 result.error_code = 74
+                 result.message = "no refined grasp is reachable at the current base pose"
++                result.recovery_safe = True
++                result.failure_stage = "validation"
++                result.failure_reason = "ik_collision"
++                result.tested_grasp_ids = list(self.tested_grasp_ids)
++                result.grasp_failure_reasons = list(self.grasp_failure_reasons)
+                 return result
++            self.selected_grasp_id = selected.grasp_id
+             self.get_logger().info(
+                 f"selected refined grasp={selected.grasp_id} "
+                 f"quality={selected.quality:.6f}"
+@@ -838,12 +859,15 @@ class MoveItGraspExecutorNode(Node):
+             ):
+                 return self.abort(goal_handle, 75, "failed to open gripper")
+             pre_state, grasp_state = selected_states
++            self.failure_stage = "pregrasp"
+             if not await self.move_to_state(group, pre_state, "pregrasp"):
+                 self.get_logger().error("MoveIt pregrasp planning or execution failed")
+-                return self.abort(goal_handle, 76, "pregrasp planning/execution failed", True)
++                return await self.recover_abort(goal_handle, 76, group, goal.active_arm)
++            self.failure_stage = "grasp"
+             if not await self.move_to_state(group, grasp_state, "grasp"):
+                 self.get_logger().error("MoveIt final grasp planning or execution failed")
+-                return self.abort(goal_handle, 77, "grasp planning/execution failed", True)
++                return await self.recover_abort(goal_handle, 77, group, goal.active_arm)
++            self.failure_stage = "verification"
+             if not await self.command_gripper(
+                 goal.active_arm, float(self.get_parameter("gripper_closed_position").value)
+             ):
+@@ -906,13 +930,29 @@ class MoveItGraspExecutorNode(Node):
+             self.object_attached = False
+             self.busy = False
+ 
+-    @staticmethod
+-    def abort(goal_handle, code: int, message: str, reposition_required: bool = False):
++    async def recover_abort(self, goal_handle, code, group, arm):
++        reason = self.last_move_failure
++        safe = self.hardware_guard_valid() and await self.command_gripper(
++            arm, float(self.get_parameter("gripper_open_position").value)
++        )
++        if safe:
++            safe = await self.move_to_state(group, self.transport_state(arm, group), "recovery_safe_park")
++        result = self.abort(goal_handle, code, "planning/execution failed; safety park attempted", True)
++        result.failure_reason = reason
++        result.recovery_safe = bool(safe)
++        return result
++
++    def abort(self, goal_handle, code: int, message: str, reposition_required: bool = False):
+         goal_handle.abort()
+         result = ExecuteMoveItGrasp.Result()
+         result.reposition_required = reposition_required
+         result.error_code = code
+         result.message = message
++        result.executed_grasp_id = self.selected_grasp_id
++        result.failure_stage = self.failure_stage
++        result.failure_reason = "unsafe_or_unverified"
++        result.tested_grasp_ids = list(self.tested_grasp_ids)
++        result.grasp_failure_reasons = list(self.grasp_failure_reasons)
+         return result
+ 
+ 
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_control/package.xml b/openflex_ws/src/openflex_thesis/openflex_thesis_control/package.xml
+index 0d8f113..9c8d9ad 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_control/package.xml
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_control/package.xml
+@@ -15,6 +15,7 @@
+   <depend>nav2_msgs</depend>
+   <depend>nav_msgs</depend>
+   <depend>openflex_thesis_msgs</depend>
++  <depend>openflex_care_agent</depend>
+   <depend>rclpy</depend>
+   <depend>sensor_msgs</depend>
+   <depend>shape_msgs</depend>
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/package.xml b/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/package.xml
+index c8e7808..80b32e4 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/package.xml
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/package.xml
+@@ -9,6 +9,7 @@
+   <buildtool_depend>ament_python</buildtool_depend>
+   <depend>ament_index_python</depend>
+   <depend>openflex_thesis_msgs</depend>
++  <depend>openflex_care_agent</depend>
+   <depend>rclpy</depend>
+   <exec_depend>python3-yaml</exec_depend>
+   <test_depend>ament_pytest</test_depend>
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/setup.py b/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/setup.py
+index 8d4ac21..82cf39f 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/setup.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_experiments/setup.py
+@@ -20,12 +20,14 @@ setup(
+     description="Reproducible thesis experiment protocols and logging.",
+     license="Apache-2.0",
+     tests_require=["pytest"],
++    extras_require={"learning": ["scikit-learn>=1.1", "joblib>=1.1"]},
+     entry_points={
+         "console_scripts": [
+             "trial_logger = openflex_thesis_experiments.trial_logger_node:main",
+             "generate_trial_matrix = openflex_thesis_experiments.trial_matrix:main",
+             "summarize_trials = openflex_thesis_experiments.summarize_trials:main",
+             "thesis_preflight = openflex_thesis_experiments.preflight:main",
++            "train_recovery = openflex_thesis_experiments.recovery_training:main",
+         ],
+     },
+ )
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ComputeTcWam.action b/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ComputeTcWam.action
+index 26647c1..0acc2be 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ComputeTcWam.action
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ComputeTcWam.action
+@@ -5,6 +5,8 @@ uint8 active_arm
+ bool evaluate_robustness
+ bool require_physical_evaluation
+ float32 timeout_sec
++bool select_candidate
++uint32 preferred_candidate_id
+ ---
+ bool success
+ AffordanceCandidateArray scored_candidates
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ExecuteMoveItGrasp.action b/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ExecuteMoveItGrasp.action
+index e03ef5a..f14649c 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ExecuteMoveItGrasp.action
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_msgs/action/ExecuteMoveItGrasp.action
+@@ -14,6 +14,11 @@ uint32 executed_grasp_id
+ float32 executed_lift_position
+ uint16 error_code
+ string message
++bool recovery_safe
++string failure_stage
++string failure_reason
++uint32[] tested_grasp_ids
++string[] grasp_failure_reasons
+ ---
+ string phase
+ uint32 tested_grasps
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/mujoco_core.launch.py b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/mujoco_core.launch.py
+index 79b7321..8c8f537 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/mujoco_core.launch.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/mujoco_core.launch.py
+@@ -21,6 +21,7 @@ def generate_launch_description():
+     return LaunchDescription(
+         [
+             DeclareLaunchArgument("upstream_model_path", default_value=""),
++            DeclareLaunchArgument("experiment_config", default_value=os.path.join(share, "config", "mujoco.yaml")),
+             DeclareLaunchArgument("enable_viewer", default_value="false"),
+             DeclareLaunchArgument("publish_rgbd", default_value="true"),
+             Node(
+@@ -40,6 +41,7 @@ def generate_launch_description():
+                         ),
+                         "use_sim_time": False,
+                     },
++                    LaunchConfiguration("experiment_config"),
+                 ],
+             ),
+             Node(
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/thesis_mujoco.launch.py b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/thesis_mujoco.launch.py
+index e2e096e..e0b2074 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/thesis_mujoco.launch.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/launch/thesis_mujoco.launch.py
+@@ -24,6 +24,7 @@ def generate_launch_description():
+     return LaunchDescription(
+         [
+             DeclareLaunchArgument("upstream_model_path", default_value=""),
++            DeclareLaunchArgument("experiment_config", default_value=sim_config),
+             DeclareLaunchArgument("enable_viewer", default_value="false"),
+             DeclareLaunchArgument("publish_rgbd", default_value="true"),
+             DeclareLaunchArgument("start_moveit", default_value="false"),
+@@ -48,6 +49,7 @@ def generate_launch_description():
+                     "upstream_model_path": LaunchConfiguration("upstream_model_path"),
+                     "enable_viewer": LaunchConfiguration("enable_viewer"),
+                     "publish_rgbd": LaunchConfiguration("publish_rgbd"),
++                    "experiment_config": LaunchConfiguration("experiment_config"),
+                 }.items(),
+             ),
+             IncludeLaunchDescription(
+@@ -72,7 +74,7 @@ def generate_launch_description():
+                 package="openflex_thesis_mujoco",
+                 executable="oracle_anygrasp",
+                 name="mujoco_oracle_anygrasp",
+-                parameters=[sim_config, {"use_sim_time": True}],
++                parameters=[sim_config, {"use_sim_time": True}, LaunchConfiguration("experiment_config")],
+                 output="screen",
+             ),
+             Node(
+@@ -201,6 +203,7 @@ def generate_launch_description():
+                         "require_physical_perception": False,
+                         "use_sim_time": True,
+                     },
++                    LaunchConfiguration("experiment_config"),
+                 ],
+                 output="screen",
+             ),
+@@ -225,7 +228,7 @@ def generate_launch_description():
+                 executable="sim_mission_client",
+                 name="thesis_mujoco_mission_client",
+                 condition=IfCondition(LaunchConfiguration("run_mission")),
+-                parameters=[sim_config, {"use_sim_time": True}],
++                parameters=[sim_config, {"use_sim_time": True}, LaunchConfiguration("experiment_config")],
+                 output="screen",
+             ),
+         ]
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/oracle_anygrasp_node.py b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/oracle_anygrasp_node.py
+index 9cbe11c..0781a17 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/oracle_anygrasp_node.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/oracle_anygrasp_node.py
+@@ -20,6 +20,7 @@ class OracleAnyGraspNode(Node):
+         self.declare_parameter("coarse_lateral_spread_m", 0.025)
+         self.declare_parameter("refined_lateral_spread_m", 0.010)
+         self.declare_parameter("pregrasp_distance_m", 0.12)
++        self.declare_parameter("refined_candidate_offsets_m", [0.0])
+         self.publisher = self.create_publisher(
+             GraspCandidateArray, str(self.get_parameter("response_topic").value), 10
+         )
+@@ -77,6 +78,9 @@ class OracleAnyGraspNode(Node):
+         for index in range(count):
+             centered = index - 0.5 * (count - 1)
+             lateral = centered * spread
++            offsets = self.get_parameter("refined_candidate_offsets_m").value
++            if request.stage == GraspCandidate.STAGE_REFINED:
++                lateral += float(offsets[index % len(offsets)])
+             height = 0.006 * ((index % 3) - 1)
+             grasp = GraspCandidate()
+             grasp.grasp_id = (
+@@ -127,4 +131,3 @@ def main(args=None) -> None:
+         node.destroy_node()
+         if rclpy.ok():
+             rclpy.shutdown()
+-
+diff --git a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/sim_mission_client.py b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/sim_mission_client.py
+index 93e7833..4e47c69 100644
+--- a/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/sim_mission_client.py
++++ b/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/sim_mission_client.py
+@@ -1,6 +1,7 @@
+ """Send one parameterized pick-deliver goal to the thesis simulator stack."""
+ 
+ from openflex_thesis_msgs.action import RunPickDeliver
++import json
+ import rclpy
+ from rclpy.action import ActionClient
+ from rclpy.node import Node
+@@ -66,6 +67,11 @@ class SimMissionClient(Node):
+ 
+     def on_result(self, future) -> None:
+         result = future.result().result
++        self.get_logger().info("RECOVERY_TASK_RESULT " + json.dumps({
++            "task_id": str(self.get_parameter("task_id").value), "success": bool(result.success),
++            "error_code": int(result.error_code), "duration_sec": float(result.total_duration_sec),
++            "recovery_attempts": int(result.recovery_attempts), "message": result.message,
++        }))
+         if result.success:
+             self.get_logger().info(
+                 f"MUJOCO_MISSION_SUCCESS duration={result.total_duration_sec:.3f}s"

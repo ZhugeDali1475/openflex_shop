@@ -215,6 +215,8 @@ class MoveItGraspExecutorNode(Node):
 
     def on_mode(self, msg: ControlMode) -> None:
         self.control_mode = int(msg.mode)
+        if self.control_mode != ControlMode.MOVEIT and self.active_move_group_handle is not None:
+            self.active_move_group_handle.cancel_goal_async()
 
     def on_joint_state(self, msg: JointState) -> None:
         self.joint_state = deepcopy(msg)
@@ -435,12 +437,14 @@ class MoveItGraspExecutorNode(Node):
         request.ik_request.timeout.nanosec = int((timeout - int(timeout)) * 1.0e9)
         response = await self.ik_client.call_async(request)
         if response is None or response.error_code.val != MoveItErrorCodes.SUCCESS:
+            self.last_validation_failure = "ik_timeout" if response and response.error_code.val == MoveItErrorCodes.TIMED_OUT else "ik_collision"
             return False, None
         validity = GetStateValidity.Request()
         validity.robot_state = response.solution
         validity.group_name = group
         checked = await self.validity_client.call_async(validity)
         if checked is None or not checked.valid:
+            self.last_validation_failure = "collision" if checked else "infrastructure"
             return False, None
         return True, response.solution
 
@@ -512,6 +516,10 @@ class MoveItGraspExecutorNode(Node):
                 wrapper.status == GoalStatus.STATUS_SUCCEEDED
                 and wrapper.result.error_code.val == MoveItErrorCodes.SUCCESS
                 and self.hardware_guard_valid()
+            )
+            self.last_move_failure = (
+                "planning_timeout" if wrapper.result.error_code.val == MoveItErrorCodes.TIMED_OUT
+                else "planning_or_execution"
             )
             if self.joint_state is not None:
                 actual = dict(
@@ -772,6 +780,12 @@ class MoveItGraspExecutorNode(Node):
         self.active_object_id = goal.target.object_id
         self.active_map_version = goal.target.map_version
         self.object_attached = False
+        self.tested_grasp_ids = []
+        self.grasp_failure_reasons = []
+        self.last_validation_failure = "ik_collision"
+        self.last_move_failure = "planning_or_execution"
+        self.failure_stage = "precondition"
+        self.selected_grasp_id = 0
         try:
             if not self.hardware_guard_valid():
                 return self.abort(goal_handle, 70, "MoveIt ownership/base-stop guard invalid")
@@ -811,6 +825,7 @@ class MoveItGraspExecutorNode(Node):
             selected = None
             selected_states = None
             for index, grasp in enumerate(ordered):
+                self.failure_stage = "validation"
                 feedback = ExecuteMoveItGrasp.Feedback()
                 feedback.phase = "current_base_ik_collision_validation"
                 feedback.tested_grasps = index + 1
@@ -818,6 +833,8 @@ class MoveItGraspExecutorNode(Node):
                 feedback.elapsed_sec = float(time.monotonic() - started)
                 goal_handle.publish_feedback(feedback)
                 pair = await self.feasible_pair(group, link, grasp)
+                self.tested_grasp_ids.append(grasp.grasp_id)
+                self.grasp_failure_reasons.append("feasible_not_executed" if pair else self.last_validation_failure)
                 if pair is not None:
                     selected = grasp
                     selected_states = pair
@@ -828,7 +845,13 @@ class MoveItGraspExecutorNode(Node):
                 result.reposition_required = True
                 result.error_code = 74
                 result.message = "no refined grasp is reachable at the current base pose"
+                result.recovery_safe = True
+                result.failure_stage = "validation"
+                result.failure_reason = "ik_collision"
+                result.tested_grasp_ids = list(self.tested_grasp_ids)
+                result.grasp_failure_reasons = list(self.grasp_failure_reasons)
                 return result
+            self.selected_grasp_id = selected.grasp_id
             self.get_logger().info(
                 f"selected refined grasp={selected.grasp_id} "
                 f"quality={selected.quality:.6f}"
@@ -838,12 +861,15 @@ class MoveItGraspExecutorNode(Node):
             ):
                 return self.abort(goal_handle, 75, "failed to open gripper")
             pre_state, grasp_state = selected_states
+            self.failure_stage = "pregrasp"
             if not await self.move_to_state(group, pre_state, "pregrasp"):
                 self.get_logger().error("MoveIt pregrasp planning or execution failed")
-                return self.abort(goal_handle, 76, "pregrasp planning/execution failed", True)
+                return await self.recover_abort(goal_handle, 76, group, goal.active_arm)
+            self.failure_stage = "grasp"
             if not await self.move_to_state(group, grasp_state, "grasp"):
                 self.get_logger().error("MoveIt final grasp planning or execution failed")
-                return self.abort(goal_handle, 77, "grasp planning/execution failed", True)
+                return await self.recover_abort(goal_handle, 77, group, goal.active_arm)
+            self.failure_stage = "verification"
             if not await self.command_gripper(
                 goal.active_arm, float(self.get_parameter("gripper_closed_position").value)
             ):
@@ -851,6 +877,13 @@ class MoveItGraspExecutorNode(Node):
                 return self.abort(goal_handle, 78, "failed to close gripper")
             if not await self.wait_for_verification(goal.target.object_id, goal.target.map_version):
                 self.get_logger().error("Independent grasp verification timed out")
+                status = self.grasp_status
+                empty = bool(status is not None and not status.object_retained
+                             and not status.contact_detected
+                             and time.monotonic() - self.grasp_status_receipt <= 0.5)
+                if empty:
+                    self.last_move_failure = "grasp_verification"
+                    return await self.recover_abort(goal_handle, 79, group, goal.active_arm)
                 return self.abort(goal_handle, 79, "independent grasp verification failed")
             # ObjectMemory carries a PoseWithCovariance plus a separate
             # header; pose_to_base() speaks PoseStamped (and needs the frame).
@@ -906,13 +939,29 @@ class MoveItGraspExecutorNode(Node):
             self.object_attached = False
             self.busy = False
 
-    @staticmethod
-    def abort(goal_handle, code: int, message: str, reposition_required: bool = False):
+    async def recover_abort(self, goal_handle, code, group, arm):
+        reason = self.last_move_failure
+        safe = self.hardware_guard_valid() and await self.command_gripper(
+            arm, float(self.get_parameter("gripper_open_position").value)
+        )
+        if safe:
+            safe = await self.move_to_state(group, self.transport_state(arm, group), "recovery_safe_park")
+        result = self.abort(goal_handle, code, "planning/execution failed; safety park attempted", True)
+        result.failure_reason = reason
+        result.recovery_safe = bool(safe)
+        return result
+
+    def abort(self, goal_handle, code: int, message: str, reposition_required: bool = False):
         goal_handle.abort()
         result = ExecuteMoveItGrasp.Result()
         result.reposition_required = reposition_required
         result.error_code = code
         result.message = message
+        result.executed_grasp_id = self.selected_grasp_id
+        result.failure_stage = self.failure_stage
+        result.failure_reason = "unsafe_or_unverified"
+        result.tested_grasp_ids = list(self.tested_grasp_ids)
+        result.grasp_failure_reasons = list(self.grasp_failure_reasons)
         return result
 
 

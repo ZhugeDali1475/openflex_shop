@@ -21,6 +21,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("upstream_model_path", default_value=""),
+            DeclareLaunchArgument("experiment_config", default_value=os.path.join(share, "config", "mujoco.yaml")),
             DeclareLaunchArgument("enable_viewer", default_value="false"),
             DeclareLaunchArgument("publish_rgbd", default_value="true"),
             Node(
@@ -40,6 +41,7 @@ def generate_launch_description():
                         ),
                         "use_sim_time": False,
                     },
+                    LaunchConfiguration("experiment_config"),
                 ],
             ),
             Node(

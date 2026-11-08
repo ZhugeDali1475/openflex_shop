@@ -47,12 +47,7 @@ for i in $(seq 1 ${TOTAL_RUNS}); do
     DURATIONS+=("${DURATION}")
 
     # 分析结果
-    if [ ${EXIT_CODE} -eq 124 ]; then
-        # Timeout
-        RESULT="TIMEOUT"
-        TIMEOUT_COUNT=$((TIMEOUT_COUNT + 1))
-        echo "Result: TIMEOUT (>${TIMEOUT_SEC}s)" | tee -a "${SUMMARY_FILE}"
-    elif grep -q "MUJOCO_MISSION_SUCCESS" "${RUN_LOG}"; then
+    if grep -q "MUJOCO_MISSION_SUCCESS" "${RUN_LOG}"; then
         # Success
         RESULT="SUCCESS"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
@@ -65,6 +60,10 @@ for i in $(seq 1 ${TOTAL_RUNS}); do
         ERROR_CODE=$(grep "MUJOCO_MISSION_FAILED" "${RUN_LOG}" | grep -oP 'code=\K[0-9]+' | head -1)
         ERROR_MSG=$(grep "MUJOCO_MISSION_FAILED" "${RUN_LOG}" | grep -oP 'message=\K.*' | head -1)
         echo "Result: FAILED (code=${ERROR_CODE}, msg=${ERROR_MSG}, total: ${DURATION}s)" | tee -a "${SUMMARY_FILE}"
+    elif [ ${EXIT_CODE} -eq 124 ]; then
+        RESULT="TIMEOUT"
+        TIMEOUT_COUNT=$((TIMEOUT_COUNT + 1))
+        echo "Result: TIMEOUT (>${TIMEOUT_SEC}s, no task terminal)" | tee -a "${SUMMARY_FILE}"
     else
         # Unknown
         RESULT="UNKNOWN"

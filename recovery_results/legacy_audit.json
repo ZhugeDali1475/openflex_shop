@@ -1,0 +1,88 @@
+{
+  "records": [
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_10_20261106_171726.log",
+      "sha256": "b7b1bee3569c38a252b9020a4bf5a1356c2a5e44fde36eac3e34f056df3425d8",
+      "status": "success",
+      "success": true,
+      "duration_sec": 125.257,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_1_20261106_171726.log",
+      "sha256": "d3a95d41c9b55891d7431a3959dacae06d1a93582a4e4635a62a71289670a387",
+      "status": "success",
+      "success": true,
+      "duration_sec": 125.351,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_2_20261106_171726.log",
+      "sha256": "de243353f91b9dee6834642eac25b8d96a1e9318427b4de9075b0fd4331c719a",
+      "status": "success",
+      "success": true,
+      "duration_sec": 120.77,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_3_20261106_171726.log",
+      "sha256": "8a4eaaa1030db8315719b77a1c7c4d4b5d9dd4cdcbd0f0c57acd27084888b634",
+      "status": "failed",
+      "success": false,
+      "duration_sec": null,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_4_20261106_171726.log",
+      "sha256": "67da880ff267313771c19b3afa5ba4a98461e3dd99e26b66719c46f92346ec11",
+      "status": "success",
+      "success": true,
+      "duration_sec": 158.504,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_5_20261106_171726.log",
+      "sha256": "2f3948c18ce2ffbe4a9eb18274670b902879cb727c8e441f0aa369a6da6fb042",
+      "status": "failed",
+      "success": false,
+      "duration_sec": null,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_6_20261106_171726.log",
+      "sha256": "3d74ed1f2cec4f9efad9c7b8e6cc1c7291aa45bf9de4d046f813c28df2071678",
+      "status": "success",
+      "success": true,
+      "duration_sec": 122.47,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_7_20261106_171726.log",
+      "sha256": "b18970add61dd4e702fb227bf3a1147f320ab466d549438871cfcebd62bcab89",
+      "status": "failed",
+      "success": false,
+      "duration_sec": null,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_8_20261106_171726.log",
+      "sha256": "94a01d83f9c92d94cc736c633985c98287c9cc70920ec953f00b9db6d24e4b18",
+      "status": "success",
+      "success": true,
+      "duration_sec": 164.905,
+      "legacy_terminal": true
+    },
+    {
+      "path": "openflex_ws/migration_records/2026-11-05/g8_repeatability/run_9_20261106_171726.log",
+      "sha256": "7bdc0a9632d7c6ea1a8031da0d74dbca689e0d48fe16e631e5a13e7b59a1f9fa",
+      "status": "failed",
+      "success": false,
+      "duration_sec": null,
+      "legacy_terminal": true
+    }
+  ],
+  "runs": 10,
+  "successes": 6,
+  "failures": 4,
+  "claim": "historical task-terminal audit, not a recovery-algorithm comparison"
+}

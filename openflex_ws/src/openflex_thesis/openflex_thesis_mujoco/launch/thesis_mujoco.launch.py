@@ -24,6 +24,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("upstream_model_path", default_value=""),
+            DeclareLaunchArgument("experiment_config", default_value=sim_config),
             DeclareLaunchArgument("enable_viewer", default_value="false"),
             DeclareLaunchArgument("publish_rgbd", default_value="true"),
             DeclareLaunchArgument("start_moveit", default_value="false"),
@@ -48,6 +49,7 @@ def generate_launch_description():
                     "upstream_model_path": LaunchConfiguration("upstream_model_path"),
                     "enable_viewer": LaunchConfiguration("enable_viewer"),
                     "publish_rgbd": LaunchConfiguration("publish_rgbd"),
+                    "experiment_config": LaunchConfiguration("experiment_config"),
                 }.items(),
             ),
             IncludeLaunchDescription(
@@ -72,7 +74,7 @@ def generate_launch_description():
                 package="openflex_thesis_mujoco",
                 executable="oracle_anygrasp",
                 name="mujoco_oracle_anygrasp",
-                parameters=[sim_config, {"use_sim_time": True}],
+                parameters=[sim_config, {"use_sim_time": True}, LaunchConfiguration("experiment_config")],
                 output="screen",
             ),
             Node(
@@ -115,6 +117,7 @@ def generate_launch_description():
                         ),
                         "use_sim_time": True,
                     },
+                    LaunchConfiguration("experiment_config"),
                 ],
                 output="screen",
             ),
@@ -201,6 +204,7 @@ def generate_launch_description():
                         "require_physical_perception": False,
                         "use_sim_time": True,
                     },
+                    LaunchConfiguration("experiment_config"),
                 ],
                 output="screen",
             ),
@@ -225,7 +229,7 @@ def generate_launch_description():
                 executable="sim_mission_client",
                 name="thesis_mujoco_mission_client",
                 condition=IfCondition(LaunchConfiguration("run_mission")),
-                parameters=[sim_config, {"use_sim_time": True}],
+                parameters=[sim_config, {"use_sim_time": True}, LaunchConfiguration("experiment_config")],
                 output="screen",
             ),
         ]

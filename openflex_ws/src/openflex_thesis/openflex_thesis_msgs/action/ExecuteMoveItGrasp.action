@@ -14,6 +14,11 @@ uint32 executed_grasp_id
 float32 executed_lift_position
 uint16 error_code
 string message
+bool recovery_safe
+string failure_stage
+string failure_reason
+uint32[] tested_grasp_ids
+string[] grasp_failure_reasons
 ---
 string phase
 uint32 tested_grasps

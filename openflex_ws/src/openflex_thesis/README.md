@@ -1,4 +1,9 @@
-# OpenFleX AnyGrasp-conditioned TC-WAM Thesis Workspace
+# OpenFleX Thesis ROS Workspace
+
+> **当前毕业设计主线已更新**：失败记忆增强的代价敏感局部恢复决策。仓库根目录的
+> `RECOVERY_RESEARCH_PLAN_CN.md`、`RECOVERY_THESIS_METHOD_CN.md` 和
+> `RECOVERY_IMPLEMENTATION_REPORT_CN.md` 是当前研究入口。下文描述的是可复用的 ROS
+> 工程底座；ACT 对位等能力保留在系统中，不再作为当前论文算法主线。
 
 > **Legacy thesis subsystem.** 本目录保留论文接口、历史实验和离线 mock 以便追溯，
 > 不进入 OpenFlex 商超比赛启动链。`openflex_anygrasp` ROS 包和 AnyGrasp SDK 已从

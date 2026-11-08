@@ -20,6 +20,7 @@ class OracleAnyGraspNode(Node):
         self.declare_parameter("coarse_lateral_spread_m", 0.025)
         self.declare_parameter("refined_lateral_spread_m", 0.010)
         self.declare_parameter("pregrasp_distance_m", 0.12)
+        self.declare_parameter("refined_candidate_offsets_m", [0.0])
         self.publisher = self.create_publisher(
             GraspCandidateArray, str(self.get_parameter("response_topic").value), 10
         )
@@ -77,6 +78,9 @@ class OracleAnyGraspNode(Node):
         for index in range(count):
             centered = index - 0.5 * (count - 1)
             lateral = centered * spread
+            offsets = self.get_parameter("refined_candidate_offsets_m").value
+            if request.stage == GraspCandidate.STAGE_REFINED:
+                lateral += float(offsets[index % len(offsets)])
             height = 0.006 * ((index % 3) - 1)
             grasp = GraspCandidate()
             grasp.grasp_id = (
@@ -127,4 +131,3 @@ def main(args=None) -> None:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
-

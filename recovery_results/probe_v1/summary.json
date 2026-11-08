@@ -1,0 +1,168 @@
+{
+  "probe_reobserve": {
+    "runs": 15,
+    "valid_task_terminals": 15,
+    "successes": 5,
+    "success_rate": 0.3333333333333333,
+    "wilson_95": [
+      0.15176100694691236,
+      0.5828687484878701
+    ],
+    "infrastructure_or_outer_timeout": 0,
+    "recovery_decisions": 3,
+    "recovery_success_rate": 0.0,
+    "repeated_failure_calls": 1,
+    "recovery_duration_sec_all": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      32.71668778802268,
+      48.148431646986865,
+      0,
+      46.52937099599512
+    ],
+    "extra_base_distance_m_all": [
+      0,
+      0.0,
+      0,
+      0,
+      0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.0,
+      0,
+      0.0,
+      0.0,
+      0,
+      0.0
+    ],
+    "failure_codes": {
+      "0": 5,
+      "47": 2,
+      "53": 3,
+      "91": 2,
+      "92": 3
+    }
+  },
+  "probe_reposition": {
+    "runs": 15,
+    "valid_task_terminals": 15,
+    "successes": 5,
+    "success_rate": 0.3333333333333333,
+    "wilson_95": [
+      0.15176100694691236,
+      0.5828687484878701
+    ],
+    "infrastructure_or_outer_timeout": 0,
+    "recovery_decisions": 3,
+    "recovery_success_rate": 0.0,
+    "repeated_failure_calls": 0,
+    "recovery_duration_sec_all": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      44.98337022605119,
+      83.54362871404737,
+      0,
+      81.65580056002364
+    ],
+    "extra_base_distance_m_all": [
+      0,
+      0.0,
+      0.0,
+      0,
+      0,
+      0.0,
+      0,
+      0,
+      0.0,
+      0.0,
+      0,
+      0.3230371584127802,
+      0.12090365201242448,
+      0,
+      0.1215344343468551
+    ],
+    "failure_codes": {
+      "0": 5,
+      "47": 2,
+      "53": 1,
+      "91": 3,
+      "92": 3,
+      "93": 1
+    }
+  },
+  "probe_switch_grasp": {
+    "runs": 15,
+    "valid_task_terminals": 15,
+    "successes": 7,
+    "success_rate": 0.4666666666666667,
+    "wilson_95": [
+      0.24809225259746442,
+      0.6988336984894921
+    ],
+    "infrastructure_or_outer_timeout": 0,
+    "recovery_decisions": 3,
+    "recovery_success_rate": 0.0,
+    "repeated_failure_calls": 1,
+    "recovery_duration_sec_all": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      40.17453275300795,
+      54.32962666300591,
+      0,
+      86.5327544559841
+    ],
+    "extra_base_distance_m_all": [
+      0,
+      0.0,
+      0.0,
+      0,
+      0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.0,
+      0.0,
+      0,
+      0.0
+    ],
+    "failure_codes": {
+      "0": 7,
+      "47": 2,
+      "53": 3,
+      "91": 2,
+      "92": 1
+    }
+  }
+}

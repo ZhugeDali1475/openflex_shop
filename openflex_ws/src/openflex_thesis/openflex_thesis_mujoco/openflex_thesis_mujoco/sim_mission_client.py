@@ -1,6 +1,7 @@
 """Send one parameterized pick-deliver goal to the thesis simulator stack."""
 
 from openflex_thesis_msgs.action import RunPickDeliver
+import json
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -66,6 +67,11 @@ class SimMissionClient(Node):
 
     def on_result(self, future) -> None:
         result = future.result().result
+        self.get_logger().info("RECOVERY_TASK_RESULT " + json.dumps({
+            "task_id": str(self.get_parameter("task_id").value), "success": bool(result.success),
+            "error_code": int(result.error_code), "duration_sec": float(result.total_duration_sec),
+            "recovery_attempts": int(result.recovery_attempts), "message": result.message,
+        }))
         if result.success:
             self.get_logger().info(
                 f"MUJOCO_MISSION_SUCCESS duration={result.total_duration_sec:.3f}s"

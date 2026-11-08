@@ -5,6 +5,10 @@ uint8 active_arm
 bool evaluate_robustness
 bool require_physical_evaluation
 float32 timeout_sec
+bool select_candidate
+uint32 preferred_candidate_id
+bool restrict_base
+geometry_msgs/Pose requested_base_pose
 ---
 bool success
 AffordanceCandidateArray scored_candidates
