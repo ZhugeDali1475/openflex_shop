@@ -2,18 +2,21 @@
 <package format="3">
   <name>openflex_thesis_experiments</name>
   <version>0.1.0</version>
-  <description>Frozen protocols, logging and dependency-light analysis for thesis experiments.</description>
+  <description>Experiment logging, safety preflight and read-only path diagnostics for OpenFlex.</description>
   <maintainer email="openarmrobot@gmail.com">OpenArmX</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
   <depend>ament_index_python</depend>
   <depend>openflex_thesis_msgs</depend>
-  <depend>openflex_care_agent</depend>
   <depend>rclpy</depend>
+  <depend>moveit_msgs</depend>
+  <depend>rosidl_runtime_py</depend>
   <exec_depend>python3-yaml</exec_depend>
   <test_depend>ament_pytest</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <test_depend>builtin_interfaces</test_depend>
+  <test_depend>trajectory_msgs</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

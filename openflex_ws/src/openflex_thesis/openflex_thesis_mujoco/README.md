@@ -1,6 +1,8 @@
 # OpenFleX Thesis MuJoCo
 
-这是独立于比赛代码的论文数字实验工程，复用 `src/openflex_mujoco` 的整机 MJCF 和网格，服务于：
+这是当前分层调度方案复用的 MuJoCo 执行底座，独立于比赛启动链，复用
+`src/openflex_mujoco` 的整机 MJCF 和网格。当前只读接入见仓库根目录
+`OPENFLEX_ROBOOS_READONLY_CN.md`；下列流程是保留的固定取送基线，不代表大模型闭环已完成：
 
 ```text
 仿真导航/真实Nav2 -> COARSE AnyGrasp -> TC-WAM(b,h,g,ready region)
@@ -21,16 +23,19 @@
 - MuJoCo Oracle 作为现有 AnyGrasp gateway 的后端，结果始终为 `physical_perception=false`。
 - 提供比例式局部对位和导航基线，节点名与日志均明确标记为“不是 ACT / 不是 Nav2”。
 
-当前相机已写入 MJCF，但尚未发布渲染 RGB-D/PointCloud2。现阶段 Oracle 用于验证控制与 TC-WAM；论文的感知实验阶段必须再接入“渲染点云 -> AnyGrasp”，两类结果不可混记。
+bridge 已包含 RGB-D/PointCloud2 发布能力；是否发布取决于启动配置。
+只读入口显式启用头部 RGB，但可用商品视野和语义映射仍需独立验收，不能把 Oracle
+坐标当成视觉检测结果。真实 AnyGrasp、ACT 训练和实机不是当前仿真取送闭环的前置任务。
 
 ## 构建
 
 ```bash
-cd /home/openarmx/openflex_all/openflex_ws
+cd /home/wgb/openflex_shop/openflex_ws
 python3 -m pip install -r src/openflex_thesis/openflex_thesis_mujoco/requirements.txt
 source /opt/ros/humble/setup.bash
-colcon build --symlink-install --packages-up-to openflex_thesis_mujoco
-source install/setup.bash
+colcon --log-base log_v2 build --build-base build_v2 --install-base install_v2 \
+  --symlink-install --packages-up-to openflex_thesis_mujoco
+source install_v2/setup.bash
 ```
 
 只检查派生模型：

@@ -7,7 +7,11 @@ whenever the wrist came near it, whether or not it was between the fingers.
 tested here without starting a ROS node or a simulation.
 """
 
+from types import SimpleNamespace
+
 import pytest
+
+from openflex_thesis_mujoco.bridge_node import MujocoBridgeNode
 
 # Measured in the TCP frame from the MuJoCo hand meshes with the finger joints
 # closed; see the bridge's `_build_attach_geometry`.
@@ -16,18 +20,10 @@ LATERAL_TOLERANCE_M = 0.020
 
 
 def attach_rejection(offset, geometry=GEOMETRY, lateral=LATERAL_TOLERANCE_M):
-    """Mirror of MujocoBridgeNode.attach_rejection."""
-    x, y, z = (float(value) for value in offset)
-    reach_min, reach_max, half_gap = geometry
-    if z < reach_min:
-        return f"object behind the fingertips (z={z:.4f} < {reach_min:.4f})"
-    if z > reach_max:
-        return f"object beyond the finger pads (z={z:.4f} > {reach_max:.4f})"
-    if abs(y) > half_gap:
-        return f"object outside the jaw span (|y|={abs(y):.4f} > {half_gap:.4f})"
-    if abs(x) > lateral:
-        return f"object laterally off the jaw axis (|x|={abs(x):.4f})"
-    return ""
+    bridge = SimpleNamespace(
+        get_parameter=lambda name: SimpleNamespace(value=lateral)
+    )
+    return MujocoBridgeNode.attach_rejection(bridge, offset, geometry)
 
 
 def test_a_real_grasp_is_accepted():

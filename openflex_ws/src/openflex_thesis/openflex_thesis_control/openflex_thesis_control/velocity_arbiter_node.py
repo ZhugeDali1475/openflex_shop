@@ -190,6 +190,8 @@ class VelocityArbiterNode(Node):
         )
 
     def publish_mode(self, reason: str) -> None:
+        self.last_mode_publish_sec = self.now_sec()
+        self.last_mode_reason = reason
         msg = ControlMode()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.mode = self.arbiter.mode
@@ -215,6 +217,8 @@ class VelocityArbiterNode(Node):
         self.output_publisher.publish(msg)
         if self.last_published_epoch != self.arbiter.epoch:
             self.publish_mode("automatic fail-closed transition")
+        elif self.now_sec() - self.last_mode_publish_sec >= 0.1:
+            self.publish_mode(self.last_mode_reason)
 
 
 def main(args=None) -> None:

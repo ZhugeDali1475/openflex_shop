@@ -17,6 +17,7 @@
   <depend>openflex_thesis_msgs</depend>
   <depend>openflex_care_agent</depend>
   <depend>rclpy</depend>
+  <depend>rosidl_runtime_py</depend>
   <depend>sensor_msgs</depend>
   <depend>shape_msgs</depend>
   <depend>std_msgs</depend>

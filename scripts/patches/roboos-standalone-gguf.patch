@@ -1,0 +1,158 @@
+diff --git a/master/config.yaml b/master/config.yaml
+index 08945a1..41a0c47 100644
+--- a/master/config.yaml
++++ b/master/config.yaml
+@@ -29,18 +29,18 @@ tts:
+ # Cloud Server Infos
+ model:
+   # Model name for the cloud server
+-  model_select: "/workspace/model/BAAI/RoboBrain2.0-7B"
++  model_select: "robobrain2.5-4b-gguf"
+   # Number of retries for planning
+   model_retry_planning: 5
+   model_dict:
+     # Model name for the cloud server
+-    cloud_model: "/workspace/model/BAAI/RoboBrain2.0-7B"
++    cloud_model: "robobrain2.5-4b-gguf"
+     # Deploy for the cloud server
+     cloud_type: "default"
+     # API key for the cloud server
+     cloud_api_key: "EMPTY"
+     # URL of the cloud server
+-    cloud_server: "http://localhost:4567/v1/"
++    cloud_server: "http://127.0.0.1:4567/v1/"
+     # Maximum number of chat messages to keep in memory
+     max_chat_message: 50
+ 
+@@ -53,7 +53,7 @@ collaborator:
+   # database number
+   db: 0
+   # Whether clear the database on startup
+-  clear: true
++  clear: false
+   # Password for server
+   password: ""
+ 
+@@ -73,4 +73,4 @@ profiling: true
+ 
+ # scene profile
+ profile:
+-  path: ./scene/profile.yaml
+\ No newline at end of file
++  path: ./scene/profile.yaml
+diff --git a/slaver/agents/models.py b/slaver/agents/models.py
+index 2fce7b1..bc37a1b 100644
+--- a/slaver/agents/models.py
++++ b/slaver/agents/models.py
+@@ -306,6 +306,7 @@ class OpenAIServerModel(Model):
+         model_path: str,
+         stop_sequences: Optional[List[str]] = None,
+         tools_to_call_from: Optional[List[str]] = None,
++        messages: Optional[List[Dict[str, Any]]] = None,
+     ) -> ChatMessage:
+ 
+         content = (
+@@ -321,12 +322,12 @@ class OpenAIServerModel(Model):
+             for current_short_statu in current_status:
+                 content += f"- {current_short_statu}\n"
+         completion_kwargs = {
+-            "messages": [{"role": "user", "content": content}],
++            "messages": messages if messages is not None else [{"role": "user", "content": content}],
+             "model": model_path,
+             "n": 1,
+             "temperature": 0,
+             "top_p": 1.0,
+-            "max_tokens": 8192,
++            "max_tokens": self.kwargs.get("max_tokens", 512),
+         }
+ 
+         if stop_sequences is not None:
+@@ -335,5 +336,8 @@ class OpenAIServerModel(Model):
+         if tools_to_call_from:
+             completion_kwargs["tools"] = tools_to_call_from
++            for option in ("tool_choice", "parallel_tool_calls"):
++                if option in self.kwargs:
++                    completion_kwargs[option] = self.kwargs[option]
+ 
+         self.display_profiling_info("completion_kwargs", completion_kwargs)
+         from datetime import datetime
+@@ -341,6 +345,8 @@ class OpenAIServerModel(Model):
+         start_inference = datetime.now()
+ 
+         response = self.client.chat.completions.create(**completion_kwargs)
++        if response.choices[0].finish_reason not in ("stop", "tool_calls"):
++            raise RuntimeError(f"Model response did not terminate normally: {response.choices[0].finish_reason}")
+         self.last_input_token_count = response.usage.prompt_tokens
+         self.last_output_token_count = response.usage.completion_tokens
+ 
+diff --git a/slaver/config.yaml b/slaver/config.yaml
+index a35b180..151172e 100644
+--- a/slaver/config.yaml
++++ b/slaver/config.yaml
+@@ -1,28 +1,28 @@
+ tool:
+   # Has the model undergone targeted training on tool_calls
+-  support_tool_calls: false
++  support_tool_calls: true
+   # Tool matching configuration
+   matching:
+     # Maximum number of tools to match for each task
+-    max_tools: 3
++    max_tools: 6
+     # Minimum similarity score threshold (0.0 to 1.0)
+-    min_similarity: 0.1
++    min_similarity: 0.0
+ 
+ # Cloud Server Infos
+ model:
+   # Model name for the cloud server
+-  model_select: "/workspace/model/BAAI/RoboBrain2.0-7B"
++  model_select: "robobrain2.5-4b-gguf"
+   # Number of retries for planning
+   model_retry_planning: 5
+   model_dict:
+     # Model name for the cloud server
+-    cloud_model: "/workspace/model/BAAI/RoboBrain2.0-7B"
++    cloud_model: "robobrain2.5-4b-gguf"
+     # Deploy for the cloud server
+     cloud_type: "default"
+     # API key for the cloud server
+     cloud_api_key: "EMPTY"
+     # URL of the cloud server
+-    cloud_server: "http://localhost:4567/v1/"
++    cloud_server: "http://127.0.0.1:4567/v1/"
+     # Maximum number of chat messages to keep in memory
+     max_chat_message: 50
+ 
+@@ -50,9 +50,9 @@ robot:
+   # "remote" with URL such as "http://127.0.0.1:8000", and run the Python script 'skill.py' on the robot itself.
+   # call_type: local
+   # path: "demo_robot_local"
+-  name: demo_robot
++  name: openflex
+   call_type: remote
+-  path: "http://127.0.0.1:8000"
++  path: "http://127.0.0.1:18551"
+ 
+ # Output reasoning context, time cost and other information
+-profiling: true
+\ No newline at end of file
++profiling: true
+diff --git a/slaver/run.py b/slaver/run.py
+index bae1bd4..14d3e47 100644
+--- a/slaver/run.py
++++ b/slaver/run.py
+@@ -211,11 +211,12 @@ class RobotManager:
+         response = await self.session.list_tools()
+         self.tools = [
+             {
++                "type": "function",
+                 "function": {
+                     "name": tool.name,
+                     "description": tool.description,
++                    "parameters": tool.inputSchema,
+                 },
+-                "input_schema": tool.inputSchema,
+             }
+             for tool in response.tools
+         ]

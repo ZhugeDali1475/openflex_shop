@@ -3,6 +3,7 @@
 from copy import deepcopy
 import json
 import math
+import os
 import time
 from typing import Optional, Tuple
 
@@ -17,13 +18,15 @@ from moveit_msgs.msg import (
     JointConstraint,
     MoveItErrorCodes,
     PlanningScene,
+    PlanningSceneComponents,
     RobotState,
 )
-from moveit_msgs.srv import ApplyPlanningScene, GetPositionIK, GetStateValidity
+from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene, GetPositionIK, GetStateValidity
 from nav_msgs.msg import Odometry
 from openflex_thesis_msgs.action import ExecuteMoveItGrasp
 from openflex_thesis_msgs.msg import ControlMode, GraspCandidate, GraspStatus, ObjectMemory, PlaceStatus
 import rclpy
+import yaml
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -32,10 +35,13 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from sensor_msgs.msg import JointState
 from shape_msgs.msg import SolidPrimitive
+from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .async_tools import ros_sleep
 from .attached_object import relative_pose, summarize_box
+from .scene_contract import scene_readback_matches, shelf_collision_objects
+from .validity_diagnostics import failure_category, ros_message, sample_pairing, stamp_ns
 
 
 class MoveItGraspExecutorNode(Node):
@@ -46,9 +52,14 @@ class MoveItGraspExecutorNode(Node):
         self.declare_parameter("ik_service", "/compute_ik")
         self.declare_parameter("state_validity_service", "/check_state_validity")
         self.declare_parameter("apply_planning_scene_service", "/apply_planning_scene")
+        self.declare_parameter("shelf_scene_file", "")
+        self.declare_parameter("require_shelf_scene", True)
+        self.declare_parameter("require_calibrated_shelf_scene", True)
+        self.declare_parameter("get_planning_scene_service", "/get_planning_scene")
         self.declare_parameter("left_gripper_action", "/left_gripper_controller/gripper_cmd")
         self.declare_parameter("right_gripper_action", "/right_gripper_controller/gripper_cmd")
         self.declare_parameter("joint_state_topic", "/joint_states")
+        self.declare_parameter("simulation_diagnostic_topic", "/thesis_sim/diagnostic_state")
         self.declare_parameter("grasp_status_topic", "/thesis/grasp_status")
         self.declare_parameter("place_status_topic", "/thesis/place/status")
         self.declare_parameter("memory_topic", "/thesis/object_memory")
@@ -135,6 +146,11 @@ class MoveItGraspExecutorNode(Node):
             str(self.get_parameter("apply_planning_scene_service").value),
             callback_group=self.callback_group,
         )
+        self.scene_readback_client = self.create_client(
+            GetPlanningScene,
+            str(self.get_parameter("get_planning_scene_service").value),
+            callback_group=self.callback_group,
+        )
         qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
@@ -152,6 +168,13 @@ class MoveItGraspExecutorNode(Node):
             str(self.get_parameter("joint_state_topic").value),
             self.on_joint_state,
             20,
+            callback_group=self.callback_group,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("simulation_diagnostic_topic").value),
+            self.on_simulation_diagnostic,
+            qos,
             callback_group=self.callback_group,
         )
         self.create_subscription(
@@ -196,6 +219,10 @@ class MoveItGraspExecutorNode(Node):
         self.control_mode = ControlMode.HOLD
         self.joint_state: Optional[JointState] = None
         self.joint_state_receipt = 0.0
+        self.joint_diagnostic_sample = (None, 0.0)
+        self.simulation_diagnostic_sample = (None, 0.0)
+        self.attachment_diagnostic = None
+        self.goal_target_diagnostic = None
         self.odometry: Optional[Odometry] = None
         self.odometry_receipt = 0.0
         self.grasp_status: Optional[GraspStatus] = None
@@ -212,6 +239,7 @@ class MoveItGraspExecutorNode(Node):
         self.create_timer(0.2, self.drain_pending_detach, callback_group=self.callback_group)
         self.active_move_group_handle = None
         self.busy = False
+        self.shelf_scene = self.load_shelf_scene()
 
     def on_mode(self, msg: ControlMode) -> None:
         self.control_mode = int(msg.mode)
@@ -219,8 +247,23 @@ class MoveItGraspExecutorNode(Node):
             self.active_move_group_handle.cancel_goal_async()
 
     def on_joint_state(self, msg: JointState) -> None:
-        self.joint_state = deepcopy(msg)
-        self.joint_state_receipt = time.monotonic()
+        received_at = time.monotonic()
+        sample = deepcopy(msg)
+        self.joint_state = sample
+        self.joint_state_receipt = received_at
+        self.joint_diagnostic_sample = (sample, received_at)
+
+    def on_simulation_diagnostic(self, msg: String) -> None:
+        try:
+            snapshot = json.loads(msg.data)
+            if (snapshot.get("schema_version") != 1
+                    or snapshot.get("source") != "mujoco_diagnostic_only_NOT_PHYSICAL"
+                    or not isinstance(snapshot.get("stamp"), dict)):
+                raise ValueError("unknown simulation diagnostic schema")
+            stamp_ns(snapshot["stamp"])
+            self.simulation_diagnostic_sample = (snapshot, time.monotonic())
+        except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as error:
+            self.get_logger().warning(f"ignoring simulation diagnostic: {error}")
 
     def on_odometry(self, msg: Odometry) -> None:
         self.odometry = deepcopy(msg)
@@ -366,6 +409,64 @@ class MoveItGraspExecutorNode(Node):
         )
         return rotated[:3]
 
+    def load_shelf_scene(self):
+        path = str(self.get_parameter("shelf_scene_file").value)
+        if not path:
+            return {}
+        if not os.path.isfile(path):
+            raise ValueError(f"shelf scene file does not exist: {path}")
+        with open(path, "r", encoding="utf-8") as stream:
+            return yaml.safe_load(stream) or {}
+
+    def shelf_objects_in_current_base(self):
+        if not self.shelf_scene:
+            return []
+        scene_frame = str(self.shelf_scene.get("frame_id", ""))
+        base_frame = str(self.get_parameter("base_frame").value)
+        transform = self.tf_buffer.lookup_transform(base_frame, scene_frame, Time())
+        return shelf_collision_objects(self.shelf_scene, transform, base_frame)
+
+    async def apply_shelf_scene(self):
+        if (self.shelf_scene and bool(self.get_parameter("require_calibrated_shelf_scene").value)
+                and not self.shelf_scene.get("calibrated", False)):
+            return False
+        objects = self.shelf_objects_in_current_base()
+        if not objects:
+            return not bool(self.get_parameter("require_shelf_scene").value)
+        request = ApplyPlanningScene.Request()
+        request.scene = PlanningScene()
+        request.scene.is_diff = True
+        request.scene.robot_state.is_diff = True
+        request.scene.world.collision_objects = objects
+        response = await self.scene_client.call_async(request)
+        if response is None or not response.success:
+            return False
+        readback = GetPlanningScene.Request()
+        readback.components.components = PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+        response = await self.scene_readback_client.call_async(readback)
+        verified = bool(response is not None and scene_readback_matches(
+            objects, response.scene.world.collision_objects, self.pose_to_base))
+        self.get_logger().info(
+            "EXECUTION_SCENE " + json.dumps({"verified": verified,
+                "object_ids": [item.id for item in objects], "pose_source": "measured_tf"})
+        )
+        return verified
+
+    async def clear_shelf_scene(self):
+        if not self.shelf_scene:
+            return
+        request = ApplyPlanningScene.Request()
+        request.scene = PlanningScene()
+        request.scene.is_diff = True
+        request.scene.robot_state.is_diff = True
+        for specification in self.shelf_scene.get("collision_objects", []):
+            collision = CollisionObject()
+            collision.header.frame_id = str(self.get_parameter("base_frame").value)
+            collision.id = str(specification.get("id", ""))
+            collision.operation = CollisionObject.REMOVE
+            request.scene.world.collision_objects.append(collision)
+        await self.scene_client.call_async(request)
+
     def pose_to_base(self, source: PoseStamped) -> Optional[PoseStamped]:
         base_frame = str(self.get_parameter("base_frame").value)
         if source.header.frame_id == base_frame:
@@ -441,7 +542,7 @@ class MoveItGraspExecutorNode(Node):
             return False, None
         validity = GetStateValidity.Request()
         validity.robot_state = response.solution
-        validity.group_name = group
+        validity.group_name = ""
         checked = await self.validity_client.call_async(validity)
         if checked is None or not checked.valid:
             self.last_validation_failure = "collision" if checked else "infrastructure"
@@ -465,6 +566,14 @@ class MoveItGraspExecutorNode(Node):
         self, group: str, state: RobotState, label: str = "move"
     ) -> bool:
         if not self.hardware_guard_valid():
+            return False
+        if not await self.apply_shelf_scene():
+            self.last_move_failure = "scene_unverified"
+            return False
+        valid, detail = await self.transportation_start_valid(group, state)
+        if not valid:
+            self.get_logger().error(f"{label} full-robot validity failed: {detail}")
+            self.last_move_failure = "collision"
             return False
         goal = MoveGroup.Goal()
         goal.request.group_name = group
@@ -623,6 +732,11 @@ class MoveItGraspExecutorNode(Node):
                 ),
             )
         )
+        self.attachment_diagnostic = {
+            "object_pose_in_base": ros_message(object_pose),
+            "tcp_pose_in_base": ros_message(tcp_pose),
+            "requested_attachment": ros_message(attached),
+        }
         return await self.apply_scene_object(attached, CollisionObject.ADD)
 
     def attached_object_id(self, object_id: str) -> str:
@@ -667,17 +781,51 @@ class MoveItGraspExecutorNode(Node):
         state was already invalid, so the current state is checked first. Both
         checks report the colliding body pairs; the planner message does not.
         """
+        joint_sample, receipt = self.joint_diagnostic_sample
+        simulation, simulation_receipt = self.simulation_diagnostic_sample
+        sampled_at = time.monotonic()
         current = RobotState()
         current.is_diff = True
-        if self.joint_state is not None:
-            current.joint_state = deepcopy(self.joint_state)
+        if joint_sample is not None:
+            current.joint_state = deepcopy(joint_sample)
         states = [("current", current), ("transport", deepcopy(target))]
+        context = {
+            "schema_version": 1,
+            "sampled_ros_stamp": ros_message(self.get_clock().now().to_msg()),
+            "sampled_monotonic_sec": sampled_at,
+            "planning_group": group,
+            "object_id": self.active_object_id,
+            "map_version": self.active_map_version,
+            "failure_stage": self.failure_stage,
+            "goal_target": ros_message(self.goal_target_diagnostic),
+            "latest_memory": ros_message(self.object_memory),
+            "memory_received_age_sec": (
+                sampled_at - self.object_memory_receipt if self.object_memory is not None else None),
+            "joint_received_age_sec": sampled_at - receipt if joint_sample is not None else None,
+            "attachment_input": deepcopy(self.attachment_diagnostic),
+            "simulation": deepcopy(simulation),
+            "simulation_pairing": sample_pairing(
+                joint_sample, simulation,
+                sampled_at - simulation_receipt if simulation is not None else None,
+                self.active_object_id),
+            "sampling_note": "Local samples precede sequential validity queries; scene readback is later. Not an atomic MoveIt snapshot.",
+        }
         failures = []
+        checks = []
         for label, state in states:
             validity = GetStateValidity.Request()
-            validity.group_name = group
+            validity.group_name = ""
             validity.robot_state = state
-            checked = await self.validity_client.call_async(validity)
+            check = {"label": label, "request": ros_message(validity),
+                     "started_monotonic_sec": time.monotonic(), "response": None}
+            try:
+                checked = await self.validity_client.call_async(validity)
+                check["response"] = ros_message(checked)
+            except Exception as error:
+                checked = None
+                check["error"] = str(error)
+            check["finished_monotonic_sec"] = time.monotonic()
+            checks.append(check)
             if checked is None:
                 failures.append(f"{label}: validity service returned nothing")
                 continue
@@ -690,7 +838,39 @@ class MoveItGraspExecutorNode(Node):
                 }
             )
             failures.append(f"{label}: " + ("; ".join(pairs) if pairs else "invalid without contacts"))
+        if failures:
+            context["checks"] = checks
+            context["failure_category"] = failure_category(checks)
+            await self.record_validity_failure(context)
         return (not failures), " | ".join(failures)
+
+    async def record_validity_failure(self, snapshot) -> None:
+        try:
+            request = GetPlanningScene.Request()
+            request.components.components = (
+                PlanningSceneComponents.ROBOT_STATE
+                | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+                | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+                | PlanningSceneComponents.TRANSFORMS
+                | PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
+                | PlanningSceneComponents.LINK_PADDING_AND_SCALING
+            )
+            snapshot["scene_readback_started_monotonic_sec"] = time.monotonic()
+            future = self.scene_readback_client.call_async(request)
+            deadline = time.monotonic() + 1.0
+            while not future.done() and time.monotonic() < deadline:
+                await ros_sleep(self, 0.02)
+            if not future.done():
+                future.cancel()
+                raise TimeoutError("diagnostic scene readback exceeded 1 second")
+            response = future.result()
+            snapshot["scene_readback"] = ros_message(response)
+            if response is None:
+                snapshot["scene_readback_error"] = "service returned nothing"
+        except Exception as error:
+            snapshot["scene_readback_error"] = str(error)
+        snapshot["scene_readback_finished_monotonic_sec"] = time.monotonic()
+        self.get_logger().error("VALIDITY_FAILURE_SNAPSHOT " + json.dumps(snapshot))
 
     async def lookup_tcp_pose(self, ik_link: str) -> Optional[PoseStamped]:
         timeout = float(self.get_parameter("tcp_lookup_timeout_sec").value)
@@ -775,10 +955,14 @@ class MoveItGraspExecutorNode(Node):
     async def execute(self, goal_handle):
         self.busy = True
         started = time.monotonic()
+        shelf_scene_applied = False
+        retain_shelf_scene = False
         goal = goal_handle.request
         self.grasp_status = None
         self.active_object_id = goal.target.object_id
         self.active_map_version = goal.target.map_version
+        self.goal_target_diagnostic = deepcopy(goal.target)
+        self.attachment_diagnostic = None
         self.object_attached = False
         self.tested_grasp_ids = []
         self.grasp_failure_reasons = []
@@ -811,11 +995,19 @@ class MoveItGraspExecutorNode(Node):
                 and self.ik_client.wait_for_service(timeout_sec=wait)
                 and self.validity_client.wait_for_service(timeout_sec=wait)
                 and self.scene_client.wait_for_service(timeout_sec=wait)
+                and self.scene_readback_client.wait_for_service(timeout_sec=wait)
             )
             gripper = self.left_gripper_client if goal.active_arm == 1 else self.right_gripper_client
             dependencies = dependencies and gripper.wait_for_server(timeout_sec=wait)
             if not dependencies:
                 return self.abort(goal_handle, 73, "MoveIt or controller dependency unavailable")
+            shelf_scene_applied = await self.apply_shelf_scene()
+            if not shelf_scene_applied:
+                return self.abort(
+                    goal_handle,
+                    86,
+                    "failed to apply shelf collision scene before grasp execution",
+                )
             group = goal.coarse_plan.planning_group
             link = goal.coarse_plan.ik_link
             ordered = sorted(
@@ -902,6 +1094,7 @@ class MoveItGraspExecutorNode(Node):
                 return self.abort(goal_handle, 80, "failed to attach object in planning scene")
             self.object_attached = True
             self.scene_attachment = (goal.target.object_id, link, goal.active_arm)
+            self.failure_stage = "transport"
             transport_target = self.transport_state(goal.active_arm, group)
             if bool(self.get_parameter("require_transport_start_valid").value):
                 valid, detail = await self.transportation_start_valid(group, transport_target)
@@ -928,11 +1121,17 @@ class MoveItGraspExecutorNode(Node):
             positions = dict(zip(grasp_state.joint_state.name, grasp_state.joint_state.position))
             result.executed_lift_position = float(positions.get("lift_joint", 0.0))
             result.message = "MoveIt jointly executed lift+arm grasp and transport pose"
+            retain_shelf_scene = True
             return result
         except Exception as error:
             self.get_logger().error(f"MoveIt grasp execution raised: {error}")
             return self.abort(goal_handle, 99, str(error))
         finally:
+            if shelf_scene_applied and not retain_shelf_scene and self.scene_client.service_is_ready():
+                try:
+                    await self.clear_shelf_scene()
+                except Exception as error:
+                    self.get_logger().error(f"failed to clear grasp shelf scene: {error}")
             self.active_move_group_handle = None
             self.active_object_id = ""
             self.active_map_version = 0

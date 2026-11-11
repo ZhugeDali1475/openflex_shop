@@ -1,0 +1,156 @@
+diff --git a/slaver/agents/slaver_agent.py b/slaver/agents/slaver_agent.py
+index f6d5f69..28e9ef7 100644
+--- a/slaver/agents/slaver_agent.py
++++ b/slaver/agents/slaver_agent.py
+@@ -40,6 +40,9 @@ class MultiStepAgent:
+         verbosity_level: LogLevel = LogLevel.INFO,
+         step_callbacks: Optional[List[Callable]] = None,
+         log_file: Optional[str] = None,
++        completion_verifier: Optional[Callable] = None,
++        system_prompt: Optional[str] = None,
++        trace_callback: Optional[Callable] = None,
+     ):
+         self.tools = tools
+         self.model = model
+@@ -56,6 +59,10 @@ class MultiStepAgent:
+         self.monitor = Monitor(self.model, self.logger)
+         self.step_callbacks = step_callbacks if step_callbacks is not None else []
+         self.step_callbacks.append(self.monitor.update_metrics)
++        self.completion_verifier = completion_verifier
++        self.system_prompt = system_prompt or 'Use actual observations and verified tool results. Never infer mission success from silence, repetition, or predicted scene changes.'
++        self.trace_callback = trace_callback
++        self.messages = []
+ 
+     async def run(
+         self,
+@@ -86,6 +93,8 @@ class MultiStepAgent:
+         if reset:
+             self.memory.reset()
+             self.step_number = 1
++            self.tool_call = []
++            self.messages = [{'role': 'system', 'content': self.system_prompt}, {'role': 'user', 'content': task}]
+ 
+         self.logger.log_task(
+             content=self.task.strip(),
+@@ -102,14 +111,14 @@ class MultiStepAgent:
+                 observations_images=images,
+             )
+             answer = await self.step(step)
+-            if answer == "final_answer":
+-                return "Mission accomplished"
++            if answer == 'verified_final_answer':
++                return {'status': 'succeeded', 'success': True, 'completion_verified': True}
+ 
+             self.collaborator.record_agent_status(self.robot_name, answer)
+             step.end_time = time.time()
+             self.step_number += 1
+ 
+-        return "Maximum number of attempts reached, Mission not completed"
++        return {'status': 'not_completed', 'success': False, 'reason': 'bounded model step budget exhausted'}
+ 
+     def step(self) -> Optional[Any]:
+         """To be implemented in children classes. Should return either None if the step is not final."""
+@@ -155,24 +164,28 @@ class ToolCallingAgent(MultiStepAgent):
+             ),
+             level=LogLevel.INFO,
+         )
+-        observation = await self.tool_executor(tool_name, json.loads(tool_arguments))
+-        observation = observation.content[0].text
++        arguments = json.loads(tool_arguments) if isinstance(tool_arguments, str) else tool_arguments
++        response = await self.tool_executor(tool_name, arguments)
++        if response.isError:
++            raise RuntimeError(f'MCP tool error: {response.content}')
++        observation = '\n'.join(block.text for block in response.content if block.type == 'text')
++        if not observation:
++            raise RuntimeError('Tool returned no auditable textual evidence')
++        self.messages.append({'role': 'tool', 'tool_call_id': self.pending_tool_id, 'content': observation})
++        images = [{'type': 'image_url', 'image_url': {'url': f'data:{block.mimeType};base64,{block.data}'}}
++                  for block in response.content if block.type == 'image']
++        if images:
++            self.messages.append({'role': 'user', 'content': [
++                {'type': 'text', 'text': 'Actual camera observation from the preceding tool, not an imagined scene.'}, *images]})
++        if self.trace_callback:
++            self.trace_callback({'tool': tool_name, 'arguments': arguments, 'observation': observation,
++                                 'image_count': len(images)})
++        memory_step.observations = observation
+         self.logger.log(
+             f"Observations: {observation.replace('[', '|')}",  # escape potential rich-tag-like components
+             level=LogLevel.INFO,
+         )
+ 
+-        # Construct memory input
+-        memory_input = {
+-            "tool_name": tool_name,
+-            "arguments": tool_arguments,
+-            "result": observation,
+-        }
+-        try:
+-            await self.memory_predict(memory_input)
+-        except Exception as e:
+-            print(f"[Scene Update Error] `{e}`")
+-
+         return observation
+ 
+     async def memory_predict(self, memory_input: dict) -> str:
+@@ -181,15 +194,7 @@ class ToolCallingAgent(MultiStepAgent):
+         Possible effects: add_object, remove_object, move_object, position.
+         """
+ 
+-        prompt = self.scene.get_action_type_prompt(memory_input)
+-
+-        model_message: ChatMessage = self.model(
+-            task=prompt, current_status="", model_path=self.model_path
+-        )
+-
+-        action_type = model_message.content.strip().lower()
+-
+-        self.scene.apply_action(action_type, json.loads(memory_input["arguments"]))
++        raise RuntimeError('Predicted scene mutation is disabled; only actual observed tool feedback is admissible')
+ 
+     async def step(self, memory_step: ActionStep) -> Union[None, Any]:
+         """
+@@ -197,6 +202,8 @@ class ToolCallingAgent(MultiStepAgent):
+         Returns None if the step is not final.
+         """
+         self.logger.log_rule(f"Step {self.step_number}", level=LogLevel.INFO)
++        if self.completion_verifier and self.completion_verifier():
++            return 'verified_final_answer'
+ 
+         # Add new step in logs
+         current_status = self.collaborator.read_agent_status(self.robot_name)
+@@ -206,6 +213,7 @@ class ToolCallingAgent(MultiStepAgent):
+             model_path=self.model_path,
+             tools_to_call_from=self.tools,
+             stop_sequences=["Observation:"],
++            messages=self.messages,
+         )
+         memory_step.model_output_message = model_message
+         self.logger.log_markdown(
+@@ -217,18 +225,21 @@ class ToolCallingAgent(MultiStepAgent):
+             title="Output message of the LLM:",
+             level=LogLevel.DEBUG,
+         )
+-        if model_message.tool_calls:
++        if model_message.tool_calls and len(model_message.tool_calls) == 1:
+             tool_call = model_message.tool_calls[0]
+             tool_name = tool_call.function.name
+             tool_arguments = tool_call.function.arguments
+         else:
+-            return "final_answer"
++            self.messages.append({'role': 'assistant', 'content': model_message.content or ''})
++            self.messages.append({'role': 'user', 'content': 'No verified completion exists. Select exactly one permitted tool; never claim completion from text alone.'})
++            return 'No single permitted tool selected; mission not verified'
+ 
+         current_call = {"tool_name": tool_name, "tool_arguments": tool_arguments}
+ 
+-        if self.tool_call and self.tool_call[-1] == current_call:
+-            return "final_answer"
+-        else:
+-            self.tool_call.append(current_call)
++        self.tool_call.append(current_call)
++        self.pending_tool_id = tool_call.id
++        self.messages.append({'role': 'assistant', 'content': model_message.content,
++            'tool_calls': [{'id': tool_call.id, 'type': 'function', 'function': {
++                'name': tool_name, 'arguments': tool_arguments if isinstance(tool_arguments, str) else json.dumps(tool_arguments)}}]})
+ 
+         return await self._execute_tool_call(tool_name, tool_arguments, memory_step)

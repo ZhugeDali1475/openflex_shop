@@ -1,7 +1,9 @@
 # openflex_tc_wam
 
-该包实现 AnyGrasp 抓姿条件化的 TC-WAM，是论文核心模块。它不直接控制硬件，也不依赖
-比赛消息或执行器。
+该包保留抓姿条件化的 TC-WAM 候选评估与 ready 区域绑定，供当前分层调度复用。
+它不直接控制硬件，也不依赖比赛消息或执行器；不再把 TC-WAM/ACT 训练设为当前论文主线。
+下文 AnyGrasp 命名为兼容接口，MuJoCo 中的 Oracle 后端不代表真实感知已接入。
+项目方案以仓库根目录 `LLM_HIERARCHICAL_ROBOT_TASK_PLAN_CN.md` 为准。
 
 ## 最终输入与输出
 
@@ -55,4 +57,3 @@ Planning Scene，不执行轨迹。正式地图要求：
 4. 结果同时满足 `physical_perception=true` 和 `physical_evaluation=true`。
 
 mock evaluator 或未标定场景的结果不得作为论文证据。
-

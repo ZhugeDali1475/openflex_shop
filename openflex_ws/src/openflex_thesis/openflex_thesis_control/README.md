@@ -1,7 +1,10 @@
 # openflex_thesis_control
 
-该包实现最终论文流水线的硬件所有权、ACT 底盘精对位、MoveIt 抓取执行和任务恢复，
-不包含比赛语义。
+该包是当前方案复用的执行底座，包含控制权仲裁、局部对位、MoveIt 抓取、固定放置
+和恢复兼容接口，不包含比赛语义。ACT 命名不代表已经完成策略训练。
+`mission_orchestrator` 保留为固定流程对照，不是 RoboOS/RoboBrain2.5 调度器；
+新版任务入口不得与其并行调度。当前边界和安全待办见仓库根目录
+`SAFETY_AND_TODO_CN.md`。
 
 ## 底盘命令所有权
 
@@ -45,7 +48,7 @@ ready 区域同时绑定 `object_id`、`map_version`、`active_arm`、`selected_
 夹爪底层可以是独立 `GripperCommand` controller，但其时序与命令所有权归 MoveIt
 抓取执行阶段；ACT 永远不控制夹爪。
 
-## 最终状态机
+## 固定流程状态机（对照基线）
 
 ```text
 Nav2观察区 -> 停稳/重置ACT回合 -> AnyGrasp粗Top-K
@@ -57,4 +60,3 @@ Nav2观察区 -> 停稳/重置ACT回合 -> AnyGrasp粗Top-K
 
 历史 14-D/32-D checkpoint 和 29-D/11-D“手臂+夹爪+底盘”checkpoint 均与最终
 24-D/3-D schema 不兼容。
-

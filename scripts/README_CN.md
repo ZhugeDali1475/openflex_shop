@@ -1,55 +1,80 @@
-# 项目脚本说明
+# 当前项目脚本
 
-所有脚本默认使用：
+毕业设计主线见根目录 `README.md` 和 `LLM_HIERARCHICAL_ROBOT_TASK_PLAN_CN.md`。
+旧学习恢复、G6/G8 批量实验与重复入口已归档，见 `LEGACY_ARCHIVE_CN.md`。
+以下分类区分只读验证、底座开发和会执行运动的固定流程，不把它们混作大模型闭环。
 
-```text
-/home/wgb/openflex_shop/openflex_ws/install_v2
-```
-
-## 环境与健康检查
+## 当前主线：模型与只读接入
 
 | 脚本 | 用途 |
 |---|---|
-| `check_care_environment.sh` | 检查 MuJoCo、ROS 包和核心单元测试 |
-| `verify_moveit_basic.sh` | 检查 MoveIt、Pick-IK、描述包和 launch 文件 |
+| `setup_robobrain25_gguf.py` | 安装隔离推理程序及兼容库，校验 GGUF 权重 |
+| `run_robobrain25_gguf.sh` | 启动本机回环地址的图文模型服务 |
+| `validate_robobrain25_gguf.py` | 文本、图像及单工具输出验证，不执行工具 |
+| `setup_roboos_gguf_client.py` | 建立模型客户端环境并应用本地兼容补丁 |
+| `run_roboos_gguf_validation.sh` | 客户端契约检查，不启动完整框架、不执行机器人技能 |
+| `setup_openflex_readonly.py` | 创建独立 MCP 环境，不改 ROS 依赖 |
+| `run_openflex_readonly_bridge.sh` | 启动状态／观察工具，默认 ROS domain 83，不发送运动 |
+| `run_openflex_readonly_sim.sh` | 仅启动现有仿真 bridge 与 RGB，隔离旧编排与控制入口 |
+| `validate_openflex_readonly.py` | 检查真实 MCP／ROS，可选 `--model` 读实时图像 |
+| `audit_openflex_head_camera.py` | 相机几何／分割审计；Oracle 分割不等于视觉识别，`--live` 读取已有快照 |
+| `run_openflex_sim_navigation.sh` | 显式启用的隔离域 83 导航；可额外启用受控右臂抓取，复用同一任务锁 |
+| `validate_openflex_navigation.py` | 实际 MCP 导航到站、取消、超时、互斥与重复请求验收，会运动 |
+| `run_openflex_manipulation_preflight.sh` | 只规划辅助栈，不启动旧任务或 MoveIt 自动执行器 |
+| `check_openflex_manipulation_safety.py` | 真实场景应用／回读、地面及全机器人测得起点有效性检查 |
+| `probe_openflex_grasp_planning.py` | Oracle 抓姿、真实 TC-WAM／IK，独立全机器人端点检查，不执行运动 |
+| `probe_openflex_grasp_trajectory.py` | 只规划预抓／抓取／持物撤离，MoveIt 与 MuJoCo 双重路径检查 |
+| `validate_openflex_grasp.py` | 实际 MCP 抓取及取消／超时验证，会运动，不是完整自然语言取送 |
+| `probe_openflex_place_trajectory.py` | 持物放置与释放后撤臂的只规划检查；释放后商品作为障碍物，禁止手指接触 |
+| `validate_openflex_delivery_skills.py` | 实际持物导航／放置的成功、取消及超时验收，会运动 |
+| `setup_openflex_roboos_runtime.py` | 独立完整框架环境与私有 Redis，不安装系统服务，不启动运动 |
+| `run_openflex_roboos_redis.sh` | 只启动本机 Redis 16383，不覆盖系统 6379，不持久化 |
+| `run_openflex_roboos_delivery.py` | 真实 Master／Worker／Redis／MCP 闭环；显式运动开关，逐次模型决策，独立终态验证 |
+| `run_openflex_live_viewer.sh` | 桌面 MuJoCo 只读实时镜像，不另起物理循环或控制任务 |
+
+部署、端口、服务复用和验收记录分别见 `ROBOBRAIN25_GGUF_LOCAL_CN.md`、
+`ROBOOS_GGUF_INTEGRATION_CN.md`、`OPENFLEX_ROBOOS_READONLY_CN.md`。
+隔离运动、抓取预检及尚未完成的系统验收见 `OPENFLEX_ROBOOS_MOTION_CN.md`。
+已有服务运行时不要重复启动；这些接口通过不代表自然语言取送已完成。
+
+`setup_robobrain25_gguf.py`、下载与原精度验证等辅助脚本保留供模型环境维护，
+当前已验证路线仍是 GGUF，不因脚本存在便声称其他部署路线可用。
+
+## 执行底座开发与诊断
+
+ROS 脚本默认复用 `/home/wgb/openflex_shop/openflex_ws/install_v2`。
+
+| 脚本／工具 | 用途与边界 |
+|---|---|
+| `check_care_environment.sh` | 检查模型、ROS 包和底座测试，名称为历史兼容 |
+| `verify_moveit_basic.sh` | 检查 MoveIt、Pick-IK、描述包和启动文件 |
 | `rebuild_mujoco_assets.sh` | 从 ROS 网格重建 MuJoCo 资源 |
+| `run_thesis_offline.sh` | 无 MoveIt 的底座开发入口；含旧辅助节点，不是新版任务入口 |
+| `start_moveit_sim.sh` | 为已有隔离仿真启动 MoveIt，不与其他规划栈重复运行 |
+| `test_moveit_ik.sh`、`diagnose_moveit_candidate.sh` | IK／候选碰撞诊断 |
+| `test_moveit_move.sh` | 会向仿真发送运动目标，使用前确认隔离域与安全条件 |
+| `probe_moveit_workspace.sh` | 候选工作空间采样，不替代整条任务轨迹验收 |
+| `check_moveit_current_state.py`、`search_moveit_left_park.py` | 状态／左臂姿态诊断 |
+| `probe_left_park_contact.py` | 离线接触复现，不提供安全停车保证 |
+| `audit_moveit_path` | 审计保存的路径失败日志或离散状态，不执行动作 |
+| `probe_plan_path` | 只请求规划／有效性服务，必须隔离仿真且不替代连续路径安全证明 |
 
-## 仿真启动
+只规划工具的构建、参数与限制见 experiments 包 README。当前碰撞与接入待办见
+`SAFETY_AND_TODO_CN.md`，不要为演示关闭碰撞或绕过夹持验证。
 
-| 脚本 | 用途 |
-|---|---|
-| `run_thesis_offline.sh` | 启动无 MoveIt 的离线 MuJoCo 栈 |
-| `run_thesis_moveit_mission.sh` | 启动低内存 MuJoCo + MoveIt 单次 mission |
-| `start_moveit_sim.sh` | 单独启动连接已有仿真的 MoveIt |
+## 固定流程对照：仅保留一个取送入口
 
-所有带 MuJoCo 渲染的启动都应保持：
+`run_thesis_moveit_mission.sh` 复用旧状态机和已有执行模块，**会发送仿真运动目标**。
+仅在相应安全检查完成后人工运行；不与 RoboOS Worker、旧自动客户端或实机节点混用。
+需要可视化时由该脚本传入 `enable_viewer:=true` 并设置合适渲染环境，不再维护重复脚本。
 
-```bash
-export MUJOCO_GL=egl
-```
+它用于固定流程对照，不是当前默认启动方式，成功也不能证明大模型自主技能调度。
 
-## MoveIt 验证与诊断
+## 回归与清理
 
-| 脚本 | 用途 |
-|---|---|
-| `test_moveit_ik.sh` | 验证 `/compute_ik` |
-| `test_moveit_move.sh` | 验证 `/move_action` 能驱动 MuJoCo |
-| `probe_moveit_workspace.sh` | 采样右臂工作空间 |
-| `diagnose_moveit_candidate.sh` | 输出候选 IK 和碰撞接触对 |
-| `check_moveit_current_state.py` | 检查当前整机状态及左臂姿态 |
-| `search_moveit_left_park.py` | 搜索左臂停放姿态 |
-| `probe_left_park_contact.py` | 离线复现左臂停姿压入地面、顶高 `lift_joint` 的缺陷（ROS-free） |
+- `tests/test_openflex_readonly_bridge.py`：状态时效、未知处理、图像和工具白名单。
+- `tests/test_roboos_gguf_integration.py`：模型客户端纯接口回归，无需启动模型。
+- `clean_generated_artifacts.sh`：只清理其声明的可再生缓存／日志，不删除模型、地图和实验数据。
 
-## 数据与清理
-
-| 脚本 | 用途 |
-|---|---|
-| `clean_generated_artifacts.sh` | 清理可再生缓存和历史运行日志 |
-
-清理脚本不会删除源码、构建产品、模型、地图、实验数据和数据库。
-# 局部恢复研究入口
-
-`bash scripts/run_recovery_research.sh` 提供 setup、test、matrix、run、train、report 子命令。
-完整使用和证据边界见仓库根目录 `RECOVERY_RUNBOOK_CN.md`。
-默认不改变原任务编排，研究运行通过独立 experiment_config 显式启用。
-
+旧研究脚本、训练依赖和运行数据不再位于当前入口中；需要追溯时按归档说明查阅，
+不要把归档脚本直接复制回来运行，也不要删除仍被执行底座依赖的 `openflex_care_agent`。

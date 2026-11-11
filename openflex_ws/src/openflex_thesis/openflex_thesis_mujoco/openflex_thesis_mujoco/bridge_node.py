@@ -14,6 +14,7 @@ from control_msgs.action import FollowJointTrajectory, GripperCommand
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from openflex_thesis_msgs.msg import (
+    ControlMode,
     FixedPlaceControl,
     GraspStatus,
     ObjectMemory,
@@ -23,10 +24,9 @@ from openflex_thesis_msgs.msg import (
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from rclpy.signals import SignalHandlerOptions
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import String
@@ -35,7 +35,10 @@ from tf2_ros import TransformBroadcaster
 
 from .math_utils import clamp, compose_pose, normalize_angle, relative_pose, yaw_to_quaternion
 from .model_builder import build_thesis_model
-from .trajectory import TrajectoryPoint, TrajectorySampler, duration_to_seconds
+from .camera_spec import HEAD_CAMERA
+from .trajectory import TrajectoryPoint, TrajectorySampler, duration_to_seconds, measured_goal_reached
+from .contact_audit import forbidden_environment_contact, forbidden_payload_contact
+from .release_verification import object_settled_on_surface, release_request_rejection
 
 try:
     import mujoco
@@ -58,7 +61,7 @@ CAMERAS = {
     "head": (
         "thesis_head_camera",
         "/thesis_sim/head",
-        "d435_color_optical_frame",
+        HEAD_CAMERA.optical_frame,
     ),
     "left_wrist": (
         "thesis_left_wrist_camera",
@@ -112,6 +115,8 @@ class MujocoBridgeNode(Node):
         self.last_twist_wall = 0.0
         self.trajectories: Dict[str, tuple] = {}
         self.trajectory_done: Dict[str, bool] = {}
+        self.active_controllers = set()
+        self.active_grippers = set()
         self.gripper_targets = {"left": 0.04, "right": 0.04}
         self.attached_arm: Optional[str] = None
         self.attachment_offset = None
@@ -120,7 +125,11 @@ class MujocoBridgeNode(Node):
         self.current_object_nominal = [1.12, 0.0, 0.84, math.pi]
         self.place_status: Optional[PlaceStatus] = None
         self.place_status_until = 0.0
+        self.pending_place = None
+        self.control_mode = None
+        self.control_mode_receipt = 0.0
         self.last_publish_stamp_ns = 0
+        self.safety_stop = None
 
         self._cache_model_indices()
         # base_link sits above the floor plane the map frame uses; the URDF
@@ -219,6 +228,15 @@ class MujocoBridgeNode(Node):
         return int(identifier)
 
     def _cache_model_indices(self) -> None:
+        robot_root = self._id(mujoco.mjtObj.mjOBJ_BODY, "openflex_robot_yaw_root")
+        self.robot_body_ids = {
+            index for index in range(self.model.nbody)
+            if int(self.model.body_rootid[index]) == robot_root
+        }
+        self.environment_body_ids = {
+            self._id(mujoco.mjtObj.mjOBJ_BODY, name)
+            for name in ("thesis_shelf", "thesis_delivery_table")
+        }
         self.joint_ids = {
             name: self._id(mujoco.mjtObj.mjOBJ_JOINT, name)
             for name in (
@@ -293,6 +311,9 @@ class MujocoBridgeNode(Node):
         self.metadata_pub = self.create_publisher(
             String, "/thesis_sim/trial_metadata", self._latched_qos()
         )
+        self.diagnostic_state_pub = self.create_publisher(
+            String, "/thesis_sim/diagnostic_state", self._latched_qos()
+        )
         self.tf_broadcaster = TransformBroadcaster(self)
         self.create_subscription(
             Twist, "/thesis/cmd_vel_selected", self._on_twist, 20
@@ -311,6 +332,8 @@ class MujocoBridgeNode(Node):
             self._latched_qos(),
             callback_group=self.callback_group,
         )
+        self.create_subscription(ControlMode, '/thesis/control_mode', self._on_control_mode, self._latched_qos(),
+                                 callback_group=self.callback_group)
         self.create_service(Trigger, "/thesis_sim/reset_nominal", self._on_reset_nominal)
         self.create_service(Trigger, "/thesis_sim/randomize", self._on_randomize)
         self.create_service(Trigger, "/thesis_sim/drop_object", self._on_drop_object)
@@ -345,7 +368,7 @@ class MujocoBridgeNode(Node):
                     execute_callback=lambda handle, selected=arm: self._execute_gripper(
                         handle, selected
                     ),
-                    goal_callback=lambda _: GoalResponse.ACCEPT,
+                    goal_callback=lambda request, selected=arm: self._gripper_goal(request, selected),
                     cancel_callback=lambda _: CancelResponse.ACCEPT,
                     callback_group=self.callback_group,
                 )
@@ -453,6 +476,10 @@ class MujocoBridgeNode(Node):
             self.trajectories.clear()
             self.trajectory_done.clear()
             self.place_status = None
+            self.pending_place = None
+            self.safety_stop = None
+            self.environment_contact_checks = 0
+            self.last_contact_audit_time = -5.0
             self._set_base_state()
             oq = yaw_to_quaternion(nominal[3])
             self._set_free_joint_pose("thesis_object_free", nominal[:3], oq)
@@ -511,6 +538,8 @@ class MujocoBridgeNode(Node):
         maximum_linear = float(self.get_parameter("max_linear_mps").value)
         maximum_angular = float(self.get_parameter("max_angular_rps").value)
         with self.lock:
+            if self.safety_stop is not None:
+                return
             self.commanded_twist = [
                 clamp(float(msg.linear.x), -maximum_linear, maximum_linear),
                 clamp(float(msg.linear.y), -maximum_linear, maximum_linear),
@@ -522,16 +551,39 @@ class MujocoBridgeNode(Node):
         self.latest_memory = deepcopy(msg)
 
     def _trajectory_goal(self, request, controller: str) -> GoalResponse:
-        return (
-            GoalResponse.ACCEPT
-            if tuple(request.trajectory.joint_names) == CONTROLLERS[controller]
-            and bool(request.trajectory.points)
-            else GoalResponse.REJECT
-        )
+        with self.lock:
+            if (tuple(request.trajectory.joint_names) != CONTROLLERS[controller]
+                    or not request.trajectory.points or self.safety_stop is not None
+                    or controller in self.active_controllers or not self._arm_control_valid()):
+                return GoalResponse.REJECT
+            try:
+                TrajectorySampler(request.trajectory.joint_names,
+                    {name: self._joint_position(name) for name in request.trajectory.joint_names},
+                    [TrajectoryPoint(duration_to_seconds(point.time_from_start), tuple(point.positions))
+                     for point in request.trajectory.points])
+            except (KeyError, ValueError):
+                return GoalResponse.REJECT
+            self.active_controllers.add(controller)
+            return GoalResponse.ACCEPT
+
+    def _arm_control_valid(self):
+        return bool(self.control_mode is not None and self.control_mode.mode == ControlMode.MOVEIT
+                    and self.control_mode.inputs_healthy and time.monotonic() - self.control_mode_receipt <= 0.5
+                    and math.hypot(*self.actual_twist[:2]) <= 0.02 and abs(self.actual_twist[2]) <= 0.03)
+
+    def _hold_controller_measured(self, controller, token):
+        with self.lock:
+            current = self.trajectories.get(controller)
+            if current is not None and current[0] == token:
+                self.trajectories.pop(controller, None)
+            for name in CONTROLLERS[controller]:
+                self.data.ctrl[self.actuator_ids[name]] = self._joint_position(name)
 
     def _execute_trajectory(self, goal_handle, controller: str):
         result = FollowJointTrajectory.Result()
         goal = goal_handle.request
+        token = None
+        succeeded = False
         try:
             with self.lock:
                 start_positions = {
@@ -554,22 +606,35 @@ class MujocoBridgeNode(Node):
                 0.01, float(self.get_parameter("real_time_factor").value)
             ) + 5.0)
             started = time.monotonic()
+            settled_since = None
             while time.monotonic() - started <= wall_timeout:
+                if self.safety_stop is not None or not self._arm_control_valid():
+                    goal_handle.abort()
+                    result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
+                    result.error_string = "MuJoCo safety stop or fresh exclusive MoveIt control revoked"
+                    return result
                 if goal_handle.is_cancel_requested:
-                    with self.lock:
-                        current = self.trajectories.get(controller)
-                        if current is not None and current[0] == token:
-                            self.trajectories.pop(controller, None)
+                    self._hold_controller_measured(controller, token)
                     goal_handle.canceled()
                     result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
                     result.error_string = "trajectory canceled"
                     return result
                 with self.lock:
                     done = self.trajectory_done.get(token, False)
-                if done:
+                    positions = [self._joint_position(name) for name in sampler.joint_names]
+                    velocities = [float(self.data.qvel[self.model.jnt_dofadr[self.joint_ids[name]]])
+                                  for name in sampler.joint_names]
+                    reached = done and measured_goal_reached(sampler.joint_names,
+                        sampler.points[-1].positions, positions, velocities)
+                if not reached:
+                    settled_since = None
+                else:
+                    settled_since = settled_since or time.monotonic()
+                if settled_since is not None and time.monotonic() - settled_since >= 0.2:
                     goal_handle.succeed()
+                    succeeded = True
                     result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
-                    result.error_string = "MuJoCo position trajectory completed"
+                    result.error_string = "MuJoCo measured joint target and stationary velocities verified for 0.2s"
                     return result
                 time.sleep(0.01)
             goal_handle.abort()
@@ -581,9 +646,41 @@ class MujocoBridgeNode(Node):
             result.error_code = FollowJointTrajectory.Result.INVALID_GOAL
             result.error_string = str(error)
             return result
+        finally:
+            with self.lock:
+                if not succeeded and token is not None:
+                    self._hold_controller_measured(controller, token)
+                self.trajectory_done.pop(token, None)
+                self.active_controllers.discard(controller)
+
+    def _gripper_goal(self, request, arm):
+        with self.lock:
+            if (self.safety_stop is not None or arm in self.active_grippers or self.pending_place is not None
+                    or not self._arm_control_valid()
+                    or not math.isfinite(request.command.position) or not 0 <= request.command.position <= 0.044
+                    or not math.isfinite(request.command.max_effort) or request.command.max_effort < 0):
+                return GoalResponse.REJECT
+            self.active_grippers.add(arm)
+            return GoalResponse.ACCEPT
 
     def _execute_gripper(self, goal_handle, arm: str):
+        succeeded = False
+        try:
+            result = self._run_gripper(goal_handle, arm)
+            succeeded = bool(result.reached_goal or result.stalled)
+            return result
+        finally:
+            with self.lock:
+                if not succeeded:
+                    self.gripper_targets[arm] = self._joint_position(GRIPPER_JOINTS[arm])
+                    self.data.ctrl[self.actuator_ids[GRIPPER_JOINTS[arm]]] = self.gripper_targets[arm]
+                self.active_grippers.discard(arm)
+
+    def _run_gripper(self, goal_handle, arm: str):
         result = GripperCommand.Result()
+        if self.safety_stop is not None or not self._arm_control_valid():
+            goal_handle.abort()
+            return result
         target = clamp(float(goal_handle.request.command.position), 0.0, 0.044)
         with self.lock:
             self.gripper_targets[arm] = target
@@ -592,6 +689,9 @@ class MujocoBridgeNode(Node):
         timeout = float(self.get_parameter("gripper_action_timeout_sec").value)
         started = time.monotonic()
         while time.monotonic() - started <= timeout:
+            if self.safety_stop is not None or not self._arm_control_valid():
+                goal_handle.abort()
+                return result
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 return result
@@ -779,6 +879,24 @@ class MujocoBridgeNode(Node):
         pairs.sort()
         return " contacts=" + ";".join(pairs)
 
+    def _diagnostic_contact_pairs(self):
+        pairs = []
+        for index in range(self.data.ncon):
+            contact = self.data.contact[index]
+            names = []
+            for geom in (int(contact.geom1), int(contact.geom2)):
+                body = int(self.model.geom_bodyid[geom])
+                body_name = (
+                    mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+                    if body > 0 else "world"
+                )
+                geom_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom)
+                names.append({"body": body_name or f"body{body}",
+                              "geom": geom_name or f"geom{geom}"})
+            pairs.append({"first": names[0], "second": names[1],
+                          "distance_m": float(contact.dist)})
+        return pairs
+
     def _log_grasp_proximity(self) -> None:
         """Record where the object sits in each TCP frame while the hand is near.
 
@@ -832,6 +950,11 @@ class MujocoBridgeNode(Node):
     def _step_attachment(self) -> None:
         if self.attached_arm is None or self.attachment_offset is None:
             return
+        if (self.gripper_targets[self.attached_arm] >= 0.03
+                and self._joint_position(GRIPPER_JOINTS[self.attached_arm]) >= 0.02):
+            self.attached_arm = None
+            self.attachment_offset = None
+            return
         hand_position, hand_orientation = self._mujoco_body_pose(
             self.data, self.hand_body_ids[self.attached_arm]
         )
@@ -869,6 +992,43 @@ class MujocoBridgeNode(Node):
         if bool(self.get_parameter("hold_left_arm_park").value):
             self._set_left_arm_park_pose()
 
+    def _audit_environment_contacts(self) -> None:
+        if self.safety_stop is not None:
+            return
+        self.environment_contact_checks += 1
+        contacts = []
+        for contact in self.data.contact[:self.data.ncon]:
+            geoms = (int(contact.geom1), int(contact.geom2))
+            bodies = tuple(int(self.model.geom_bodyid[geom]) for geom in geoms)
+            if forbidden_environment_contact(
+                bodies, float(contact.dist), self.robot_body_ids, self.environment_body_ids
+            ) or forbidden_payload_contact(bodies, float(contact.dist),
+                self.object_body_id if getattr(self, 'attached_arm', None) is not None else None,
+                self.environment_body_ids):
+                contacts.append({
+                    "bodies": [mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, body)
+                               for body in bodies],
+                    "geoms": [mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom)
+                              for geom in geoms],
+                    "distance_m": float(contact.dist),
+                })
+        if contacts:
+            self.safety_stop = {
+                "sim_time_sec": float(self.data.time), "base_xy_yaw": list(self.base_pose),
+                "joints": {name: self._joint_position(name) for name in self.scalar_joint_names},
+                "contacts": contacts, "response": "freeze_simulation_until_reset",
+            }
+            self.actual_twist = [0.0, 0.0, 0.0]
+            self.commanded_twist = [0.0, 0.0, 0.0]
+            self.data.qvel[:] = 0.0
+            self.get_logger().error("MUJOCO_SAFETY_STOP " + json.dumps(self.safety_stop))
+        elif self.data.time - self.last_contact_audit_time >= 5.0:
+            self.last_contact_audit_time = float(self.data.time)
+            self.get_logger().info("MUJOCO_SAFETY_AUDIT " + json.dumps({
+                "checks": self.environment_contact_checks, "sim_time_sec": float(self.data.time),
+                "scope": "robot_bodies_vs_shelf_and_delivery_table", "violation": False,
+            }))
+
     def _simulation_loop(self) -> None:
         dt = float(self.model.opt.timestep)
         real_time_factor = max(0.01, float(self.get_parameter("real_time_factor").value))
@@ -876,16 +1036,23 @@ class MujocoBridgeNode(Node):
         deadline = time.monotonic()
         while not self.stop_event.is_set():
             with self.lock:
-                self._step_base(dt)
-                self._step_trajectories()
-                for arm, joint in GRIPPER_JOINTS.items():
-                    self.data.ctrl[self.actuator_ids[joint]] = self.gripper_targets[arm]
-                self._apply_gravity_compensation()
-                mujoco.mj_step(self.model, self.data)
-                self._hold_left_arm_park()
-                self._try_attach()
-                self._log_grasp_proximity()
-                self._step_attachment()
+                if self.safety_stop is not None:
+                    self.data.time += dt
+                else:
+                    self._step_base(dt)
+                    self._step_trajectories()
+                    for arm, joint in GRIPPER_JOINTS.items():
+                        self.data.ctrl[self.actuator_ids[joint]] = self.gripper_targets[arm]
+                    self._apply_gravity_compensation()
+                    mujoco.mj_step(self.model, self.data)
+                    self._hold_left_arm_park()
+                    mujoco.mj_forward(self.model, self.data)
+                    self._audit_environment_contacts()
+                    if self.safety_stop is None:
+                        self._try_attach()
+                        self._log_grasp_proximity()
+                        self._step_attachment()
+                self._step_placement()
             deadline += wall_step
             wait = deadline - time.monotonic()
             if wait > 0.0:
@@ -919,6 +1086,17 @@ class MujocoBridgeNode(Node):
         return message
 
     def _publish_cameras(self, render_data, stamp: Time) -> None:
+        optical_id = self._id(mujoco.mjtObj.mjOBJ_BODY, HEAD_CAMERA.optical_frame)
+        position, orientation = self._mujoco_body_pose(render_data, optical_id)
+        transform = TransformStamped()
+        transform.header.stamp = deepcopy(stamp)
+        transform.header.frame_id = "map"
+        transform.child_frame_id = HEAD_CAMERA.optical_frame
+        transform.transform.translation.x, transform.transform.translation.y, \
+            transform.transform.translation.z = position
+        transform.transform.rotation.x, transform.transform.rotation.y, \
+            transform.transform.rotation.z, transform.transform.rotation.w = orientation
+        self.tf_broadcaster.sendTransform(transform)
         messages = []
         for key, (camera_name, _topic_prefix, frame_id) in CAMERAS.items():
             renderer = self.renderers[key]
@@ -1001,47 +1179,107 @@ class MujocoBridgeNode(Node):
                 renderer.close()
             self.renderers = {}
 
-    def _on_place_control(self, msg: FixedPlaceControl) -> None:
-        if not msg.enabled:
-            return
-        status = PlaceStatus()
+    def _on_control_mode(self, msg: ControlMode) -> None:
         with self.lock:
-            status.header.stamp = self._simulation_stamp()
-            status.header.frame_id = msg.delivery_pose.header.frame_id or "map"
-            status.object_id = msg.object_id
-            if self.attached_arm is None:
-                status.failure_code = 91
-                status.detail = "no object is attached in MuJoCo"
-                # Failure status: publish immediately but don't keep retransmitting.
-                # Set place_status_until in the past so it expires immediately.
-                self.place_status = status
-                self.place_status_until = time.monotonic() - 1.0
-            else:
-                pose = msg.delivery_pose.pose
-                z = float(pose.position.z)
-                if z <= 0.05:
-                    z = float(self.get_parameter("delivery_surface_z_m").value)
-                q = pose.orientation
-                orientation = (q.x, q.y, q.z, q.w)
-                if sum(value * value for value in orientation) < 0.5:
-                    orientation = (0.0, 0.0, 0.0, 1.0)
-                self.attached_arm = None
-                self.attachment_offset = None
-                self._set_free_joint_pose(
-                    "thesis_object_free",
-                    (pose.position.x, pose.position.y, z),
-                    orientation,
-                )
-                arm = "left" if int(msg.active_arm) == 1 else "right"
-                self.gripper_targets[arm] = 0.04
-                mujoco.mj_forward(self.model, self.data)
-                status.target_reached = True
-                status.released = True
-                status.verified = True
-                status.detail = "MuJoCo fixed-placement release verified"
-                # Success status: publish for 2 seconds to ensure delivery.
-                self.place_status = status
-                self.place_status_until = time.monotonic() + 2.0
+            self.control_mode = deepcopy(msg)
+            self.control_mode_receipt = time.monotonic()
+
+    def _place_guard_valid(self) -> bool:
+        return bool(self.control_mode is not None and self.control_mode.mode == ControlMode.PLACE
+                    and time.monotonic() - self.control_mode_receipt <= 0.5
+                    and math.hypot(*self.actual_twist[:2]) <= 0.02 and abs(self.actual_twist[2]) <= 0.03
+                    and math.hypot(*self.commanded_twist[:2]) <= 0.02 and abs(self.commanded_twist[2]) <= 0.03
+                    and not self.trajectories and self.safety_stop is None)
+
+    def _delivery_geometry(self):
+        surface = self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_delivery_top')
+        object_geometry = self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom')
+        return (surface, tuple(float(value) for value in self.model.geom_size[object_geometry]),
+                tuple(float(value) for value in self.data.geom_xpos[surface]),
+                tuple(float(value) for value in self.model.geom_size[surface]))
+
+    def _place_failure(self, code, detail):
+        self.place_status.header.stamp = self._simulation_stamp()
+        self.place_status.failure_code = code
+        self.place_status.verified = False
+        self.place_status.detail = detail
+        if self.pending_place is not None:
+            self.place_status.released = self.attached_arm is None
+        if self.pending_place is not None and self.attached_arm is not None:
+            self.gripper_targets[self.pending_place['arm']] = self.pending_place['previous_gripper_target']
+        self.pending_place = None
+        self.place_status_until = time.monotonic() + 2.0
+
+    def _on_place_control(self, msg: FixedPlaceControl) -> None:
+        with self.lock:
+            if not msg.enabled:
+                if self.pending_place is not None and msg.object_id == self.place_status.object_id:
+                    self._place_failure(93, 'release verification canceled; cancellation is not successful placement')
+                return
+            if self.pending_place is not None:
+                return
+            self.place_status = PlaceStatus()
+            self.place_status.header.stamp = self._simulation_stamp()
+            self.place_status.header.frame_id = 'map'
+            self.place_status.object_id = msg.object_id
+            self.place_status_until = time.monotonic() + 2.0
+            if not self._place_guard_valid():
+                self._place_failure(92, 'fresh exclusive PLACE mode, stopped base and stationary arm required')
+                return
+            if (msg.object_id != str(self.get_parameter('object_id').value)
+                    or msg.active_arm not in (1, 2) or msg.delivery_pose.header.frame_id != 'map'):
+                self._place_failure(94, 'release object, arm or map-frame contract mismatch')
+                return
+            arm = 'left' if msg.active_arm == 1 else 'right'
+            if self.attached_arm != arm:
+                self._place_failure(91, 'requested object is not attached to the requested arm')
+                return
+            pose = msg.delivery_pose.pose
+            target = (pose.position.x, pose.position.y, pose.position.z)
+            position, orientation = self._mujoco_body_pose(self.data, self.object_body_id)
+            surface, half_size, center, surface_size = self._delivery_geometry()
+            reason = release_request_rejection(position, orientation, target, half_size, center, surface_size)
+            if reason:
+                self._place_failure(95, reason)
+                return
+            self.pending_place = {'arm': arm, 'target': target, 'surface': surface, 'half_size': half_size,
+                                  'surface_center': center, 'surface_half_size': surface_size,
+                                  'started': time.monotonic(), 'stable_since': None,
+                                  'previous_gripper_target': self.gripper_targets[arm]}
+            self.gripper_targets[arm] = 0.04
+            self.place_status.target_reached = True
+            self.place_status.detail = 'opening measured gripper at actual object pose; awaiting physical settling'
+
+    def _step_placement(self) -> None:
+        pending = self.pending_place
+        if pending is None:
+            return
+        self.place_status.header.stamp = self._simulation_stamp()
+        self.place_status_until = time.monotonic() + 2.0
+        if not self._place_guard_valid():
+            self._place_failure(92, 'release safety ownership or base-stop guard revoked')
+            return
+        if time.monotonic() - pending['started'] > 10.0:
+            self._place_failure(96, 'release settling deadline exceeded')
+            return
+        self.place_status.released = self.attached_arm is None
+        position, orientation = self._mujoco_body_pose(self.data, self.object_body_id)
+        object_geometry = self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom')
+        supported = any({int(contact.geom1), int(contact.geom2)} == {object_geometry, pending['surface']}
+                        and -0.001 <= contact.dist <= 0.001 for contact in self.data.contact[:self.data.ncon])
+        dof = int(self.model.jnt_dofadr[self.joint_ids['thesis_object_free']])
+        settled = object_settled_on_surface(position, orientation, pending['half_size'], pending['target'],
+            pending['surface_center'], pending['surface_half_size'], self.data.qvel[dof:dof + 6], supported,
+            self.attached_arm is not None, self._joint_position(GRIPPER_JOINTS[pending['arm']]) >= 0.03)
+        if not settled:
+            pending['stable_since'] = None
+            return
+        if pending['stable_since'] is None:
+            pending['stable_since'] = float(self.data.time)
+        if self.data.time - pending['stable_since'] >= 0.5:
+            self.place_status.verified = True
+            self.place_status.detail = 'MuJoCo actual-pose release: open gripper, detached box, table contact and 0.5s settled'
+            self.pending_place = None
 
     def _publish_state(self) -> None:
         with self.lock:
@@ -1074,6 +1312,41 @@ class MujocoBridgeNode(Node):
             )
             observation = self._object_observation(stamp, object_position, object_orientation)
             grasp = self._grasp_status(stamp, object_position)
+            simulation_diagnostic = {
+                "schema_version": 1,
+                "source": "mujoco_diagnostic_only_NOT_PHYSICAL",
+                "stamp": {"sec": int(stamp.sec), "nanosec": int(stamp.nanosec)},
+                "simulation_time_sec": float(self.data.time),
+                "object_id": str(self.get_parameter("object_id").value),
+                "object_pose": {
+                    "frame_id": "map",
+                    "position_m": [float(value) for value in object_position],
+                    "orientation_xyzw": [float(value) for value in object_orientation],
+                },
+                "joint_state": {
+                    "names": list(joint.name),
+                    "position_rad_or_m": [float(value) for value in joint.position],
+                    "velocity_rad_or_m_s": [float(value) for value in joint.velocity],
+                },
+                "attached_arm": self.attached_arm,
+                "control_ack": None if self.control_mode is None else {
+                    "mode": int(self.control_mode.mode),
+                    "epoch": int(self.control_mode.epoch),
+                    "inputs_healthy": bool(self.control_mode.inputs_healthy),
+                    "fresh": time.monotonic() - self.control_mode_receipt <= 0.5,
+                    "arm_control_valid": self._arm_control_valid(),
+                    "place_control_valid": self._place_guard_valid(),
+                },
+                "object_velocity_linear_angular": [float(value) for value in self.data.qvel[
+                    int(self.model.jnt_dofadr[self.joint_ids['thesis_object_free']]):
+                    int(self.model.jnt_dofadr[self.joint_ids['thesis_object_free']]) + 6]],
+                "delivery_support_contact": any(
+                    {int(contact.geom1), int(contact.geom2)} == {
+                        self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom'), self._delivery_geometry()[0]}
+                    and -0.001 <= contact.dist <= 0.001 for contact in self.data.contact[:self.data.ncon]),
+                "contacts": self._diagnostic_contact_pairs(),
+                "safety_stop": deepcopy(self.safety_stop),
+            }
             place = deepcopy(self.place_status)
             place_valid = place is not None and time.monotonic() <= self.place_status_until
             base_pose = tuple(self.base_pose)
@@ -1084,8 +1357,10 @@ class MujocoBridgeNode(Node):
         self.odom_pub.publish(odom)
         self.observation_pub.publish(observation)
         self.grasp_pub.publish(grasp)
+        diagnostic = String()
+        diagnostic.data = json.dumps(simulation_diagnostic, sort_keys=True)
+        self.diagnostic_state_pub.publish(diagnostic)
         if place_valid:
-            place.header.stamp = deepcopy(stamp)
             self.place_pub.publish(place)
         self._publish_tf(stamp, base_pose)
 
@@ -1128,7 +1403,9 @@ class MujocoBridgeNode(Node):
             <= float(self.get_parameter("gripper_closed_threshold_m").value)
         )
         message.object_retained = attached
-        message.transport_safe = bool(attached and object_position[2] > 0.20)
+        message.transport_safe = bool(
+            attached and object_position[2] > 0.20 and self.safety_stop is None
+        )
         # Attachment now requires the object to sit inside the closed jaws, so
         # `attached` is real geometry instead of a proximity proxy. Re-check the
         # live pose rather than the stored grasp-time offset so a displaced
@@ -1151,6 +1428,7 @@ class MujocoBridgeNode(Node):
             inside_jaws = not self.attach_rejection(live_offset, self.attach_geometry)
         message.verified = bool(
             message.contact_detected and message.gripper_closed and inside_jaws
+            and self.safety_stop is None
         )
         message.detail = (
             f"MuJoCo jaw-bracketed attachment on {self.attached_arm} TCP "
@@ -1203,14 +1481,14 @@ class MujocoBridgeNode(Node):
 
 
 def main(args=None) -> None:
-    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
+    rclpy.init(args=args)
     node = None
     try:
         node = MujocoBridgeNode()
         executor = MultiThreadedExecutor(num_threads=8)
         executor.add_node(node)
         executor.spin()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         if node is not None:

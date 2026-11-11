@@ -1,42 +1,65 @@
 # openflex_thesis_experiments
 
-正式实验不允许临时改组。先将 `config/experiment_protocol.yaml` 中的
-`frozen` 改为 `true`，记录代码提交、数据集和 checkpoint，再生成 trial manifest：
+当前保留通用日志、统计、安全预检与只规划诊断，服务于 RoboOS + RoboBrain2.5 分层调度。
+方案入口见仓库根目录 `README.md`。旧学习恢复 benchmark、训练、矩阵和报告模块已移除，
+原始代码、专属测试及实验数据见 `LEGACY_ARCHIVE_CN.md`；不继续旧版五方法或 25 次研究矩阵。
+
+## 保留的命令
+
+- `trial_logger`：任务、控制权和抓放事件记录。
+- `generate_trial_matrix`、`summarize_trials`：通用试次展开与描述统计；当前新协议尚待冻结。
+- `thesis_preflight`：既有物理证据预检，保持失败关闭，不是当前仿真方案必做流程。
+- `audit_moveit_path`：保存的离散状态／失败日志审计，不把缺失检查当作安全。
+- `probe_plan_path`：读取场景、请求路径规划并检查返回离散点，不执行轨迹。
+
+`config/experiment_protocol.yaml`、`legacy_perception.yaml` 仍由既有物理预检引用，
+只作安全门控和兼容配置保留，**不得直接冻结为当前大模型实验协议**。
+
+## 构建
+
+在已有依赖安装完成的工作区内：
 
 ```bash
-ros2 run openflex_thesis_experiments generate_trial_matrix \
-  install/openflex_thesis_experiments/share/openflex_thesis_experiments/config/experiment_protocol.yaml \
-  /tmp/thesis_manifest.jsonl
+source /opt/ros/humble/setup.bash
+source openflex_ws/install_v2/setup.bash
+cd openflex_ws
+colcon --log-base log_v2 build --build-base build_v2 --install-base install_v2 \
+  --symlink-install --packages-select openflex_thesis_experiments
+source install_v2/setup.bash
 ```
 
-每次真机实验从 manifest 读取唯一 `trial_id` 启动 `trial_logger`。日志目录包含：
+## 只规划取证工具
 
-- `metadata.json`：实验条件与版本；
-- `events.jsonl`：任务、热力图、记忆、控制权和抓放证据；
-- `result.json`：终态、成功率字段、耗时和错误码。
-
-最终流水线的事件日志还必须保存粗/近场 AnyGrasp request id、候选 grasp id、选定
-`(b*, h*, g*)`、`ready_region_id`、planning group、map version、ACT 对位结果、
-MoveIt 是否返回 `reposition_required` 以及局部重算次数。不同绑定的 ready 区域不得
-在统计时合并为同一次成功。
-
-汇总使用 Wilson 95% 区间，TC-WAM 物理标定还应报告热力图分数与经验成功率的
-Spearman 相关系数。不得把 mock evaluator 日志计入正式数据。
-
-## 正式证据预检
-
-每个实验阶段先运行静态门控，例如：
+运行前独立确认诊断协议、隔离域和节点身份，停止 mission／控制客户端。
+`--confirm-simulation` 是操作者确认，不是软件认证；`ROS_LOCALHOST_ONLY=1` 也不能排除本机实机节点。
+以下仅展示接口，不表示历史停车目标安全，也不应未经核验直接执行：
 
 ```bash
-# 只检查真实AnyGrasp阶段
-ros2 run openflex_thesis_experiments thesis_preflight \
-  --scope perception --through-gate G2_moveit_evaluator
-
-# 完整取送正式实验
-ros2 run openflex_thesis_experiments thesis_preflight \
-  --scope end_to_end --through-gate G7_end_to_end
+export ROS_LOCALHOST_ONLY=1
+ros2 run openflex_thesis_experiments probe_plan_path \
+  --target path/to/diagnostic_target.json --group right_arm_with_lift \
+  --required-object-id mujoco_shelf_back \
+  --required-object-id mujoco_shelf_board_target_level \
+  --required-object-id mujoco_shelf_board_upper_1 \
+  --required-object-id mujoco_shelf_board_upper_2 \
+  --required-object-id mujoco_shelf_left_wall \
+  --required-object-id mujoco_shelf_right_wall \
+  --domain-id 175 --confirm-simulation --timeout-sec 60 \
+  --output path/to/new_plan_probe.json
 ```
 
-该命令检查 AnyGrasp SDK/checkpoint、物理输出标志、货架场景标定、MoveIt对象几何、
-24-D/3-D ACT冻结状态、安全门以及指定顺序的硬件验收门。失败是预期的保护行为，
-不得为了启动系统而直接把布尔量改成`true`；只能在对应标定记录、日志和视频齐全后更新。
+目标 JSON 包含 `lift_joint` 和所选侧 `openarmx_<side>_joint1` 至 `joint7` 的 8 个有限值。
+已有输出文件拒绝覆盖；新诊断须使用新目录，不覆盖历史证据。
+
+- 只连接 `/get_planning_scene`、`/plan_kinematic_path`、`/check_state_validity`，
+  不调用执行 action、夹爪、场景写入或运动话题；其他进程仍可能运动，所以必须隔离。
+- 输出保留请求／响应、单调时间、规划错误码、返回轨迹关节／时间点，以及每点完整状态和接触对。
+  非活动臂、附着物、ACM、八叉树和场景回读均纳入诊断。
+- 单次响应最多等待 10 秒，总时限默认 60 秒，最多审计 1000 个返回点；超限保留原响应并失败。
+- 无轨迹、无响应、首尾不一致、缺失检查或场景变化均不补造成有效状态。
+- 仅在规划成功、全部离散点有效、首尾／附着物一致且场景哈希未变等条件成立时报告
+  `discrete_diagnostic_passed=true`。它不证明连续路径安全、场景原子一致或标定正确。
+- 新规划无法还原历史 seed 6301 的内部第 61 点；规划器拒绝且未返回轨迹时，工具也拿不到该轨迹。
+
+历史路径分析与负结果已归档，证据位置见 `LEGACY_ARCHIVE_CN.md`，未关闭问题见
+`SAFETY_AND_TODO_CN.md`。本次清理不运行该探针、不重跑机器人任务。

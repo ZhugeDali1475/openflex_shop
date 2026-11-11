@@ -229,7 +229,7 @@ class MoveItEvaluatorNode(Node):
     async def collision_free(self, group_name: str, state: RobotState) -> bool:
         request = GetStateValidity.Request()
         request.robot_state = state
-        request.group_name = group_name
+        request.group_name = ""
         response = await self.validity_client.call_async(request)
         return bool(response is not None and response.valid)
 

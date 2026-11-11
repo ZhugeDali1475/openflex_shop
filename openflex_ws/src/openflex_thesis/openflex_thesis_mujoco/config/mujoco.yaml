@@ -20,7 +20,10 @@ openflex_thesis_mujoco_bridge:
     # ~28 mm off command. This pose keeps the deepest left-arm point at
     # +0.309 m above the floor even at lift = -0.65 m.
     # Evidence: migration_records/2026-11-05/G3_LEFT_PARK_SEARCH.json
-    inactive_arm_park_positions: [-0.7, -1.2, 0.4, 1.2, 0.0, 0.0, 0.0]
+    # 2026-11-09: Changed to back_fold (-2.8 instead of -0.7) to avoid shelf collision
+    # Based on recovery_results/system_v1_scene_fix_diagnostic/park_scan.json
+    # back_fold reduces contact states from 213 to 19 out of 2424 samples
+    inactive_arm_park_positions: [-2.8, -1.2, 0.4, 1.2, 0.0, 0.0, 0.0]
     hold_left_arm_park: true
     # Feed the gravity/Coriolis bias forward for the actuated joints. The
     # converted MJCF PD servos otherwise droop 60-120 mm at the grasp pose,

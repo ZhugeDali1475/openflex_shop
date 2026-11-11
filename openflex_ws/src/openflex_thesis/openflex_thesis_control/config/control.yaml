@@ -43,6 +43,10 @@ moveit_grasp_executor:
     ik_service: /compute_ik
     state_validity_service: /check_state_validity
     apply_planning_scene_service: /apply_planning_scene
+    shelf_scene_file: ""
+    require_shelf_scene: true
+    require_calibrated_shelf_scene: true
+    get_planning_scene_service: /get_planning_scene
     left_gripper_action: /left_gripper_controller/gripper_cmd
     right_gripper_action: /right_gripper_controller/gripper_cmd
     joint_state_topic: /joint_states

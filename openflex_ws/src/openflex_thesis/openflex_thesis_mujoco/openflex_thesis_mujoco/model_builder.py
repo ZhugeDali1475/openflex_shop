@@ -2,9 +2,12 @@
 
 import argparse
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 import xml.etree.ElementTree as ET
+
+from .camera_spec import HEAD_CAMERA
 
 
 @dataclass(frozen=True)
@@ -12,6 +15,7 @@ class SceneSpec:
     object_position: tuple = (1.12, 0.0, 0.84)
     object_yaw_rad: float = 3.141592653589793
     object_half_size: tuple = (0.035, 0.030, 0.080)
+    object_contact_margin_m: float = 0.001
     shelf_center_x: float = 1.24
     shelf_half_width_y: float = 0.65
     shelf_surface_z: float = 0.74
@@ -62,6 +66,8 @@ def _add_geom(parent, name, geom_type, pos, size, rgba, **attributes):
 
 
 def _add_scene(worldbody, spec: SceneSpec) -> None:
+    if not math.isfinite(spec.object_contact_margin_m) or not 0.0 <= spec.object_contact_margin_m <= 0.002:
+        raise ValueError('Object contact margin must be a finite conservative 0-2 mm envelope')
     shelf = ET.SubElement(worldbody, "body", {"name": "thesis_shelf"})
     _add_geom(
         shelf,
@@ -128,6 +134,7 @@ def _add_scene(worldbody, spec: SceneSpec) -> None:
         spec.object_half_size,
         "0.88 0.18 0.12 1",
         mass="0.22",
+        margin=spec.object_contact_margin_m,
     )
     ET.SubElement(
         object_body,
@@ -135,10 +142,13 @@ def _add_scene(worldbody, spec: SceneSpec) -> None:
         {"name": "thesis_object_center", "size": "0.008", "rgba": "1 1 1 1"},
     )
 
+    # 2026-11-09: Moved occluder far from work area to avoid interference
+    # Original position: (1.02, 0.32, 0.86) - blocked grasp candidates
+    # New position: (-5.0, -5.0, 0.5) - safely out of robot workspace
     occluder = ET.SubElement(
         worldbody,
         "body",
-        {"name": "thesis_occluder", "pos": "1.02 0.32 0.86"},
+        {"name": "thesis_occluder", "pos": "-5.0 -5.0 0.5"},
     )
     ET.SubElement(occluder, "freejoint", {"name": "thesis_occluder_free"})
     _add_geom(
@@ -188,8 +198,20 @@ def build_thesis_model(
         attributes.update({"limited": "false", "damping": "2.0", "armature": "0.01"})
         robot_root.insert(index, ET.Element("joint", attributes))
 
+    head = worldbody.find(f".//body[@name='{HEAD_CAMERA.parent_body}']")
+    if head is None:
+        raise ValueError(f"upstream MJCF is missing {HEAD_CAMERA.parent_body}")
+    optical = ET.SubElement(head, "body", {
+        "name": HEAD_CAMERA.optical_frame,
+        "pos": " ".join(map(str, HEAD_CAMERA.position)),
+        "quat": " ".join(map(str, HEAD_CAMERA.optical_quaternion_wxyz)),
+    })
+    ET.SubElement(optical, "camera", {
+        "name": "thesis_head_camera", "mode": "fixed",
+        "fovy": str(HEAD_CAMERA.fovy_degrees), "quat": "0 1 0 0",
+    })
+
     for body_name, camera_name in (
-        ("d435_color_optical_frame", "thesis_head_camera"),
         ("openarmx_left_link7_pico", "thesis_left_wrist_camera"),
         ("openarmx_right_link7_pico", "thesis_right_wrist_camera"),
     ):
