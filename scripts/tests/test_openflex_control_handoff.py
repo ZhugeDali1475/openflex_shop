@@ -9,6 +9,7 @@ pytest.importorskip('rclpy')
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_roboos_bridge'))
 from openflex_roboos_bridge.navigation_node import NavigationNode
+from openflex_roboos_bridge.telemetry_wait import TelemetryUnavailable
 from openflex_thesis_msgs.msg import ControlMode
 
 
@@ -43,3 +44,50 @@ def test_place_requires_actual_simulator_place_guard():
     node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement(mode=ControlMode.PLACE)})
     with pytest.raises(TimeoutError):
         NavigationNode.wait_control_ack(node, ControlMode.PLACE, 7, timeout=0.001)
+
+
+def test_continuous_guard_uses_applied_epoch_not_independent_subscriber_receipt():
+    node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement()})
+    assert NavigationNode.require_control_ack(node, ControlMode.MOVEIT, 7)['epoch'] == 7
+
+
+@pytest.mark.parametrize('updates', [{'epoch': 8}, {'fresh': False}, {'inputs_healthy': False},
+    {'arm_control_valid': False}, {'mode': ControlMode.HOLD}, {'epoch': None}])
+def test_continuous_guard_never_reuses_invalid_executor_ack(updates):
+    node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement(**updates)})
+    with pytest.raises(RuntimeError, match='revoked'):
+        NavigationNode.require_control_ack(node, ControlMode.MOVEIT, 7)
+
+
+def test_continuous_guard_propagates_stale_diagnostic():
+    def stale(name):
+        raise RuntimeError('Missing/stale telemetry: diagnostic')
+    with pytest.raises(RuntimeError, match='stale'):
+        NavigationNode.require_control_ack(SimpleNamespace(sample=stale), ControlMode.MOVEIT, 7)
+
+
+def test_place_continuous_guard_requires_actual_place_validity():
+    node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement(mode=ControlMode.PLACE)})
+    with pytest.raises(RuntimeError, match='revoked'):
+        NavigationNode.require_control_ack(node, ControlMode.PLACE, 7)
+
+
+def test_handoff_can_wait_for_new_fresh_sample_without_reusing_stale_ack(monkeypatch):
+    responses = iter([None, acknowledgement()])
+
+    def sample(name):
+        value = next(responses)
+        if value is None:
+            raise TelemetryUnavailable('Missing/stale telemetry: diagnostic')
+        return {'control_ack': value}
+
+    monkeypatch.setattr('openflex_roboos_bridge.navigation_node.time.sleep', lambda seconds: None)
+    NavigationNode.wait_control_ack(SimpleNamespace(sample=sample), ControlMode.MOVEIT, 7)
+
+
+def test_continuous_motion_guard_does_not_wait_out_telemetry_loss():
+    def sample(name):
+        raise TelemetryUnavailable('Missing/stale telemetry: diagnostic')
+
+    with pytest.raises(TelemetryUnavailable):
+        NavigationNode.require_control_ack(SimpleNamespace(sample=sample), ControlMode.MOVEIT, 7)

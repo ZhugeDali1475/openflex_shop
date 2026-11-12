@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${root}/scripts/openflex_sim_resources.sh"
 if [[ "${OPENFLEX_ENABLE_SIM_NAV:-0}" != "1" ]]; then
     echo "Explicit opt-in required: OPENFLEX_ENABLE_SIM_NAV=1 bash scripts/run_openflex_sim_navigation.sh" >&2
     exit 1

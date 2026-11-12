@@ -22,8 +22,10 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
 from .navigation_guard import NavigationGuard, angle_difference
+from .action_journal import GoalAcceptanceUnknown, record_terminal, send_audited_goal
 from .operation_store import OperationStore
 from .scene_registry import load_scene_registry
+from .telemetry_wait import TelemetryUnavailable, wait_for_fresh_stop
 
 
 class NavigationNode(Node):
@@ -79,7 +81,8 @@ class NavigationNode(Node):
         with self.sample_lock:
             message, received = deepcopy(self.samples.get(key, (None, 0)))
         if message is None or time.monotonic() - received > 0.5:
-            raise RuntimeError(f"Missing/stale telemetry: {key}")
+            receipt_age = time.monotonic() - received if message is not None else None
+            raise TelemetryUnavailable(f"Missing/stale telemetry: {key}; receipt_age_seconds={receipt_age}")
         if key == "diagnostic":
             stamp = message["stamp"]
             source = stamp["sec"] * 1_000_000_000 + stamp["nanosec"]
@@ -87,7 +90,7 @@ class NavigationNode(Node):
             source = message.header.stamp.sec * 1_000_000_000 + message.header.stamp.nanosec
         age = (self.get_clock().now().nanoseconds - source) / 1e9
         if not -0.1 <= age <= 0.5:
-            raise RuntimeError(f"Telemetry clock mismatch: {key}")
+            raise TelemetryUnavailable(f"Telemetry clock mismatch: {key}")
         return message
 
     @staticmethod
@@ -143,7 +146,11 @@ class NavigationNode(Node):
     def wait_control_ack(self, mode, epoch, timeout=3.0):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            acknowledgement = self.sample("diagnostic").get("control_ack") or {}
+            try:
+                acknowledgement = self.sample("diagnostic").get("control_ack") or {}
+            except TelemetryUnavailable:
+                time.sleep(0.01)
+                continue
             valid = (acknowledgement.get("mode") == mode and acknowledgement.get("epoch") == epoch
                 and acknowledgement.get("fresh") is True and acknowledgement.get("inputs_healthy") is True)
             if mode == ControlMode.MOVEIT:
@@ -155,20 +162,25 @@ class NavigationNode(Node):
             time.sleep(0.01)
         raise TimeoutError(f"Simulator has not acknowledged control mode {mode}, epoch {epoch}")
 
+    def require_control_ack(self, mode, epoch):
+        acknowledgement = self.sample('diagnostic').get('control_ack') or {}
+        valid = (epoch is not None and acknowledgement.get('mode') == mode
+                 and acknowledgement.get('epoch') == epoch and acknowledgement.get('fresh') is True
+                 and acknowledgement.get('inputs_healthy') is True)
+        if mode == ControlMode.MOVEIT:
+            valid = valid and acknowledgement.get('arm_control_valid') is True
+        elif mode == ControlMode.PLACE:
+            valid = valid and acknowledgement.get('place_control_valid') is True
+        if not valid:
+            raise RuntimeError(f'Executor control acknowledgement revoked: mode={mode}, epoch={epoch}')
+        return acknowledgement
+
     def stopped(self, timeout=4):
-        since = None
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
+        def stationary():
             twist = self.sample("odometry").twist.twist
-            now = time.monotonic()
-            if math.hypot(twist.linear.x, twist.linear.y) <= 0.02 and abs(twist.angular.z) <= 0.03:
-                since = since or now
-                if now - since >= 0.5:
-                    return True
-            else:
-                since = None
-            time.sleep(0.02)
-        return False
+            return math.hypot(twist.linear.x, twist.linear.y) <= 0.02 and abs(twist.angular.z) <= 0.03
+
+        return wait_for_fresh_stop(stationary, timeout)
 
     def submit(self, arguments):
         if set(arguments) != {"target_id", "request_id", "timeout_sec"}:
@@ -229,16 +241,12 @@ class NavigationNode(Node):
                 goal.pose.pose.position.x, goal.pose.pose.position.y = waypoint[:2]
                 goal.pose.pose.orientation.z = math.sin(waypoint[2] / 2)
                 goal.pose.pose.orientation.w = math.cos(waypoint[2] / 2)
-                send_future = self.action.send_goal_async(goal)
                 try:
-                    handle = self.await_future(send_future, 3)
-                except TimeoutError:
-                    send_future.add_done_callback(lambda future: future.result().cancel_goal_async()
-                                                  if future.result() and future.result().accepted else None)
+                    handle = send_audited_goal(self, request_id, self.action, goal,
+                                              '/navigate_to_pose', 'navigation_waypoint')
+                except GoalAcceptanceUnknown:
                     status = "unknown"
                     raise
-                if handle is None or not handle.accepted:
-                    raise RuntimeError("Navigation goal rejected")
                 result_future = handle.get_result_async()
                 while not result_future.done():
                     self.healthy(allow_attached=allow_attached)
@@ -252,6 +260,7 @@ class NavigationNode(Node):
                         raise TimeoutError("Skill deadline exceeded")
                     time.sleep(0.02)
                 result = result_future.result()
+                record_terminal(self.store, request_id, handle, result)
                 self.store.event(request_id, "action_result", {"status": int(result.status), "waypoint": waypoint})
                 if result.status != GoalStatus.STATUS_SUCCEEDED:
                     raise RuntimeError(f"Navigation action did not succeed: {result.status}")
@@ -273,6 +282,7 @@ class NavigationNode(Node):
                 if cancel_future is not None:
                     self.await_future(cancel_future, 3)
                     terminal = self.await_future(result_future, 3)
+                    record_terminal(self.store, request_id, handle, terminal)
                     if terminal.status not in (GoalStatus.STATUS_SUCCEEDED, GoalStatus.STATUS_CANCELED, GoalStatus.STATUS_ABORTED):
                         raise RuntimeError("Action terminal state unknown")
                 released = self.stopped()

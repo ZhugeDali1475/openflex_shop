@@ -17,6 +17,13 @@ from std_msgs.msg import String
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def viewer_period(value):
+    rate = float(value)
+    if not math.isfinite(rate) or not 5 <= rate <= 60:
+        raise ValueError('Read-only viewer FPS must be finite and between 5 and 60')
+    return 1.0 / rate
+
+
 class LiveView(Node):
     def __init__(self):
         super().__init__('openflex_live_readonly_viewer', start_parameter_services=False)
@@ -87,6 +94,7 @@ def main():
     if os.environ.get('ROS_DOMAIN_ID') != '83':
         raise RuntimeError('Read-only live viewer requires isolated ROS domain 83')
     rclpy.init()
+    period = viewer_period(os.environ.get('OPENFLEX_VIEWER_FPS', '30'))
     node = LiveView()
     try:
         with mujoco.viewer.launch_passive(node.model, node.data, show_left_ui=False, show_right_ui=False) as viewer:
@@ -95,6 +103,7 @@ def main():
             viewer.cam.azimuth = 135
             viewer.cam.elevation = -25
             while viewer.is_running() and rclpy.ok():
+                frame_started = time.monotonic()
                 for callback_index in range(16):
                     rclpy.spin_once(node, timeout_sec=0.0)
                 with viewer.lock():
@@ -107,7 +116,7 @@ def main():
                     f'{node.data.time:.2f}s\n{diagnostic.get("attached_arm")}\n'
                     f'{diagnostic.get("delivery_support_contact")}\n{diagnostic.get("safety_stop")}'))
                 viewer.sync()
-                time.sleep(0.015)
+                time.sleep(max(0.0, period - (time.monotonic() - frame_started)))
     except KeyboardInterrupt:
         pass
     finally:

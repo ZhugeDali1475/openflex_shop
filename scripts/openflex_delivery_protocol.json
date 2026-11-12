@@ -1,0 +1,45 @@
+{
+  "protocol_id": "openflex_delivery_small_v1",
+  "scope": "isolated_MuJoCo_domain_83_NOT_PHYSICAL",
+  "purpose": "Small feasibility evaluation, not a statistical superiority claim",
+  "automatic_retry": false,
+  "max_trial_seconds": 1200,
+  "video_fps": 2,
+  "initial_object_tolerance_m": 0.04,
+  "trials": [
+    {
+      "id": "model_synonym",
+      "policy": "model",
+      "task": "麻烦将架子上的那件商品取下来，运到交付桌，松开夹爪放稳后再确认结果。",
+      "inject_stale_once": false
+    },
+    {
+      "id": "model_stale_once",
+      "policy": "model",
+      "task": "请把货架上的 thesis_item_01 商品取下，送到 delivery_zone 交付桌面并放稳。",
+      "inject_stale_once": true
+    },
+    {
+      "id": "fixed_nominal",
+      "policy": "fixed",
+      "task": "请把货架上的 thesis_item_01 商品取下，送到 delivery_zone 交付桌面并放稳。",
+      "inject_stale_once": false
+    }
+  ],
+  "denominators": {
+    "model_normal": 1,
+    "model_fault": 1,
+    "fixed_normal": 1,
+    "all_scheduled": 3
+  },
+  "fault_definition": "Withhold the first actual fresh camera response and send explicitly labeled stale-observation rejection to the real Worker. Do not change sensor data, robot state or motion safety checks.",
+  "limitations": [
+    "One trial per condition, no significance or generalization claim",
+    "Nominal comparison also varies wording; no causal attribution to the model",
+    "Guarded Worker prompt explicitly supplies the legal skill order",
+    "Oracle identity/pose, right-arm-only and fixed simulated left-arm park",
+    "Existing proportional navigation, sampled collision checks, jaw geometry proxy",
+    "Fixed comparison uses exactly the same MCP skills and completion verifier, not the retired legacy executor",
+    "No real hardware and no visual identity accuracy evaluation"
+  ]
+}

@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_roboos_b
 sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_thesis_control'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 from check_openflex_manipulation_safety import SafetyProbe
+from openflex_motion_profile import scaling_for_phase, selected_profile
 from openflex_roboos_bridge.navigation_guard import NavigationGuard
 from openflex_roboos_bridge.trajectory_guard import sample_joint_path
 from openflex_thesis_control.attached_object import relative_pose
@@ -76,7 +77,7 @@ class TrajectoryProbe(SafetyProbe):
                   'model_sha256': hashlib.sha256(model_path.read_bytes()).hexdigest(),
                   'measured_start_state': initial, 'candidate_base': plan['best_base_pose'],
                   'empty_approach_guard': navigation, 'hypothetical_candidate_start': message_to_ordereddict(start_checked),
-                  'phases': []}
+                  'phases': [], 'motion_profile': selected_profile()}
         report['held_transport_only'] = held_transport
         if held_transport and initial['simulator_diagnostic'].get('attached_arm') != 'right':
             raise RuntimeError('Fresh measured right-hand attachment required for held transport planning')
@@ -125,8 +126,9 @@ class TrajectoryProbe(SafetyProbe):
             request.motion_plan_request.start_state = deepcopy(state)
             request.motion_plan_request.allowed_planning_time = 8.0
             request.motion_plan_request.num_planning_attempts = 3
-            request.motion_plan_request.max_velocity_scaling_factor = 0.05
-            request.motion_plan_request.max_acceleration_scaling_factor = 0.05
+            velocity, acceleration = scaling_for_phase(phase)
+            request.motion_plan_request.max_velocity_scaling_factor = velocity
+            request.motion_plan_request.max_acceleration_scaling_factor = acceleration
             constraints = Constraints()
             for name, position in zip(plan['joint_names'], positions):
                 constraint = JointConstraint()
@@ -252,8 +254,9 @@ class TrajectoryProbe(SafetyProbe):
             lift_request.motion_plan_request.start_state = deepcopy(state)
             lift_request.motion_plan_request.allowed_planning_time = 8.0
             lift_request.motion_plan_request.num_planning_attempts = 3
-            lift_request.motion_plan_request.max_velocity_scaling_factor = 0.05
-            lift_request.motion_plan_request.max_acceleration_scaling_factor = 0.05
+            velocity, acceleration = scaling_for_phase('clearance_lift')
+            lift_request.motion_plan_request.max_velocity_scaling_factor = velocity
+            lift_request.motion_plan_request.max_acceleration_scaling_factor = acceleration
             lift_constraints = Constraints()
             measured_positions = dict(zip(state.joint_state.name, state.joint_state.position))
             for name in plan['joint_names']:
@@ -321,8 +324,9 @@ class TrajectoryProbe(SafetyProbe):
             retreat_request.motion_plan_request.start_state = deepcopy(state)
             retreat_request.motion_plan_request.allowed_planning_time = 8.0
             retreat_request.motion_plan_request.num_planning_attempts = 3
-            retreat_request.motion_plan_request.max_velocity_scaling_factor = 0.05
-            retreat_request.motion_plan_request.max_acceleration_scaling_factor = 0.05
+            velocity, acceleration = scaling_for_phase('shelf_withdrawal')
+            retreat_request.motion_plan_request.max_velocity_scaling_factor = velocity
+            retreat_request.motion_plan_request.max_acceleration_scaling_factor = acceleration
             retreat_constraints = Constraints()
             retreat_positions = dict(zip(ik_response.solution.joint_state.name, ik_response.solution.joint_state.position))
             for name in plan['joint_names']:
@@ -357,8 +361,9 @@ class TrajectoryProbe(SafetyProbe):
         transport_request.motion_plan_request.start_state = deepcopy(state)
         transport_request.motion_plan_request.allowed_planning_time = 8.0
         transport_request.motion_plan_request.num_planning_attempts = 3
-        transport_request.motion_plan_request.max_velocity_scaling_factor = 0.05
-        transport_request.motion_plan_request.max_acceleration_scaling_factor = 0.05
+        velocity, acceleration = scaling_for_phase('transport')
+        transport_request.motion_plan_request.max_velocity_scaling_factor = velocity
+        transport_request.motion_plan_request.max_acceleration_scaling_factor = acceleration
         transport_constraints = Constraints()
         for name, position in zip(plan['joint_names'], [-0.10, 0.0, 0.0, 0.0, 1.8, 0.0, 0.0, 0.0]):
             constraint = JointConstraint()

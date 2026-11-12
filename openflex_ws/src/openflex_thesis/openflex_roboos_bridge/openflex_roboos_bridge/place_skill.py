@@ -9,6 +9,8 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profi
 
 from openflex_thesis_mujoco.release_verification import object_settled_on_surface
 
+from .action_journal import cancel_to_hold_and_audit
+
 
 class PlaceSkill:
     def __init__(self, node):
@@ -73,7 +75,8 @@ class PlaceSkill:
                     raise TimeoutError('Place approach timed out')
                 uncertain = approach['status'] == 'unknown'
                 raise RuntimeError(f'Place approach failed: {approach}')
-            self.node.set_mode(ControlMode.MOVEIT)
+            acquired = self.node.set_mode(ControlMode.MOVEIT)
+            self.motion.base_lock_epoch = acquired['epoch']
             self.motion.base_lock = self.node.base_pose()
             fresh, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py', [])
             if not fresh.get('place_paths_valid'):
@@ -83,7 +86,7 @@ class PlaceSkill:
             if not self.motion.retained():
                 raise RuntimeError('Object lost before authorized release')
             self.motion.base_lock = None
-            self.node.set_mode(ControlMode.PLACE)
+            release_control = self.node.set_mode(ControlMode.PLACE)
             command.enabled = True
             command.header.stamp = command.delivery_pose.header.stamp = self.node.get_clock().now().to_msg()
             target = list(fresh['release_center_map'])
@@ -95,8 +98,8 @@ class PlaceSkill:
             release_deadline = min(self.motion.deadline, time.monotonic() + 12)
             while time.monotonic() < release_deadline:
                 self.motion.gate(attached=True)
-                mode = self.node.sample('mode')
-                if mode.mode != ControlMode.PLACE or not self.node.stopped(timeout=0.6):
+                self.node.require_control_ack(ControlMode.PLACE, release_control['epoch'])
+                if not self.node.stopped(timeout=0.6):
                     raise RuntimeError('Exclusive release mode or base-stop revoked')
                 try:
                     observed = self.node.sample('place')
@@ -117,7 +120,8 @@ class PlaceSkill:
             if not verified:
                 raise TimeoutError('Actual contact and settled release not verified before deadline')
             self.motion.released_target = target
-            self.node.set_mode(ControlMode.MOVEIT)
+            acquired = self.node.set_mode(ControlMode.MOVEIT)
+            self.motion.base_lock_epoch = acquired['epoch']
             self.motion.base_lock = self.node.base_pose()
             retreat, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py', ['--retreat'])
             if not retreat.get('place_paths_valid'):
@@ -141,12 +145,7 @@ class PlaceSkill:
             try:
                 command.enabled = False
                 self.publisher.publish(command)
-                for handle, future in self.motion.handles:
-                    handle.cancel_goal_async()
-                    terminal = self.node.await_future(future, 5)
-                    if terminal.status not in (GoalStatus.STATUS_SUCCEEDED, GoalStatus.STATUS_ABORTED, GoalStatus.STATUS_CANCELED):
-                        raise RuntimeError('Controller terminal status unknown')
-                self.node.set_mode(ControlMode.HOLD)
+                cancel_to_hold_and_audit(self.node, request_id, self.motion.handles, ControlMode.HOLD)
                 stopped = self.node.stopped() and self.motion.joints_stopped()
                 if not stopped or uncertain:
                     status, success = 'unknown', False
@@ -155,6 +154,7 @@ class PlaceSkill:
                 detail += f'; terminal stop audit failed: {error}'
             self.motion.handles.clear()
             self.motion.base_lock = None
+            self.motion.base_lock_epoch = None
             self.node.store.finish(request_id, status, success=success and stopped, detail=detail,
                 stopped_confirmed=stopped, place_verified=verified, physical_verification=False,
                 backend='actual_MuJoCo_pose_release_contact_settling_NOT_PHYSICAL')

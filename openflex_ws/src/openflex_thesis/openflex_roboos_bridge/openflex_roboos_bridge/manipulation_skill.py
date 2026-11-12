@@ -15,6 +15,9 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profi
 from rosidl_runtime_py.set_message import set_message_fields
 from trajectory_msgs.msg import JointTrajectory
 
+from .telemetry_wait import wait_for_fresh_stop
+from .action_journal import cancel_to_hold_and_audit, record_terminal, send_audited_goal
+
 
 class ManipulationSkill:
     def __init__(self, node):
@@ -36,6 +39,7 @@ class ManipulationSkill:
         self.handles = []
         self.deadline = 0.0
         self.base_lock = None
+        self.base_lock_epoch = None
         self.released_target = None
 
     def submit(self, arguments):
@@ -63,9 +67,9 @@ class ManipulationSkill:
         if self.released_target is not None and not self.node.placement.placement_still_verified(self.released_target):
             raise RuntimeError('Released payload moved or lost stable support during retreat; stop immediately')
         if self.base_lock is not None:
-            mode = self.node.sample('mode')
+            self.node.require_control_ack(ControlMode.MOVEIT, self.base_lock_epoch)
             twist = self.node.sample('odometry').twist.twist
-            if (mode.mode != ControlMode.MOVEIT or math.hypot(twist.linear.x, twist.linear.y) > 0.02
+            if (math.hypot(twist.linear.x, twist.linear.y) > 0.02
                     or abs(twist.angular.z) > 0.03 or math.dist(self.node.base_pose()[:2], self.base_lock[:2]) > 0.01):
                 raise RuntimeError('MoveIt exclusive mode or measured stationary base lock revoked')
 
@@ -74,6 +78,7 @@ class ManipulationSkill:
         run_path = self.root / 'local_dependencies/openflex_roboos/runs' / request_id
         run_path.mkdir(exist_ok=True)
         log_path = run_path / f'{script}_{time.time_ns()}.log'
+        probe_started = time.monotonic()
         with log_path.open('w') as stream:
             process = subprocess.Popen(['/usr/bin/python3', str(self.root / 'scripts' / script), *extra],
                 cwd=self.root, stdout=stream, stderr=subprocess.STDOUT)
@@ -95,46 +100,36 @@ class ManipulationSkill:
             raise RuntimeError(f'Planning-only probe failed; inspect {log_path}')
         report = json.loads(paths[0].read_text())
         self.node.store.event(request_id, 'planning_probe', {'script': script, 'report': str(paths[0]),
-            'blocked_at': report.get('blocked_at'), 'error': report.get('error')})
+            'blocked_at': report.get('blocked_at'), 'error': report.get('error'),
+            'elapsed_seconds': time.monotonic() - probe_started,
+            'motion_profile': report.get('motion_profile', 'baseline')})
         return report, paths[0]
 
-    def wait_action(self, client, goal, attached=False):
+    def wait_action(self, request_id, client, goal, attached=False):
         self.gate(attached)
         if not client.wait_for_server(timeout_sec=3):
             raise RuntimeError('Reviewed simulation controller unavailable')
-        future = client.send_goal_async(goal)
-        try:
-            handle = self.node.await_future(future, 3)
-        except Exception:
-            future.add_done_callback(lambda done: done.result().cancel_goal_async()
-                if done.result() and done.result().accepted else None)
-            raise RuntimeError('Unknown goal acceptance; manual stop audit required')
-        if handle is None or not handle.accepted:
-            raise RuntimeError('Controller goal rejected')
+        handle = send_audited_goal(self.node, request_id, client, goal,
+                                  '/right_gripper_controller/gripper_cmd', 'gripper')
         result = handle.get_result_async()
         self.handles.append((handle, result))
         while not result.done():
             self.gate(attached)
             time.sleep(0.02)
         response = result.result()
+        record_terminal(self.node.store, request_id, handle, response)
         if response.status != GoalStatus.STATUS_SUCCEEDED:
             raise RuntimeError(f'Controller terminal status {response.status}')
         self.handles.remove((handle, result))
         return response.result
 
     def joints_stopped(self, timeout=5):
-        deadline, since = time.monotonic() + timeout, None
-        while time.monotonic() < deadline:
+        def stationary():
             diagnostic = self.node.sample('diagnostic')
             velocities = diagnostic['joint_state']['velocity_rad_or_m_s']
-            if velocities and all(math.isfinite(value) and abs(value) <= 0.03 for value in velocities):
-                since = since or time.monotonic()
-                if time.monotonic() - since >= 0.5:
-                    return True
-            else:
-                since = None
-            time.sleep(0.02)
-        return False
+            return bool(velocities) and all(math.isfinite(value) and abs(value) <= 0.03 for value in velocities)
+
+        return wait_for_fresh_stop(stationary, timeout)
 
     def execute_trajectory(self, request_id, phase, attached):
         trajectory = JointTrajectory()
@@ -162,15 +157,9 @@ class ManipulationSkill:
                 client = self.clients[controller]
                 if not client.wait_for_server(timeout_sec=3):
                     raise RuntimeError('Paired arm/lift controller unavailable')
-                sent = client.send_goal_async(goal)
-                try:
-                    handle = self.node.await_future(sent, 3)
-                except Exception:
-                    sent.add_done_callback(lambda done: done.result().cancel_goal_async()
-                        if done.result() and done.result().accepted else None)
-                    raise RuntimeError('Unknown goal acceptance; manual stop audit required')
-                if handle is None or not handle.accepted:
-                    raise RuntimeError('Paired arm/lift trajectory rejected')
+                endpoint = ('/lift_joint_controller/follow_joint_trajectory' if controller == 'lift'
+                            else '/right_joint_trajectory_controller/follow_joint_trajectory')
+                handle = send_audited_goal(self.node, request_id, client, goal, endpoint, phase['phase'])
                 result = handle.get_result_async()
                 self.handles.append((handle, result))
                 pending.append((handle, result))
@@ -179,6 +168,7 @@ class ManipulationSkill:
                 time.sleep(0.02)
             for handle, future in pending:
                 response = future.result()
+                record_terminal(self.node.store, request_id, handle, response)
                 if response.status != GoalStatus.STATUS_SUCCEEDED or response.result.error_code != 0:
                     raise RuntimeError(f'Real trajectory execution did not succeed: {response.status}: {response.result.error_string}')
                 self.handles.remove((handle, future))
@@ -192,10 +182,10 @@ class ManipulationSkill:
                     handle.cancel_goal_async()
             raise
 
-    def command_gripper(self, position, attached):
+    def command_gripper(self, request_id, position, attached):
         goal = GripperCommand.Goal()
         goal.command.position, goal.command.max_effort = position, 20.0
-        result = self.wait_action(self.gripper, goal, attached)
+        result = self.wait_action(request_id, self.gripper, goal, attached)
         if not (result.reached_goal or result.stalled):
             raise RuntimeError('Gripper result does not confirm the requested action')
 
@@ -234,9 +224,10 @@ class ManipulationSkill:
                 if navigation['status'] == 'unknown':
                     raise RuntimeError('Unknown goal acceptance or navigation terminal state')
                 raise RuntimeError(f'Grasp approach navigation failed: {navigation}')
-            self.node.set_mode(ControlMode.MOVEIT)
+            acquired = self.node.set_mode(ControlMode.MOVEIT)
+            self.base_lock_epoch = acquired['epoch']
             self.base_lock = self.node.base_pose()
-            self.command_gripper(0.044, False)
+            self.command_gripper(request_id, 0.044, False)
             planned, source = self.probe(request_id, 'probe_openflex_grasp_planning.py', ['--refined'])
             if not planned.get('tc_wam_success') or not planned.get('endpoints_valid'):
                 raise RuntimeError('Fresh refined plan at the measured aligned base is not feasible')
@@ -245,7 +236,7 @@ class ManipulationSkill:
                 raise RuntimeError(f'Fresh whole pickup path rejected: {checked.get("blocked_at")}')
             for phase in checked['phases'][:2]:
                 self.execute_trajectory(request_id, phase, False)
-            self.command_gripper(0.0, True)
+            self.command_gripper(request_id, 0.0, True)
             deadline = min(self.deadline, time.monotonic() + 8)
             while not self.retained() and time.monotonic() < deadline:
                 self.gate(attached=True)
@@ -271,10 +262,7 @@ class ManipulationSkill:
             uncertain = 'Unknown goal acceptance' in detail
         finally:
             try:
-                for handle, future in self.handles:
-                    handle.cancel_goal_async()
-                    self.node.await_future(future, 5)
-                self.node.set_mode(ControlMode.HOLD)
+                cancel_to_hold_and_audit(self.node, request_id, self.handles, ControlMode.HOLD)
                 stopped = self.node.stopped() and self.joints_stopped()
                 if not stopped or uncertain:
                     status, success = 'unknown', False
@@ -283,6 +271,7 @@ class ManipulationSkill:
                 detail += f'; terminal stop unknown: {error}'
             self.handles.clear()
             self.base_lock = None
+            self.base_lock_epoch = None
             self.node.store.finish(request_id, status, success=success and stopped, detail=detail,
                 stopped_confirmed=stopped, physical_verification=False,
                 grasp_verified=success and stopped, transport_safe=success and stopped,

@@ -1,0 +1,35 @@
+{
+  "protocol_id": "openflex_speed_paired_feasibility_v1",
+  "scope": "isolated_MuJoCo_domain_83_NOT_PHYSICAL",
+  "purpose": "Exploratory same-text same-model profile comparison, one trial per condition, not reliability certification",
+  "automatic_retry": false,
+  "max_trial_seconds": 1200,
+  "video_fps": 2,
+  "initial_object_tolerance_m": 0.04,
+  "trials": [
+    {
+      "id": "model_baseline",
+      "policy": "model",
+      "motion_profile": "baseline",
+      "task": "请把货架上的 thesis_item_01 商品取下，送到 delivery_zone 交付桌面并放稳。",
+      "inject_stale_once": false
+    },
+    {
+      "id": "model_balanced_v1",
+      "policy": "model",
+      "motion_profile": "balanced_v1",
+      "task": "请把货架上的 thesis_item_01 商品取下，送到 delivery_zone 交付桌面并放稳。",
+      "inject_stale_once": false
+    }
+  ],
+  "denominators": {"baseline": 1, "balanced_v1": 1, "all_scheduled": 2},
+  "fault_definition": "No injected fault; do not modify feedback, collisions, acceleration or completion checks",
+  "limitations": [
+    "One trial per condition with fixed baseline-first ordering; no statistics or reliability claim",
+    "Same model, prompt, text, geometry and completion contract; motion planning still variable",
+    "Only four longer phases request 0.10 velocity scaling instead of 0.05; acceleration remains 0.05",
+    "Near-contact grasp, lift clearance, shelf withdrawal, place and postplace clearance remain 0.05",
+    "Both profiles keep full-robot, payload, path and contact checks; no unreviewed trajectory retiming",
+    "Oracle identity/pose, fixed arms, existing navigation and simulation-only evidence"
+  ]
+}

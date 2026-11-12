@@ -10,6 +10,8 @@ import subprocess
 import time
 from urllib.request import ProxyHandler, Request, build_opener
 
+from openflex_motion_profile import validate_profile
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / 'local_dependencies/openflex_roboos'
@@ -99,7 +101,7 @@ def status():
         snapshot = request_json('http://127.0.0.1:18552/state')
         report['measured_hold'] = measured_hold(snapshot)
         report['source_status'] = {name: value['status'] for name, value in snapshot['sources'].items()}
-        report['object'] = snapshot['sources']['simulation_diagnostic'].get('data', {}).get('object_pose')
+        report['object'] = (snapshot['sources']['simulation_diagnostic'].get('data') or {}).get('object_pose')
     except Exception as error:
         report.update(measured_hold=False, snapshot_error=str(error))
     return report
@@ -127,13 +129,20 @@ def start(arguments):
         raise RuntimeError('Pending operation or scheduler exists; audit/stop it before lifecycle changes')
     if not active(UNITS['simulation']) and active(UNITS['planning']):
         raise RuntimeError('Orphan planning clock: stop/audit existing planning stack before a fresh simulation')
+    profile = validate_profile(getattr(arguments, 'motion_profile', 'baseline'))
+    profile_path = RUNTIME / 'running_motion_profile.json'
+    running_profile = json.loads(profile_path.read_text())['motion_profile'] if profile_path.exists() else 'baseline'
+    if active(UNITS['simulation']) and running_profile != profile:
+        raise RuntimeError('Running motion profile differs; audit stop and coordinate a new simulation first')
     for name, filename in [('model', 'run_robobrain25_gguf.sh'), ('redis', 'run_openflex_roboos_redis.sh'),
                            ('readonly', 'run_openflex_readonly_bridge.sh'),
                            ('simulation', 'run_openflex_sim_navigation.sh'),
                            ('planning', 'run_openflex_manipulation_preflight.sh')]:
         environment = ['OPENFLEX_ENABLE_SIM_NAV=1', 'OPENFLEX_ENABLE_SIM_MANIPULATION=1',
-                       'OPENFLEX_ENABLE_SIM_PLACE=1'] if name == 'simulation' else []
+                       'OPENFLEX_ENABLE_SIM_PLACE=1', 'OPENFLEX_MOTION_PROFILE=' + profile] if name == 'simulation' else []
         start_unit(name, ['/bin/bash', str(ROOT / 'scripts' / filename)], environment)
+        if name == 'simulation':
+            save(profile_path, {'motion_profile': profile, 'physical_verification': False})
     start_unit('skills', [str(ROOT / '.venvs/openflex-mcp/bin/python'), '-I',
                          str(ROOT / 'scripts/openflex_mcp_entry.py'), '--port', '18556',
                          '--enable-navigation', '--enable-manipulation', '--enable-placement'])
@@ -232,6 +241,7 @@ def main():
     starter = commands.add_parser('start')
     starter.add_argument('--enable-simulation-motion', action='store_true')
     starter.add_argument('--gui', action='store_true')
+    starter.add_argument('--motion-profile', choices=['baseline', 'balanced_v1'], default='baseline')
     stopper = commands.add_parser('stop')
     stopper.add_argument('--timeout', type=float, default=150)
     stopper.add_argument('--shutdown-services', action='store_true')

@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / 'local_dependencies/roboos_client'))
 sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_thesis_mujoco'))
 from flag_scale.flagscale.agent.collaboration import Collaborator
 from openflex_delivery_contract import DeliveryContract, MOTION_TOOLS, state_summary, terminal_summary
+from openflex_delivery_experiment import reject_stale_frame, run_fixed
 from openflex_runner_safety import cancel_and_audit, check_stop, validate_selection
 
 
@@ -168,6 +169,7 @@ async def worker(arguments):
     output = arguments.output
     contract = DeliveryContract()
     trace, model_trace, active = [], [], None
+    fault_applied = False
     registry = collaboration()
     connection = registry._get_conn()
     connection.ping()
@@ -216,23 +218,24 @@ async def worker(arguments):
                     for key in list(environment):
                         if key.lower().endswith('_proxy'):
                             environment.pop(key)
-                    process = subprocess.Popen([sys.executable, '-I', str(Path(__file__).resolve()), '--role', 'master',
-                        '--output', str(output), '--task-id', arguments.task_id, '--task', arguments.task],
-                        cwd=ROOT, env=environment, stdout=(output / 'master_stdout.log').open('w'), stderr=subprocess.STDOUT)
-                    message = None
-                    for attempt in range(240):
-                        message = pubsub.get_message(timeout=0.1)
-                        if message and message['type'] == 'message':
-                            break
-                        if process.poll() is not None:
-                            raise RuntimeError('Master exited before dispatch; inspect master_stdout.log')
-                        await asyncio.sleep(0.15)
-                    if not message or message['type'] != 'message':
-                        raise TimeoutError('No model-planned subtask received via actual Redis pub/sub')
-                    subtask = json.loads(message['data'])
-                    if subtask.get('task_id') != arguments.task_id:
-                        raise RuntimeError('Unexpected task ID on isolated delivery channel')
-                    save(output / 'worker_received_subtask.json', subtask)
+                    if arguments.policy == 'model':
+                        process = subprocess.Popen([sys.executable, '-I', str(Path(__file__).resolve()), '--role', 'master',
+                            '--output', str(output), '--task-id', arguments.task_id, '--task', arguments.task],
+                            cwd=ROOT, env=environment, stdout=(output / 'master_stdout.log').open('w'), stderr=subprocess.STDOUT)
+                        message = None
+                        for attempt in range(240):
+                            message = pubsub.get_message(timeout=0.1)
+                            if message and message['type'] == 'message':
+                                break
+                            if process.poll() is not None:
+                                raise RuntimeError('Master exited before dispatch; inspect master_stdout.log')
+                            await asyncio.sleep(0.15)
+                        if not message or message['type'] != 'message':
+                            raise TimeoutError('No model-planned subtask received via actual Redis pub/sub')
+                        subtask = json.loads(message['data'])
+                        if subtask.get('task_id') != arguments.task_id:
+                            raise RuntimeError('Unexpected task ID on isolated delivery channel')
+                        save(output / 'worker_received_subtask.json', subtask)
 
                     async def call_mcp(name, parameters):
                         response = await session.call_tool(name, parameters)
@@ -244,7 +247,7 @@ async def worker(arguments):
                         return response.structuredContent or json.loads(next(block.text for block in response.content if block.type == 'text'))
 
                     async def execute(name, parameters):
-                        nonlocal active
+                        nonlocal active, fault_applied
                         check_stop(output)
                         validate_selection(tools, name, parameters)
                         try:
@@ -264,6 +267,14 @@ async def worker(arguments):
                         response = await call_mcp(name, backend)
                         raw = extract(response)
                         image_blocks = [block for block in response.content if block.type == 'image']
+                        if name == 'observe_scene' and arguments.inject_stale_once and not fault_applied:
+                            rejected = reject_stale_frame(raw, len(image_blocks))
+                            fault_applied = True
+                            trace.append({'time': datetime.now().astimezone().isoformat(), 'selected_tool': name,
+                                'model_arguments': parameters, 'backend_arguments': backend, 'raw_result': rejected,
+                                'pre_injection_camera_status': 'fresh', 'image_count': 0})
+                            save(output / 'tool_trace.json', trace)
+                            return CallToolResult(content=[TextContent(type='text', text=json.dumps(rejected))])
                         trace.append({'time': datetime.now().astimezone().isoformat(), 'selected_tool': name,
                             'model_arguments': parameters, 'backend_arguments': backend, 'raw_result': raw,
                             'image_count': len(image_blocks)})
@@ -276,7 +287,7 @@ async def worker(arguments):
                                 raw = extract(await call_mcp('get_skill_result', {'request_id': active}))
                             trace[-1]['terminal_result'] = raw
                             save(output / 'tool_trace.json', trace)
-                            if raw.get('status') in ('running', 'unknown'):
+                            if raw.get('status') not in ('succeeded', 'failed', 'timed_out', 'canceled') or raw.get('stopped_confirmed') is not True:
                                 raise RuntimeError('Unknown terminal state: hold same request ID; do not retry')
                             active = None
                         contract.record(name, parameters, raw, len(image_blocks))
@@ -287,6 +298,14 @@ async def worker(arguments):
                         else:
                             compact = terminal_summary(raw) if name in MOTION_TOOLS else state_summary(raw)
                         return CallToolResult(content=[TextContent(type='text', text=json.dumps(compact, ensure_ascii=False)), *image_blocks])
+
+                    if arguments.policy == 'fixed':
+                        result = await run_fixed(execute, contract)
+                        result.update(task_id=arguments.task_id, physical_verification=False,
+                            master_worker_redis=False, final_measured_completion=contract.completed,
+                            passed=contract.completed, policy='fixed',
+                            scope='fixed_dispatch_same_MCP_ROS_MuJoCo_skills_NOT_PHYSICAL')
+                        return result
 
                     model = OpenAIServerModel(model_id=MODEL, api_base='http://127.0.0.1:4567/v1/', api_key='EMPTY',
                         support_tool_calls=True, profiling=False, max_tokens=256,
@@ -299,9 +318,12 @@ async def worker(arguments):
                         history = [item for index, item in enumerate(history)
                             if not (isinstance(item.get('content'), list) and index < len(history) - 4)]
                         kwargs['messages'] = history
+                        inference_started = time.monotonic()
                         answer = model(**kwargs)
+                        inference_seconds = time.monotonic() - inference_started
                         check_stop(output)
                         model_trace.append({'time': datetime.now().astimezone().isoformat(), 'messages': history,
+                            'inference_seconds': inference_seconds,
                             'content': answer.content, 'tool_calls': [{'name': call.function.name,
                                 'arguments': call.function.arguments, 'id': call.id} for call in answer.tool_calls or []],
                             'dispatch_policy': 'first_model_call_only_discard_rest_then_reinfer_from_actual_feedback',
@@ -342,8 +364,9 @@ Do not imagine updates. Only the external final measured completion verifier can
             result['status'] = 'interrupted'
     finally:
         save(output / 'worker_result.json', result)
-        registry.send('openflex_to_RoboOS', json.dumps({'robot_name': 'openflex', 'task_id': arguments.task_id,
-            'subtask_handle': arguments.task, 'subtask_result': result}))
+        if arguments.policy == 'model':
+            registry.send('openflex_to_RoboOS', json.dumps({'robot_name': 'openflex', 'task_id': arguments.task_id,
+                'subtask_handle': arguments.task, 'subtask_result': result}))
         if process is not None:
             for attempt in range(40):
                 if process.poll() is not None:
@@ -358,8 +381,12 @@ Do not imagine updates. Only the external final measured completion verifier can
     master_result = output / 'master_received_result.json'
     received = json.loads(master_result.read_text()) if master_result.exists() else {}
     result['passed'] = bool(result.get('success') and result.get('final_measured_completion')
-        and received.get('subtask_result', {}).get('success') and (output / 'master_plan.json').exists())
-    result['scope'] = 'actual_RoboOS_GlobalAgent_ToolCallingAgent_Redis_MCP_ROS_MuJoCo_NOT_PHYSICAL'
+        and (arguments.policy == 'fixed' or (received.get('subtask_result', {}).get('success')
+        and (output / 'master_plan.json').exists())))
+    result['policy'] = arguments.policy
+    result['fault_applied'] = fault_applied
+    result['scope'] = ('actual_RoboOS_GlobalAgent_ToolCallingAgent_Redis_MCP_ROS_MuJoCo_NOT_PHYSICAL'
+                       if arguments.policy == 'model' else 'fixed_dispatch_same_MCP_ROS_MuJoCo_skills_NOT_PHYSICAL')
     return result
 
 
@@ -370,6 +397,8 @@ def main():
     parser.add_argument('--task-id')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--execute-isolated-simulation', action='store_true')
+    parser.add_argument('--policy', choices=['model', 'fixed'], default='model')
+    parser.add_argument('--inject-stale-once', action='store_true')
     arguments = parser.parse_args()
     if arguments.role == 'master':
         if arguments.output is None or arguments.task_id is None:
@@ -378,11 +407,14 @@ def main():
         return
     if not arguments.execute_isolated_simulation:
         raise RuntimeError('Explicit --execute-isolated-simulation required; this runs real simulation motion')
+    if arguments.inject_stale_once and arguments.policy != 'model':
+        parser.error('The one-shot observation fault is only for the model recovery trial')
     arguments.task_id = arguments.task_id or datetime.now().strftime('roboos_delivery_%Y%m%d_%H%M%S')
     arguments.output = arguments.output or ROOT / 'local_dependencies/openflex_roboos/runs' / arguments.task_id
     arguments.output.mkdir(parents=True, exist_ok=False)
     save(arguments.output / 'manifest.json', {'task': arguments.task, 'task_id': arguments.task_id,
-        'ros_domain': 83, 'model': MODEL, 'roboos_revision': subprocess.check_output(
+        'ros_domain': 83, 'model': MODEL if arguments.policy == 'model' else None, 'policy': arguments.policy,
+        'inject_stale_once': arguments.inject_stale_once, 'roboos_revision': subprocess.check_output(
             ['git', '-C', str(ROOT / 'local_dependencies/RoboOS'), 'rev-parse', 'HEAD'], text=True).strip(),
         'adapter_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'worker_patch_sha256': hashlib.sha256((ROOT / 'scripts/patches/roboos-verified-worker.patch').read_bytes()).hexdigest(),

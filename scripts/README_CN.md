@@ -31,6 +31,11 @@
 | `run_openflex_roboos_redis.sh` | 只启动本机 Redis 16383，不覆盖系统 6379，不持久化 |
 | `run_openflex_roboos_delivery.py` | 真实 Master／Worker／Redis／MCP 闭环；显式运动开关，逐次模型决策，独立终态验证 |
 | `run_openflex_live_viewer.sh` | 桌面 MuJoCo 只读实时镜像，不另起物理循环或控制任务 |
+| `openflex_runtime.py` | 统一 status／start／run／stop；显式隔离仿真启用，先停稳再关服务，不自动重置商品 |
+| `run_openflex_recording.sh` | EGL 录制同时间戳 ROS 实测状态，独立于桌面开关；逐帧日志和可解码／非黑帧验证 |
+| `view_openflex_model_result.py` | 桌面显示一次真实视觉描述及指定任务模型选技／后端反馈；只读，视觉文字不等于身份验证 |
+| `openflex_delivery_protocol.json` | 三条件、固定分母、无自动重试的小规模评测协议 |
+| `evaluate_openflex_delivery.py` | 先冻结源码／权重／协议，再采集同义指令、一次过期观察、同技能固定对照及录像 |
 
 部署、端口、服务复用和验收记录分别见 `ROBOBRAIN25_GGUF_LOCAL_CN.md`、
 `ROBOOS_GGUF_INTEGRATION_CN.md`、`OPENFLEX_ROBOOS_READONLY_CN.md`。
@@ -39,6 +44,18 @@
 
 `setup_robobrain25_gguf.py`、下载与原精度验证等辅助脚本保留供模型环境维护，
 当前已验证路线仍是 GGUF，不因脚本存在便声称其他部署路线可用。
+
+## 离线研究与商超资产审计
+
+`audit_openflex_research_assets.py` 用SQLite只读事务、XML及Office文档解析核验库存、模型覆盖与中期来源；
+加 `--render` 仅在独立进程执行 `mj_forward` 生成静态截图，不执行 `mj_step`、ROS或机器人控制。
+输出必须为新目录，禁止输出到原商超资产或中期目录；不会把不匹配的中文SKU猜成YCB模型。
+相关论文与算法研究定位见 `thesis/商超轮臂机器人_研究主线与算法实验方案_CN.md`。
+
+```bash
+MUJOCO_GL=egl python3 scripts/audit_openflex_research_assets.py --output local_dependencies/openflex_thesis/NEW_RESEARCH_AUDIT --render
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/tests/test_openflex_research_assets.py
+```
 
 ## 执行底座开发与诊断
 
@@ -62,16 +79,22 @@ ROS 脚本默认复用 `/home/wgb/openflex_shop/openflex_ws/install_v2`。
 只规划工具的构建、参数与限制见 experiments 包 README。当前碰撞与接入待办见
 `SAFETY_AND_TODO_CN.md`，不要为演示关闭碰撞或绕过夹持验证。
 
-## 固定流程对照：仅保留一个取送入口
+## 固定流程与对照边界
 
 `run_thesis_moveit_mission.sh` 复用旧状态机和已有执行模块，**会发送仿真运动目标**。
 仅在相应安全检查完成后人工运行；不与 RoboOS Worker、旧自动客户端或实机节点混用。
 需要可视化时由该脚本传入 `enable_viewer:=true` 并设置合适渲染环境，不再维护重复脚本。
 
-它用于固定流程对照，不是当前默认启动方式，成功也不能证明大模型自主技能调度。
+它是旧执行流程参考，不是当前默认启动方式，成功也不能证明大模型自主技能调度。
+新版冻结实验的 `--policy fixed` 在同一 MCP 调用与验证入口内采用固定技能顺序，
+与模型组共用安全门控和完成判定；不是运行旧脚本后将两个不同底层系统混作公平对照。
+具体协议、故障注入边界和原始批次见根目录 `OPENFLEX_EVALUATION_CN.md`。
 
 ## 回归与清理
 
+- 当前UNKNOWN运行现场不可清理或重启，先见根目录安全说明S0。停稳等待修复仅离线验证，未部署到现场。
+- `tests/test_openflex_stop_audit.py`：过期/运动重置停稳窗口、有界超时和不吞其他错误；不提供现场解锁功能。
+- `analyze_openflex_runtime.py`：只读分解原任务日志，区别轨迹区间、运动外时间和缺失的推理计时。
 - `tests/test_openflex_readonly_bridge.py`：状态时效、未知处理、图像和工具白名单。
 - `tests/test_roboos_gguf_integration.py`：模型客户端纯接口回归，无需启动模型。
 - `clean_generated_artifacts.sh`：只清理其声明的可再生缓存／日志，不删除模型、地图和实验数据。

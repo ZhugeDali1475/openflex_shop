@@ -26,6 +26,7 @@ for directory in ['scripts', 'openflex_ws/src/openflex_thesis/openflex_roboos_br
                   'openflex_ws/src/openflex_thesis/openflex_thesis_mujoco']:
     sys.path.insert(0, str(ROOT / directory))
 from check_openflex_manipulation_safety import SafetyProbe
+from openflex_motion_profile import scaling_for_phase, selected_profile
 from openflex_roboos_bridge.navigation_guard import NavigationGuard
 from openflex_roboos_bridge.scene_registry import load_scene_registry
 from openflex_roboos_bridge.trajectory_guard import sample_joint_path
@@ -62,7 +63,8 @@ class PlaceProbe(SafetyProbe):
         report = {'trajectory_execution': False, 'physical_verification': False,
                   'model_sha256': hashlib.sha256(model_path.read_bytes()).hexdigest(),
                   'measured_start_state': measured, 'release_center_map': release,
-                  'retreat_only': retreat, 'candidates': [], 'phases': [], 'place_paths_valid': False}
+                  'retreat_only': retreat, 'candidates': [], 'phases': [], 'place_paths_valid': False,
+                  'motion_profile': selected_profile()}
         guard = NavigationGuard(model_path)
         for sample_index in range(8):
             rclpy.spin_once(self, timeout_sec=0.02)
@@ -233,7 +235,8 @@ class PlaceProbe(SafetyProbe):
                 request.max_step, request.jump_threshold = 0.005, 2.0
                 request.revolute_jump_threshold, request.prismatic_jump_threshold = 0.15, 0.015
                 request.avoid_collisions = True
-                request.max_velocity_scaling_factor = request.max_acceleration_scaling_factor = 0.05
+                velocity, acceleration = scaling_for_phase('postplace_clearance')
+                request.max_velocity_scaling_factor, request.max_acceleration_scaling_factor = velocity, acceleration
                 start_position = guard.data.xpos[hand].copy()
                 backwards = -guard.data.xmat[hand].reshape(3, 3)[:, 2] * 0.10
                 quaternion = guard.data.xquat[hand].copy()
@@ -277,7 +280,8 @@ class PlaceProbe(SafetyProbe):
                 motion = request.motion_plan_request
                 motion.group_name, motion.start_state = 'right_arm_with_lift', deepcopy(state)
                 motion.allowed_planning_time, motion.num_planning_attempts = 8.0, 3
-                motion.max_velocity_scaling_factor = motion.max_acceleration_scaling_factor = 0.05
+                velocity, acceleration = scaling_for_phase(phase_name)
+                motion.max_velocity_scaling_factor, motion.max_acceleration_scaling_factor = velocity, acceleration
                 motion.goal_constraints = [joint_goal_constraints(positions)]
                 response = self.call(planner, request).motion_plan_response
                 phase = {'phase': phase_name, 'planning_response': message_to_ordereddict(response),

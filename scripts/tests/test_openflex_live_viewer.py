@@ -12,6 +12,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import view_openflex_live_sim as live
 
 
+@pytest.mark.parametrize('value', ['0', 'nan', 'inf', '61', '-1'])
+def test_invalid_viewer_rate_cannot_disable_freshness_display(value):
+    with pytest.raises(ValueError):
+        live.viewer_period(value)
+
+
+def test_viewer_uses_bounded_frame_budget_not_unlimited_busy_rendering():
+    assert live.viewer_period('30') == 1 / 30
+
+
 def diagnostic(second):
     return {'source': 'mujoco_diagnostic_only_NOT_PHYSICAL', 'stamp': {'sec': second, 'nanosec': 0},
         'joint_state': {'names': [], 'position_rad_or_m': []},
