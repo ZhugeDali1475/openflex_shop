@@ -23,13 +23,6 @@ import math
 from typing import Mapping, Optional, Sequence, Tuple
 
 from .competition_registry import TARGET_OBJECT_ID
-from .target_resolution_contract import (
-    TargetResolutionError,
-    VisualCandidate,
-    authorize_grasp,
-    resolve_unique_red_candidate,
-)
-
 
 DEFAULT_MIN_CONFIDENCE = 0.8
 DEFAULT_MIN_BLOB_PIXELS = 24
@@ -118,6 +111,7 @@ class SearchResolution:
     selection_reason: str
     selected_object_id: Optional[str]
     selected_candidate_id: Optional[str]
+    selected_perception_track_id: Optional[str]
     candidates: Tuple[BlobCandidate, ...]
     region: RegionVerdict
     frame_sha256: str
@@ -132,6 +126,7 @@ class SearchResolution:
             "selection_reason": self.selection_reason,
             "selected_object_id": self.selected_object_id,
             "selected_candidate_id": self.selected_candidate_id,
+            "selected_perception_track_id": self.selected_perception_track_id,
             "candidates": [candidate.__dict__ for candidate in self.candidates],
             "region": self.region.__dict__,
             "frame_sha256": self.frame_sha256,
@@ -365,29 +360,31 @@ def analyze_frame(rgb, depth_mm, intrinsics: CameraIntrinsics, camera_pose: Came
         "max_aspect_ratio": max_aspect_ratio,
         "slot_verdict": region.state,
         "pose_source": "image_depth_backprojection_map_frame",
-        "yaw_source": "registered_slot_geometry_not_perception",
+        "yaw_source": "registered_slot_geometry_not_perception" if expected_point_map is not None
+                      else "unobserved_default_zero_not_object_orientation",
     }
     return FrameAnalysis(candidates=candidates, region=region, frame_sha256=frame_sha,
                          model_output=model_output)
 
 
 def resolve_search_target(analysis: FrameAnalysis, query: str, *,
-                          color: str = "red", object_id: str = TARGET_OBJECT_ID,
+                          color: str = "red", object_id: Optional[str] = TARGET_OBJECT_ID,
                           min_confidence: float = DEFAULT_MIN_CONFIDENCE,
                           slot_radius_px: float = DEFAULT_SLOT_RADIUS_PX,
                           depth_tolerance_m: float = DEFAULT_SLOT_DEPTH_TOLERANCE_M) -> SearchResolution:
     """Resolve a query into an authorized target or a named fail-closed refusal.
 
-    Only candidates that sit in the registered slot (pixel-near the projected
-    slot and depth-consistent with it) can authorise a grasp; saturated fixture
-    decoration elsewhere in the frame is ignored rather than treated as a
-    candidate object.
+    When a registered expected point is supplied, retain the legacy slot-bound
+    behavior for regression comparisons.  Without it, resolve across the full
+    frame: the result carries a visual candidate/track identity and never a
+    MuJoCo object id.  Online search must use this no-slot mode.
     """
 
     def failed(reason: str, detail: str) -> SearchResolution:
         return SearchResolution(query=query, requested_color=color, outcome="failed", reason=reason,
                                 selection_reason=detail, selected_object_id=None,
-                                selected_candidate_id=None, candidates=analysis.candidates,
+                                selected_candidate_id=None, selected_perception_track_id=None,
+                                candidates=analysis.candidates,
                                 region=analysis.region, frame_sha256=analysis.frame_sha256,
                                 model_output=dict(analysis.model_output))
 
@@ -405,12 +402,15 @@ def resolve_search_target(analysis: FrameAnalysis, query: str, *,
                 return False
         return True
 
+    slot_constrained = expected_px is not None or expected_depth is not None
     matching = [candidate for candidate in analysis.candidates
                 if candidate.color == color and candidate.visible
-                and candidate.confidence >= min_confidence and at_slot(candidate)]
+                and candidate.confidence >= min_confidence
+                and (not slot_constrained or at_slot(candidate))]
     foreign = [candidate for candidate in analysis.candidates
                if candidate.color != color and candidate.visible
-               and candidate.confidence >= min_confidence and at_slot(candidate)]
+               and candidate.confidence >= min_confidence
+               and (not slot_constrained or at_slot(candidate))]
 
     if len(matching) > 1:
         return failed("ambiguous_candidates",
@@ -431,22 +431,25 @@ def resolve_search_target(analysis: FrameAnalysis, query: str, *,
         return failed("target_absent", "no target-colour candidate and the slot is not occluded")
 
     candidate = matching[0]
-    visual = VisualCandidate(candidate_id=candidate.candidate_id, color=candidate.color,
-                             confidence=candidate.confidence, depth_m=candidate.depth_m,
-                             pose_xyzyaw=candidate.pose_xyzyaw, visible=True,
-                             resolved_object_id=object_id if analysis.region.state == "target" else None)
-    try:
-        selected = resolve_unique_red_candidate([visual], min_confidence=min_confidence)
-        authorization = authorize_grasp(selected, identity_confirmed=True,
-                                        depth_confirmed=selected.depth_m is not None,
-                                        pose_confirmed=selected.pose_xyzyaw is not None)
-    except TargetResolutionError as error:
-        return failed("not_authorizable", str(error))
+    if candidate.depth_m is None or candidate.pose_xyzyaw is None:
+        return failed("not_authorizable", "candidate lacks RGB-D depth or map pose")
+    # A frame-local observation token is not a simulator identity and is not a
+    # substitute for temporal multi-frame tracking.  The execution layer must
+    # persist/track this observation before requesting a grasp.
+    perception_track_id = f"track_{analysis.frame_sha256[:12]}_{candidate.candidate_id}"
+    selected_object_id = object_id if slot_constrained and object_id is not None else None
     return SearchResolution(query=query, requested_color=color, outcome="authorized",
                             reason="target_visible",
-                            selection_reason=("unique visible target-colour candidate at the registered slot; "
-                                              "depth and pose confirmed from the live frame"),
-                            selected_object_id=authorization.object_id,
-                            selected_candidate_id=authorization.candidate_id,
+                            selection_reason=("unique visible target-colour candidate in the full frame; "
+                                              "depth and pose confirmed from the live frame"
+                                              if not slot_constrained else
+                                              "unique candidate at legacy registered slot; not valid as unknown-slot evidence"),
+                            selected_object_id=selected_object_id,
+                            selected_candidate_id=candidate.candidate_id,
+                            selected_perception_track_id=perception_track_id,
                             candidates=analysis.candidates, region=analysis.region,
-                            frame_sha256=analysis.frame_sha256, model_output=dict(analysis.model_output))
+                            frame_sha256=analysis.frame_sha256,
+                            model_output={**dict(analysis.model_output),
+                                          "identity_source": "visual_frame_candidate",
+                                          "mujoco_object_id_used": False,
+                                          "legacy_slot_binding": slot_constrained})

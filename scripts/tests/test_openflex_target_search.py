@@ -58,6 +58,20 @@ def test_visible_target_is_resolved_and_authorized():
     assert resolution.to_dict()["selection_basis"] == "image_derived_candidates_not_oracle_object_id"
 
 
+def test_unknown_slot_search_scans_full_frame_and_returns_visual_identity_only():
+    rgb = np.full((HEIGHT, WIDTH, 3), GREY, dtype=np.uint8)
+    depth = np.full((HEIGHT, WIDTH), 2400, dtype=np.uint16)
+    # Deliberately away from the old registered slot at (32, 24).
+    rgb[5:15, 45:55] = RED
+    depth[5:15, 45:55] = 1800
+    analysis = analyze_frame(rgb, depth, INTRINSICS, CAMERA)
+    resolution = resolve_search_target(analysis, "红色商品")
+    assert resolution.outcome == "authorized"
+    assert resolution.selected_object_id is None
+    assert resolution.selected_perception_track_id.startswith("track_")
+    assert resolution.model_output["mujoco_object_id_used"] is False
+
+
 def test_occluded_slot_fails_closed():
     rgb, depth = frame(blobs=((GREY, 0),), slot_depth_mm=1500)  # nearer surface, no red
     analysis = analyze_frame(rgb, depth, INTRINSICS, CAMERA, expected_point_map=SLOT)

@@ -98,13 +98,7 @@ class SearchSkill:
         return CameraPose((translation.x, translation.y, translation.z),
                           (rotation.x, rotation.y, rotation.z, rotation.w))
 
-    def _expected_slot(self, object_id):
-        objects = self.node.registry["objects"]
-        if object_id not in objects:
-            raise RuntimeError(f"object {object_id} is not registered for this scene")
-        return tuple(objects[object_id]["nominal_pose_xyzyaw"][:3])
-
-    def analyze_once(self, query, object_id, color):
+    def analyze_once(self, query, color):
         """Capture one frame and resolve it; returns (resolution, artifacts)."""
         color_message, depth_message, info_message = self._fresh_frame()
         rgb = np.frombuffer(color_message.data, dtype=np.uint8).reshape(
@@ -113,9 +107,8 @@ class SearchSkill:
             depth_message.height, depth_message.width).copy()
         intrinsics = CameraIntrinsics.from_k(info_message.width, info_message.height, list(info_message.k))
         pose = self._camera_pose()
-        analysis = analyze_frame(rgb, depth, intrinsics, pose,
-                                 expected_point_map=self._expected_slot(object_id), color=color)
-        resolution = resolve_search_target(analysis, query, color=color, object_id=object_id)
+        analysis = analyze_frame(rgb, depth, intrinsics, pose, color=color)
+        resolution = resolve_search_target(analysis, query, color=color, object_id=None)
         artifacts = {"rgb": rgb, "depth": depth, "analysis": analysis}
         return resolution, artifacts
 
@@ -154,7 +147,6 @@ class SearchSkill:
 
     def execute(self, arguments):
         request_id = arguments["request_id"]
-        object_id = next(iter(self.node.registry["objects"]))
         deadline = time.monotonic() + float(arguments["timeout_sec"])
         directory = self.runs / f"search_{request_id}"
         status, success, detail, stopped = "failed", False, "", False
@@ -163,7 +155,7 @@ class SearchSkill:
             while attempts < 3:
                 attempts += 1
                 try:
-                    resolution, artifacts = self.analyze_once(arguments["query"], object_id, arguments["color"])
+                    resolution, artifacts = self.analyze_once(arguments["query"], arguments["color"])
                 except Exception as error:
                     detail = f"observation {attempts} failed: {error}"
                     time.sleep(0.4)
@@ -182,18 +174,11 @@ class SearchSkill:
                 status, detail = "timed_out", "deadline reached before grasp"
                 stopped = self.node.stopped()
             else:
-                outcome = self.node.manipulation.execute(
-                    {"request_id": request_id, "object_id": object_id,
-                     "timeout_sec": max(1.0, deadline - time.monotonic())}, finalize=False)
-                attached = self.node.sample("diagnostic").get("attached_arm") is not None
-                success = bool(outcome.get("success") and outcome.get("stopped_confirmed") and attached)
-                stopped = bool(outcome.get("stopped_confirmed")) or self.node.stopped()
-                status = "succeeded" if success else "failed"
-                detail = outcome.get("detail", "") or ("grasp reported success but attachment was not verified"
-                                                       if not attached else "")
-                self.node.store.event(request_id, "search_grasp", {
-                    "grasp_request_id": request_id, "outcome": outcome, "attached_after_grasp": attached})
-                record = dict(record or {}, grasp=outcome, attachment_verified=attached)
+                # The visual observation is not yet wired through the grasp
+                # planner.  Never fall back to the registered MuJoCo object id.
+                status = "failed"
+                detail = "visual candidate found, but visual-observation grasp input is not integrated; no motion issued"
+                stopped = self.node.stopped()
         except Exception as error:
             detail = str(error)
             try:
