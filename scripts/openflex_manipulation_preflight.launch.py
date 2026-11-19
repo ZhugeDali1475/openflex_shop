@@ -2,7 +2,12 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
+import os
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from openflex_preflight_config import resolve_shelf_scene
 
 
 def generate_launch_description():
@@ -10,7 +15,10 @@ def generate_launch_description():
     thesis = root / "openflex_ws/src/openflex_thesis"
     tc_config = str(thesis / "openflex_tc_wam/config/tc_wam.yaml")
     sim_config = str(thesis / "openflex_thesis_mujoco/config/mujoco.yaml")
-    scene = str(thesis / "openflex_thesis_mujoco/config/sim_shelf_scene.yaml")
+    scene = resolve_shelf_scene(
+        default_scene=thesis / "openflex_thesis_mujoco/config/sim_shelf_scene.yaml",
+        environment=os.environ,
+    )
     urdf = Path(get_package_share_directory("openarmx_integrated_description")) / "urdf/openarmx_integrated_robot.urdf.xacro"
     configuration = (
         MoveItConfigsBuilder("openarmx_integrated", package_name="openarmx_integrated_moveit_config")
@@ -36,6 +44,9 @@ def generate_launch_description():
              parameters=[sim_config, {"use_sim_time": True}]),
         Node(package="openflex_tc_wam", executable="moveit_evaluator", name="moveit_evaluator", output="screen",
              parameters=[tc_config, {"use_sim_time": True, "shelf_scene_file": scene, "require_calibrated_scene": False}]),
+        # Standoff window must clear the protruding gondola base level in the
+        # single-red fixture; a 0.60 m standoff put the chassis into the shelf.
         Node(package="openflex_tc_wam", executable="tc_wam_server", name="tc_wam_server", output="screen",
-             parameters=[tc_config, {"use_sim_time": True, "distance_step_m": 0.20, "lateral_step_m": 0.15}]),
+             parameters=[tc_config, {"use_sim_time": True, "distance_min_m": 0.70,
+                                     "distance_step_m": 0.10, "lateral_step_m": 0.15}]),
     ])

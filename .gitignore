@@ -23,6 +23,8 @@
 # ROS/colcon build products
 /build/
 /install/
+/build_v2/
+/install_v2/
 /log/
 /openflex_ws/build/
 /openflex_ws/build_*/

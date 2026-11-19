@@ -1,6 +1,9 @@
 """Exclusive, fail-closed velocity mux for Nav2, ACT and recovery."""
 
 from copy import deepcopy
+import json
+import time
+import threading
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -21,6 +24,11 @@ from .arbiter import (
     Velocity,
     VelocityArbiter,
 )
+
+# A locked base stays healthy while the measured twist is zero. Long arm trajectories
+# (tens of seconds) must not be aborted by a momentary telemetry hiccup, but a base
+# whose measured velocity is persistently unknown still fails closed.
+CONTROL_FEED_STALE_SEC = 2.0
 
 
 class VelocityArbiterNode(Node):
@@ -122,6 +130,20 @@ class VelocityArbiterNode(Node):
             raise ValueError("publish_rate_hz must be positive")
         self.create_timer(1.0 / rate, self.on_timer)
         self.publish_mode("startup_hold")
+        # The mode feed is a live exclusivity heartbeat: consumers reject control when
+        # it goes stale on the wall clock. A sim-clock stall (long probe, CPU spike)
+        # would otherwise starve the timer and abort an in-flight MoveIt trajectory,
+        # so republish the same mode from a wall-clock watchdog.
+        self.mode_watchdog = threading.Thread(target=self.mode_watchdog_loop, daemon=True)
+        self.mode_watchdog.start()
+
+    def mode_watchdog_loop(self) -> None:
+        while rclpy.ok():
+            time.sleep(0.2)
+            try:
+                self.publish_mode(self.last_mode_reason)
+            except Exception as error:  # pragma: no cover - defensive only
+                self.get_logger().error(f"control_mode watchdog republish failed: {error}")
 
     def now_sec(self) -> float:
         return self.get_clock().now().nanoseconds * 1.0e-9
@@ -133,8 +155,11 @@ class VelocityArbiterNode(Node):
 
     def on_odometry(self, msg: Odometry) -> None:
         twist = msg.twist.twist
+        now_sec = self.now_sec()
+        if self.arbiter.last_measured_sec is not None and now_sec - self.arbiter.last_measured_sec > 0.3:
+            self.get_logger().warn(f"odometry feed gap {now_sec - self.arbiter.last_measured_sec:.3f}s of sim time")
         self.arbiter.update_measured_velocity(
-            Velocity(twist.linear.x, twist.linear.y, twist.angular.z), self.now_sec()
+            Velocity(twist.linear.x, twist.linear.y, twist.angular.z), now_sec
         )
 
     def on_affordance(self, msg: AffordanceState) -> None:
@@ -190,6 +215,13 @@ class VelocityArbiterNode(Node):
         )
 
     def publish_mode(self, reason: str) -> None:
+        wall_now = time.monotonic()
+        previous = getattr(self, 'last_mode_publish_wall', None)
+        if previous is not None and wall_now - previous > 0.3:
+            self.get_logger().warn(
+                f"control_mode publication stalled {wall_now - previous:.3f}s of wall time; "
+                f"sim clock {self.now_sec():.3f}, reason={reason}")
+        self.last_mode_publish_wall = wall_now
         self.last_mode_publish_sec = self.now_sec()
         self.last_mode_reason = reason
         msg = ControlMode()
@@ -201,9 +233,16 @@ class VelocityArbiterNode(Node):
         if self.arbiter.mode == ACT:
             msg.inputs_healthy = self.arbiter.act_safety_valid()
         elif self.arbiter.mode in (MOVEIT, PLACE):
-            msg.inputs_healthy = self.arbiter.confirmed_stopped(self.now_sec())
+            msg.inputs_healthy = self.arbiter.confirmed_stopped(self.now_sec(), stale_sec=CONTROL_FEED_STALE_SEC)
         else:
             msg.inputs_healthy = True
+        signature = (int(msg.mode), int(msg.epoch), bool(msg.inputs_healthy))
+        if signature != getattr(self, 'last_mode_signature', None):
+            self.get_logger().warn(f"control_mode -> mode={msg.mode} epoch={msg.epoch} "
+                                   f"inputs_healthy={msg.inputs_healthy} reason={reason}"
+                                   + ("" if msg.inputs_healthy else " "
+                                      + json.dumps(self.arbiter.stop_diagnostics(self.now_sec()))))
+            self.last_mode_signature = signature
         self.mode_publisher.publish(msg)
         self.last_published_epoch = self.arbiter.epoch
 

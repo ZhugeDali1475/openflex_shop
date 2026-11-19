@@ -15,6 +15,22 @@ from std_msgs.msg import String
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_VIEWER_SCENE = ROOT / 'local_dependencies/openflex_roboos/readonly_scene.xml'
+
+
+def viewer_scene_path():
+    """Mirror the scene the isolated simulation actually loaded.
+
+    Falls back to the packaged static viewer scene when no explicit runtime
+    scene is configured, so the GUI never silently renders a different world.
+    """
+    configured = os.environ.get('OPENFLEX_SIM_SCENE_MODEL')
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.exists():
+            raise RuntimeError(f'OPENFLEX_SIM_SCENE_MODEL does not exist: {path}')
+        return path
+    return DEFAULT_VIEWER_SCENE
 
 
 def viewer_period(value):
@@ -27,7 +43,7 @@ def viewer_period(value):
 class LiveView(Node):
     def __init__(self):
         super().__init__('openflex_live_readonly_viewer', start_parameter_services=False)
-        self.model = mujoco.MjModel.from_xml_path(str(ROOT / 'local_dependencies/openflex_roboos/readonly_scene.xml'))
+        self.model = mujoco.MjModel.from_xml_path(str(viewer_scene_path()))
         self.data = mujoco.MjData(self.model)
         self.odometry = {}
         self.frames = {}
@@ -98,8 +114,10 @@ def main():
     node = LiveView()
     try:
         with mujoco.viewer.launch_passive(node.model, node.data, show_left_ui=False, show_right_ui=False) as viewer:
-            viewer.cam.lookat[:] = [0.0, -0.15, 0.75]
-            viewer.cam.distance = 3.8
+            center = node.model.stat.center
+            extent = float(node.model.stat.extent)
+            viewer.cam.lookat[:] = [float(center[0]), float(center[1]), float(center[2])]
+            viewer.cam.distance = max(3.8, 2.6 * extent)
             viewer.cam.azimuth = 135
             viewer.cam.elevation = -25
             while viewer.is_running() and rclpy.ok():

@@ -21,6 +21,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("upstream_model_path", default_value=""),
+            DeclareLaunchArgument("scene_model_path", default_value=""),
             DeclareLaunchArgument("experiment_config", default_value=os.path.join(share, "config", "mujoco.yaml")),
             DeclareLaunchArgument("enable_viewer", default_value="false"),
             DeclareLaunchArgument("publish_rgbd", default_value="true"),
@@ -33,6 +34,7 @@ def generate_launch_description():
                     os.path.join(share, "config", "mujoco.yaml"),
                     {
                         "upstream_model_path": LaunchConfiguration("upstream_model_path"),
+                        "scene_model_path": LaunchConfiguration("scene_model_path"),
                         "enable_viewer": ParameterValue(
                             LaunchConfiguration("enable_viewer"), value_type=bool
                         ),

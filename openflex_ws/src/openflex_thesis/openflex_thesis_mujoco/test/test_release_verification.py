@@ -70,11 +70,13 @@ def bridge_fixture(model, position=TARGET):
 
     data = mujoco.MjData(model)
     bridge = SimpleNamespace(model=model, data=data, lock=threading.RLock(),
+        control_mode_lock=threading.RLock(),
         attached_arm='right', attachment_offset=((0, 0, 0), UPRIGHT),
         pending_place=None, place_status=None, place_status_until=0.0,
         safety_stop=None, trajectories={}, actual_twist=[0.0] * 3, commanded_twist=[0.0] * 3,
         gripper_targets={'left': 0.04, 'right': 0.0}, control_mode=ControlMode(mode=ControlMode.PLACE),
-        control_mode_receipt=time.monotonic(), get_parameter=lambda name: SimpleNamespace(value='thesis_item_01'),
+        control_mode_receipt=time.monotonic(), get_parameter=lambda name: SimpleNamespace(
+            value={'delivery_surface_geom': 'thesis_delivery_top'}.get(name, 'thesis_item_01')),
         _simulation_stamp=lambda: Time(sec=int(data.time)),
         _mujoco_body_pose=MujocoBridgeNode._mujoco_body_pose)
     bridge.object_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'thesis_object')

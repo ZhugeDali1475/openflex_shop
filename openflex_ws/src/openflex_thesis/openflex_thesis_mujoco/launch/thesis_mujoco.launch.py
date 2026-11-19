@@ -24,6 +24,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("upstream_model_path", default_value=""),
+            DeclareLaunchArgument("scene_model_path", default_value=""),
             DeclareLaunchArgument("experiment_config", default_value=sim_config),
             DeclareLaunchArgument("enable_viewer", default_value="false"),
             DeclareLaunchArgument("publish_rgbd", default_value="true"),
@@ -47,6 +48,7 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource(core_launch),
                 launch_arguments={
                     "upstream_model_path": LaunchConfiguration("upstream_model_path"),
+                    "scene_model_path": LaunchConfiguration("scene_model_path"),
                     "enable_viewer": LaunchConfiguration("enable_viewer"),
                     "publish_rgbd": LaunchConfiguration("publish_rgbd"),
                     "experiment_config": LaunchConfiguration("experiment_config"),
@@ -216,7 +218,8 @@ def generate_launch_description():
                 executable="scripted_local_policy",
                 name="scripted_local_alignment_baseline",
                 condition=IfCondition(LaunchConfiguration("start_scripted_policy")),
-                parameters=[sim_config, {"use_sim_time": True}],
+                parameters=[sim_config, LaunchConfiguration("experiment_config"),
+                            {"use_sim_time": True}],
                 output="screen",
             ),
             Node(
@@ -224,7 +227,8 @@ def generate_launch_description():
                 executable="sim_navigation",
                 name="sim_navigation_baseline_not_nav2",
                 condition=IfCondition(LaunchConfiguration("start_sim_navigation")),
-                parameters=[sim_config, {"use_sim_time": True}],
+                parameters=[sim_config, LaunchConfiguration("experiment_config"),
+                            {"use_sim_time": True}],
                 output="screen",
             ),
             Node(

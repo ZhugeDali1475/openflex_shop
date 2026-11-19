@@ -24,7 +24,11 @@ from openflex_thesis_msgs.msg import (
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.executors import (
+    ExternalShutdownException,
+    MultiThreadedExecutor,
+    SingleThreadedExecutor,
+)
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
@@ -96,10 +100,15 @@ class MujocoBridgeNode(Node):
                 "python3 -m pip install 'mujoco>=3.3,<4'"
             )
         self._declare_parameters()
-        model_path = build_thesis_model(
-            str(self.get_parameter("upstream_model_path").value),
-            str(self.get_parameter("derived_model_path").value),
-        )
+        configured_scene = str(self.get_parameter("scene_model_path").value).strip()
+        if configured_scene:
+            from pathlib import Path
+            model_path = Path(configured_scene).expanduser().resolve(strict=True)
+        else:
+            model_path = build_thesis_model(
+                str(self.get_parameter("upstream_model_path").value),
+                str(self.get_parameter("derived_model_path").value),
+            )
         self.model = mujoco.MjModel.from_xml_path(str(model_path))
         self.model.opt.timestep = float(self.get_parameter("timestep_sec").value)
         self.data = mujoco.MjData(self.model)
@@ -126,9 +135,26 @@ class MujocoBridgeNode(Node):
         self.place_status: Optional[PlaceStatus] = None
         self.place_status_until = 0.0
         self.pending_place = None
+        # The control-mode heartbeat is a 0.5 s wall-clock exclusivity gate, so
+        # its receipt must not be starved by the simulation/lock churn that the
+        # rest of the bridge generates.  It therefore has its own lock, its own
+        # dedicated subscriber node and its own single-threaded executor thread
+        # (see ``ControlModeReceiver`` and ``main``); ``self.lock`` is only ever
+        # taken *outside* ``control_mode_lock``, never the other way round.
+        self.control_mode_lock = threading.RLock()
         self.control_mode = None
         self.control_mode_receipt = 0.0
+        self.control_mode_gap_sec = None
+        self.control_mode_gap_max_sec = 0.0
+        self.control_mode_stamp = None
+        self.control_mode_stamp_gap_sec = None
+        self.control_mode_stamp_gap_max_sec = 0.0
         self.last_publish_stamp_ns = 0
+        self.control_mode_entry = 0.0
+        self.control_mode_entry_gap_sec = None
+        self.control_mode_entry_gap_max_sec = 0.0
+        self.control_mode_lock_wait_sec = None
+        self.control_mode_lock_wait_max_sec = 0.0
         self.safety_stop = None
 
         self._cache_model_indices()
@@ -147,17 +173,39 @@ class MujocoBridgeNode(Node):
             from mujoco import viewer
 
             self.viewer = viewer.launch_passive(self.model, self.data)
-        self.sim_thread = threading.Thread(
-            target=self._simulation_loop, name="mujoco-step", daemon=True
+        self.gil_heartbeat_sec = None
+        self.gil_heartbeat_max_sec = 0.0
+        # Same probe, but only counted once the EGL renderers exist and the
+        # simulation is stepping.  The *startup* renderer construction alone
+        # holds the GIL for ~1 s, so the all-time max can never say whether a
+        # mid-grasp receipt gap was a steady-state interpreter stall or just
+        # that one-off construction.
+        self.gil_heartbeat_max_steady_sec = 0.0
+        self.gil_heartbeat_steady = False
+        self.heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop, name="gil-heartbeat", daemon=True
         )
-        self.sim_thread.start()
+        self.heartbeat_thread.start()
+        # MuJoCo's EGL renderer constructor holds the GIL for ~1 s each, and a
+        # reset-per-round batch starts grasping seconds after the bridge comes
+        # up.  Finish creating the RGB-D renderers *before* the bridge starts
+        # stepping or the 50 Hz state timer announces control-mode readiness,
+        # otherwise that GIL stall ages the 0.5 s exclusivity heartbeat past its
+        # window mid-grasp and intermittently aborts the arm.
         self.renderers = {}
+        self.renderers_ready = threading.Event()
         self.camera_thread = None
         if bool(self.get_parameter("publish_rgbd").value):
             self.camera_thread = threading.Thread(
                 target=self._camera_loop, name="mujoco-rgbd", daemon=True
             )
             self.camera_thread.start()
+            self.renderers_ready.wait(timeout=180.0)
+        self.gil_heartbeat_steady = True
+        self.sim_thread = threading.Thread(
+            target=self._simulation_loop, name="mujoco-step", daemon=True
+        )
+        self.sim_thread.start()
         rate = float(self.get_parameter("publish_rate_hz").value)
         self.create_timer(1.0 / rate, self._publish_state)
         self.get_logger().warn(
@@ -170,6 +218,7 @@ class MujocoBridgeNode(Node):
         parameters = {
             "upstream_model_path": "",
             "derived_model_path": "/tmp/openflex_thesis_mujoco_scene.xml",
+            "scene_model_path": "",
             "timestep_sec": 0.002,
             "real_time_factor": 1.0,
             "enable_viewer": False,
@@ -217,6 +266,11 @@ class MujocoBridgeNode(Node):
             "gripper_goal_tolerance_m": 0.003,
             "gripper_action_timeout_sec": 4.0,
             "delivery_surface_z_m": 0.56,
+            "environment_body_names": ["thesis_shelf", "thesis_delivery_table"],
+            "delivery_table_body": "thesis_delivery_table",
+            "delivery_surface_geom": "thesis_delivery_top",
+            "delivery_surface_geom_right": "counter_top_right_top",
+            "occluder_free_joint": "thesis_occluder_free",
         }
         for name, value in parameters.items():
             self.declare_parameter(name, value)
@@ -233,10 +287,13 @@ class MujocoBridgeNode(Node):
             index for index in range(self.model.nbody)
             if int(self.model.body_rootid[index]) == robot_root
         }
-        self.environment_body_ids = {
-            self._id(mujoco.mjtObj.mjOBJ_BODY, name)
-            for name in ("thesis_shelf", "thesis_delivery_table")
-        }
+        self.environment_body_ids = set()
+        for name in self.get_parameter("environment_body_names").value:
+            body_id = self._id(mujoco.mjtObj.mjOBJ_BODY, str(name))
+            self.environment_body_ids.update(
+                index for index in range(self.model.nbody)
+                if int(self.model.body_rootid[index]) == body_id or index == body_id
+            )
         self.joint_ids = {
             name: self._id(mujoco.mjtObj.mjOBJ_JOINT, name)
             for name in (
@@ -244,7 +301,6 @@ class MujocoBridgeNode(Node):
                 "base_y",
                 "base_yaw",
                 "thesis_object_free",
-                "thesis_occluder_free",
                 "lift_joint",
                 *LEFT_ARM_JOINTS,
                 *RIGHT_ARM_JOINTS,
@@ -259,6 +315,11 @@ class MujocoBridgeNode(Node):
         self.actuated_dofs = [
             int(self.model.jnt_dofadr[self.joint_ids[name]]) for name in self.actuator_ids
         ]
+        occluder_joint = str(self.get_parameter("occluder_free_joint").value).strip()
+        if occluder_joint:
+            self.joint_ids[occluder_joint] = self._id(
+                mujoco.mjtObj.mjOBJ_JOINT, occluder_joint
+            )
         self.base_link_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "base_link")
         self.object_body_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "thesis_object")
         self.hand_body_ids = {
@@ -332,8 +393,11 @@ class MujocoBridgeNode(Node):
             self._latched_qos(),
             callback_group=self.callback_group,
         )
-        self.create_subscription(ControlMode, '/thesis/control_mode', self._on_control_mode, self._latched_qos(),
-                                 callback_group=self.callback_group)
+        # ``/thesis/control_mode`` is deliberately *not* subscribed here: it is the
+        # 0.5 s exclusivity heartbeat and running it on the crowded main executor
+        # starved its dispatch.  ``ControlModeReceiver`` subscribes on its own node
+        # and single-threaded executor instead (see ``main``).
+        self.control_mode_receiver = None
         self.create_service(Trigger, "/thesis_sim/reset_nominal", self._on_reset_nominal)
         self.create_service(Trigger, "/thesis_sim/randomize", self._on_randomize)
         self.create_service(Trigger, "/thesis_sim/drop_object", self._on_drop_object)
@@ -483,14 +547,16 @@ class MujocoBridgeNode(Node):
             self._set_base_state()
             oq = yaw_to_quaternion(nominal[3])
             self._set_free_joint_pose("thesis_object_free", nominal[:3], oq)
-            occluder_position = (
-                (nominal[0] - 0.14, nominal[1], nominal[2])
-                if self.occluded
-                else (nominal[0], 3.0, nominal[2])
-            )
-            self._set_free_joint_pose(
-                "thesis_occluder_free", occluder_position, (0.0, 0.0, 0.0, 1.0)
-            )
+            occluder_joint = str(self.get_parameter("occluder_free_joint").value).strip()
+            if occluder_joint:
+                occluder_position = (
+                    (nominal[0] - 0.14, nominal[1], nominal[2])
+                    if self.occluded
+                    else (nominal[0], 3.0, nominal[2])
+                )
+                self._set_free_joint_pose(
+                    occluder_joint, occluder_position, (0.0, 0.0, 0.0, 1.0)
+                )
             self._set_left_arm_park_pose()
             self._initialize_actuators()
             mujoco.mj_forward(self.model, self.data)
@@ -567,9 +633,35 @@ class MujocoBridgeNode(Node):
             return GoalResponse.ACCEPT
 
     def _arm_control_valid(self):
-        return bool(self.control_mode is not None and self.control_mode.mode == ControlMode.MOVEIT
-                    and self.control_mode.inputs_healthy and time.monotonic() - self.control_mode_receipt <= 0.5
+        with self.control_mode_lock:
+            mode = self.control_mode
+            receipt = self.control_mode_receipt
+        return bool(mode is not None and mode.mode == ControlMode.MOVEIT
+                    and mode.inputs_healthy and time.monotonic() - receipt <= 0.5
                     and math.hypot(*self.actual_twist[:2]) <= 0.02 and abs(self.actual_twist[2]) <= 0.03)
+
+    def _arm_control_status(self):
+        """Explain exactly which exclusivity condition failed; diagnostics only."""
+        with self.control_mode_lock:
+            mode = self.control_mode
+            receipt = self.control_mode_receipt
+        age = None if mode is None else round(time.monotonic() - receipt, 3)
+        return {
+            "mode": None if mode is None else int(mode.mode),
+            "epoch": None if mode is None else int(mode.epoch),
+            "inputs_healthy": None if mode is None else bool(mode.inputs_healthy),
+            "mode_receipt_age_sec": age,
+                    "receipt_gap_sec": self.control_mode_gap_sec,
+                    "receipt_gap_max_sec": self.control_mode_gap_max_sec,
+                    "entry_gap_sec": self.control_mode_entry_gap_sec,
+                    "entry_gap_max_sec": self.control_mode_entry_gap_max_sec,
+                    "lock_wait_sec": self.control_mode_lock_wait_sec,
+                    "lock_wait_max_sec": self.control_mode_lock_wait_max_sec,
+                    "publisher_stamp_gap_sec": self.control_mode_stamp_gap_sec,
+                    "publisher_stamp_gap_max_sec": self.control_mode_stamp_gap_max_sec,
+            "actual_twist": [round(float(value), 4) for value in self.actual_twist],
+            "safety_stop": self.safety_stop is not None,
+        }
 
     def _hold_controller_measured(self, controller, token):
         with self.lock:
@@ -609,6 +701,8 @@ class MujocoBridgeNode(Node):
             settled_since = None
             while time.monotonic() - started <= wall_timeout:
                 if self.safety_stop is not None or not self._arm_control_valid():
+                    self.get_logger().warn("MoveIt exclusivity revoked mid-trajectory "
+                                           + json.dumps(self._arm_control_status()))
                     goal_handle.abort()
                     result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
                     result.error_string = "MuJoCo safety stop or fresh exclusive MoveIt control revoked"
@@ -1029,6 +1123,24 @@ class MujocoBridgeNode(Node):
                 "scope": "robot_bodies_vs_shelf_and_delivery_table", "violation": False,
             }))
 
+    def _heartbeat_loop(self) -> None:
+        """Read-only scheduling probe: how long could a thread not run at all?
+
+        A well-behaved interpreter wakes this 0.02 s wait on time; a large
+        value means some *other* thread held the GIL (or an in-process lock) for
+        that long.  It exists only to attribute control-mode receipt gaps.
+        """
+        last = time.monotonic()
+        while not self.stop_event.wait(0.02):
+            now = time.monotonic()
+            self.gil_heartbeat_sec = round(now - last, 3)
+            self.gil_heartbeat_max_sec = max(self.gil_heartbeat_max_sec, self.gil_heartbeat_sec)
+            if self.gil_heartbeat_steady:
+                self.gil_heartbeat_max_steady_sec = max(
+                    self.gil_heartbeat_max_steady_sec, self.gil_heartbeat_sec
+                )
+            last = now
+
     def _simulation_loop(self) -> None:
         dt = float(self.model.opt.timestep)
         real_time_factor = max(0.01, float(self.get_parameter("real_time_factor").value))
@@ -1151,6 +1263,7 @@ class MujocoBridgeNode(Node):
                 key: mujoco.Renderer(self.model, height=height, width=width)
                 for key in CAMERAS
             }
+            self.renderers_ready.set()
             deadline = time.monotonic()
             while not self.stop_event.is_set() and rclpy.ok():
                 with self.lock:
@@ -1172,31 +1285,101 @@ class MujocoBridgeNode(Node):
                 elif remaining < -period:
                     deadline = time.monotonic()
         except Exception as error:
+            self.renderers_ready.set()
             if rclpy.ok():
                 self.get_logger().error(f"MuJoCo RGB-D rendering stopped: {error}")
         finally:
+            self.renderers_ready.set()
             for renderer in self.renderers.values():
                 renderer.close()
             self.renderers = {}
 
     def _on_control_mode(self, msg: ControlMode) -> None:
-        with self.lock:
+        stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        entry = time.monotonic()
+        with self.control_mode_lock:
+            now = time.monotonic()
+            previous = self.control_mode_receipt if self.control_mode is not None else None
+            previous_stamp = self.control_mode_stamp
+            previous_entry = self.control_mode_entry if self.control_mode is not None else None
             self.control_mode = deepcopy(msg)
-            self.control_mode_receipt = time.monotonic()
+            self.control_mode_receipt = now
+            self.control_mode_stamp = stamp
+            self.control_mode_entry = entry
+            self.control_mode_gap_sec = None if previous is None else round(now - previous, 3)
+            self.control_mode_stamp_gap_sec = None if previous_stamp is None else round(stamp - previous_stamp, 3)
+            self.control_mode_entry_gap_sec = None if previous_entry is None else round(entry - previous_entry, 3)
+            self.control_mode_lock_wait_sec = round(now - entry, 3)
+            if self.control_mode_gap_sec is not None and self.control_mode_gap_sec > 0.4:
+                self.control_mode_gap_max_sec = max(self.control_mode_gap_max_sec, self.control_mode_gap_sec)
+                self.control_mode_entry_gap_max_sec = max(self.control_mode_entry_gap_max_sec,
+                                                          self.control_mode_entry_gap_sec or 0.0)
+                self.control_mode_lock_wait_max_sec = max(self.control_mode_lock_wait_max_sec,
+                                                          self.control_mode_lock_wait_sec or 0.0)
+                if self.control_mode_stamp_gap_sec is not None:
+                    self.control_mode_stamp_gap_max_sec = max(self.control_mode_stamp_gap_max_sec,
+                                                              self.control_mode_stamp_gap_sec)
+                self.get_logger().warn(
+                    "control_mode receipt gap %.3fs (entry_gap=%.3f lock_wait=%.3f) but publisher stamped only "
+                    "%.3fs apart (receipt_gap_max=%.3f entry_gap_max=%.3f lock_wait_max=%.3f publisher_gap_max=%.3f "
+                    "gil_heartbeat=%.3f gil_heartbeat_steady_max=%.3f) "
+                    "mode=%d epoch=%d"
+                    % (self.control_mode_gap_sec, self.control_mode_entry_gap_sec
+                       if self.control_mode_entry_gap_sec is not None else -1.0,
+                       self.control_mode_lock_wait_sec
+                       if self.control_mode_lock_wait_sec is not None else -1.0,
+                       self.control_mode_stamp_gap_sec
+                       if self.control_mode_stamp_gap_sec is not None else -1.0,
+                       self.control_mode_gap_max_sec, self.control_mode_entry_gap_max_sec,
+                       self.control_mode_lock_wait_max_sec, self.control_mode_stamp_gap_max_sec,
+                       self.gil_heartbeat_sec if self.gil_heartbeat_sec is not None else -1.0,
+                       self.gil_heartbeat_max_steady_sec,
+                       int(msg.mode), int(msg.epoch)))
 
     def _place_guard_valid(self) -> bool:
-        return bool(self.control_mode is not None and self.control_mode.mode == ControlMode.PLACE
-                    and time.monotonic() - self.control_mode_receipt <= 0.5
+        with self.control_mode_lock:
+            mode = self.control_mode
+            receipt = self.control_mode_receipt
+        return bool(mode is not None and mode.mode == ControlMode.PLACE
+                    and time.monotonic() - receipt <= 0.5
                     and math.hypot(*self.actual_twist[:2]) <= 0.02 and abs(self.actual_twist[2]) <= 0.03
                     and math.hypot(*self.commanded_twist[:2]) <= 0.02 and abs(self.commanded_twist[2]) <= 0.03
                     and not self.trajectories and self.safety_stop is None)
 
-    def _delivery_geometry(self):
-        surface = self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_delivery_top')
+    def _delivery_geometry(self, destination_id="sim_delivery_top_left"):
+        if destination_id == "delivery_zone":
+            destination_id = "sim_delivery_top_left"
+        if destination_id == "sim_delivery_top_left":
+            parameter = "delivery_surface_geom"
+        elif destination_id == "sim_delivery_top_right":
+            parameter = "delivery_surface_geom_right"
+        else:
+            raise ValueError(f"Unknown delivery destination: {destination_id}")
+        surface = self._id(
+            mujoco.mjtObj.mjOBJ_GEOM,
+            str(self.get_parameter(parameter).value),
+        )
         object_geometry = self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom')
         return (surface, tuple(float(value) for value in self.model.geom_size[object_geometry]),
                 tuple(float(value) for value in self.data.geom_xpos[surface]),
                 tuple(float(value) for value in self.model.geom_size[surface]))
+
+    def _delivery_support_contact(self):
+        try:
+            object_geometry = self._id(mujoco.mjtObj.mjOBJ_GEOM, "thesis_object_geom")
+            surfaces = {
+                self._delivery_geometry("sim_delivery_top_left")[0]: "sim_delivery_top_left",
+                self._delivery_geometry("sim_delivery_top_right")[0]: "sim_delivery_top_right",
+            }
+        except (KeyError, ValueError, TypeError):
+            return None
+        for contact in self.data.contact[:self.data.ncon]:
+            pair = {int(contact.geom1), int(contact.geom2)}
+            if object_geometry in pair and -0.001 <= contact.dist <= 0.001:
+                surface = next((geom for geom in pair if geom in surfaces), None)
+                if surface is not None:
+                    return surfaces[surface]
+        return None
 
     def _place_failure(self, code, detail):
         self.place_status.header.stamp = self._simulation_stamp()
@@ -1213,7 +1396,8 @@ class MujocoBridgeNode(Node):
     def _on_place_control(self, msg: FixedPlaceControl) -> None:
         with self.lock:
             if not msg.enabled:
-                if self.pending_place is not None and msg.object_id == self.place_status.object_id:
+                if (self.pending_place is not None and msg.object_id == self.place_status.object_id
+                        and (msg.destination_id or 'sim_delivery_top_left') == self.place_status.destination_id):
                     self._place_failure(93, 'release verification canceled; cancellation is not successful placement')
                 return
             if self.pending_place is not None:
@@ -1222,11 +1406,14 @@ class MujocoBridgeNode(Node):
             self.place_status.header.stamp = self._simulation_stamp()
             self.place_status.header.frame_id = 'map'
             self.place_status.object_id = msg.object_id
+            destination_id = msg.destination_id or 'sim_delivery_top_left'
+            self.place_status.destination_id = destination_id
             self.place_status_until = time.monotonic() + 2.0
             if not self._place_guard_valid():
                 self._place_failure(92, 'fresh exclusive PLACE mode, stopped base and stationary arm required')
                 return
             if (msg.object_id != str(self.get_parameter('object_id').value)
+                    or destination_id not in ('sim_delivery_top_left', 'sim_delivery_top_right')
                     or msg.active_arm not in (1, 2) or msg.delivery_pose.header.frame_id != 'map'):
                 self._place_failure(94, 'release object, arm or map-frame contract mismatch')
                 return
@@ -1237,12 +1424,17 @@ class MujocoBridgeNode(Node):
             pose = msg.delivery_pose.pose
             target = (pose.position.x, pose.position.y, pose.position.z)
             position, orientation = self._mujoco_body_pose(self.data, self.object_body_id)
-            surface, half_size, center, surface_size = self._delivery_geometry()
+            try:
+                surface, half_size, center, surface_size = self._delivery_geometry(destination_id)
+            except (KeyError, ValueError) as error:
+                self._place_failure(97, f'destination geometry unavailable: {error}')
+                return
             reason = release_request_rejection(position, orientation, target, half_size, center, surface_size)
             if reason:
                 self._place_failure(95, reason)
                 return
-            self.pending_place = {'arm': arm, 'target': target, 'surface': surface, 'half_size': half_size,
+            self.pending_place = {'arm': arm, 'target': target, 'destination_id': destination_id,
+                                  'surface': surface, 'half_size': half_size,
                                   'surface_center': center, 'surface_half_size': surface_size,
                                   'started': time.monotonic(), 'stable_since': None,
                                   'previous_gripper_target': self.gripper_targets[arm]}
@@ -1283,6 +1475,14 @@ class MujocoBridgeNode(Node):
 
     def _publish_state(self) -> None:
         with self.lock:
+            # Snapshot the receipt under its own lock so the diagnostic never
+            # waits on the simulation lock churn; lock order is always
+            # self.lock -> control_mode_lock.
+            with self.control_mode_lock:
+                control_mode = self.control_mode
+                control_mode_receipt = self.control_mode_receipt
+                control_mode_age = (None if control_mode is None
+                                    else time.monotonic() - control_mode_receipt)
             stamp = self._next_publish_stamp()
             clock = Clock(clock=deepcopy(stamp))
             joint = JointState()
@@ -1310,8 +1510,35 @@ class MujocoBridgeNode(Node):
             object_position, object_orientation = self._mujoco_body_pose(
                 self.data, self.object_body_id
             )
+            attached_hand_pose = None
+            attachment_transform = None
+            if self.attached_arm is not None:
+                hand_position, hand_orientation = self._mujoco_body_pose(
+                    self.data, self.hand_body_ids[self.attached_arm])
+                live_offset, live_relative_orientation = relative_pose(
+                    hand_position, hand_orientation, object_position, object_orientation)
+                attached_hand_pose = {
+                    "frame_id": "map",
+                    "position_m": [float(value) for value in hand_position],
+                    "orientation_xyzw": [float(value) for value in hand_orientation],
+                }
+                attachment_transform = {
+                    "parent_frame": "map",
+                    "child_frame": f"openarmx_{self.attached_arm}_hand",
+                    "translation_m": [float(value) for value in live_offset],
+                    "orientation_xyzw": [float(value) for value in live_relative_orientation],
+                }
             observation = self._object_observation(stamp, object_position, object_orientation)
             grasp = self._grasp_status(stamp, object_position)
+            support_probe = getattr(self, '_delivery_support_contact', None)
+            support_destination = support_probe() if support_probe is not None else (
+                'sim_delivery_top_left' if any(
+                    {int(contact.geom1), int(contact.geom2)} == {
+                        int(self._delivery_geometry()[0]),
+                        int(self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom'))}
+                    and -0.001 <= contact.dist <= 0.001
+                    for contact in self.data.contact[:self.data.ncon]
+                ) else None)
             simulation_diagnostic = {
                 "schema_version": 1,
                 "source": "mujoco_diagnostic_only_NOT_PHYSICAL",
@@ -1323,27 +1550,46 @@ class MujocoBridgeNode(Node):
                     "position_m": [float(value) for value in object_position],
                     "orientation_xyzw": [float(value) for value in object_orientation],
                 },
+                "attached_hand_pose": attached_hand_pose,
+                "attachment_transform": attachment_transform,
                 "joint_state": {
                     "names": list(joint.name),
                     "position_rad_or_m": [float(value) for value in joint.position],
                     "velocity_rad_or_m_s": [float(value) for value in joint.velocity],
                 },
                 "attached_arm": self.attached_arm,
-                "control_ack": None if self.control_mode is None else {
-                    "mode": int(self.control_mode.mode),
-                    "epoch": int(self.control_mode.epoch),
-                    "inputs_healthy": bool(self.control_mode.inputs_healthy),
-                    "fresh": time.monotonic() - self.control_mode_receipt <= 0.5,
+                "control_ack": None if control_mode is None else {
+                    "mode": int(control_mode.mode),
+                    "epoch": int(control_mode.epoch),
+                    "inputs_healthy": bool(control_mode.inputs_healthy),
+                    "fresh": control_mode_age <= 0.5,
+                    # Published so a failure instant can be attributed to a stale
+                    # receipt versus a moving base instead of only "revoked".
+                    "mode_receipt_age_sec": round(control_mode_age, 3),
+                    # Discriminates a *publisher-side* gap (old stamp at receipt)
+                    # from a *bridge-side dispatch* gap: both are measured with
+                    # each side's own clock, so the two numbers stay comparable
+                    # even though the publisher stamps simulated time.
+            "receipt_gap_sec": self.control_mode_gap_sec,
+            "receipt_gap_max_sec": self.control_mode_gap_max_sec,
+            "entry_gap_sec": self.control_mode_entry_gap_sec,
+            "entry_gap_max_sec": self.control_mode_entry_gap_max_sec,
+            "lock_wait_sec": self.control_mode_lock_wait_sec,
+            "lock_wait_max_sec": self.control_mode_lock_wait_max_sec,
+            "publisher_stamp_gap_sec": self.control_mode_stamp_gap_sec,
+            "publisher_stamp_gap_max_sec": self.control_mode_stamp_gap_max_sec,
+                    "actual_twist": [round(float(value), 4) for value in self.actual_twist],
                     "arm_control_valid": self._arm_control_valid(),
                     "place_control_valid": self._place_guard_valid(),
                 },
                 "object_velocity_linear_angular": [float(value) for value in self.data.qvel[
                     int(self.model.jnt_dofadr[self.joint_ids['thesis_object_free']]):
                     int(self.model.jnt_dofadr[self.joint_ids['thesis_object_free']]) + 6]],
-                "delivery_support_contact": any(
-                    {int(contact.geom1), int(contact.geom2)} == {
-                        self._id(mujoco.mjtObj.mjOBJ_GEOM, 'thesis_object_geom'), self._delivery_geometry()[0]}
-                    and -0.001 <= contact.dist <= 0.001 for contact in self.data.contact[:self.data.ncon]),
+                "delivery_support_contact": support_destination is not None,
+                "delivery_support_destination_id": support_destination,
+                "gil_heartbeat_sec": self.gil_heartbeat_sec,
+                "gil_heartbeat_max_sec": self.gil_heartbeat_max_sec,
+                "gil_heartbeat_max_steady_sec": self.gil_heartbeat_max_steady_sec,
                 "contacts": self._diagnostic_contact_pairs(),
                 "safety_stop": deepcopy(self.safety_stop),
             }
@@ -1480,17 +1726,66 @@ class MujocoBridgeNode(Node):
         return super().destroy_node()
 
 
+class ControlModeReceiver(Node):
+    """Isolated subscriber for the live control-mode exclusivity heartbeat.
+
+    The heartbeat gates arm exclusivity with a 0.5 s wall-clock window and is
+    republished by the arbiter several times per second.  Measured on the
+    isolated stack, running it on the bridge's shared ``MultiThreadedExecutor``
+    (also occupied by seconds-long trajectory/gripper callbacks) delayed its
+    dispatch by 0.5-1.0 s, aging the receipt past the window and intermittently
+    aborting grasps.  This tiny node subscribes on its own node, spun by a
+    ``SingleThreadedExecutor`` in its own thread, and forwards straight to the
+    bridge handler, which stores the receipt under its own uncontended lock.
+    """
+
+    def __init__(self, bridge: "MujocoBridgeNode") -> None:
+        super().__init__("mujoco_control_mode_receiver")
+        self._bridge = bridge
+        self.create_subscription(
+            ControlMode, "/thesis/control_mode", self._forward, bridge._latched_qos()
+        )
+
+    def _forward(self, msg: ControlMode) -> None:
+        self._bridge._on_control_mode(msg)
+
+
+def _spin_receiver(executor: SingleThreadedExecutor) -> None:
+    try:
+        executor.spin()
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+
+
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = None
+    receiver = None
+    receiver_executor = None
+    receiver_thread = None
     try:
         node = MujocoBridgeNode()
+        receiver = ControlModeReceiver(node)
+        node.control_mode_receiver = receiver
+        receiver_executor = SingleThreadedExecutor()
+        receiver_executor.add_node(receiver)
+        receiver_thread = threading.Thread(
+            target=_spin_receiver, args=(receiver_executor,),
+            name="mujoco-control-mode", daemon=True,
+        )
+        receiver_thread.start()
         executor = MultiThreadedExecutor(num_threads=8)
         executor.add_node(node)
         executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        if receiver_executor is not None:
+            receiver_executor.shutdown()
+        if receiver_thread is not None:
+            receiver_thread.join(timeout=2.0)
+        if receiver is not None:
+            receiver.destroy_node()
         if node is not None:
             node.destroy_node()
         if rclpy.ok():

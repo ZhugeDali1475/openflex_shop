@@ -20,7 +20,7 @@ def gripper():
     data = mujoco.MjData(model)
     data.qpos[0] = 0.02
     parameters = {'gripper_goal_tolerance_m': 0.003, 'gripper_action_timeout_sec': 4.0}
-    instance = SimpleNamespace(model=model, data=data, lock=RLock(), safety_stop=None, pending_place=None,
+    instance = SimpleNamespace(model=model, data=data, lock=RLock(), control_mode_lock=RLock(), safety_stop=None, pending_place=None,
         control_mode=ControlMode(mode=ControlMode.MOVEIT, inputs_healthy=True), control_mode_receipt=time.monotonic(),
         actual_twist=[0.0] * 3, active_grippers=set(), attached_arm=None,
         joint_ids={name: 0}, actuator_ids={name: 0}, gripper_targets={'right': 0.04},

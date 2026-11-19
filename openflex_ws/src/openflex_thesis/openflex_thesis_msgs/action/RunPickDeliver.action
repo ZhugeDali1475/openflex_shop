@@ -3,6 +3,7 @@ uint8 ARM_RIGHT=2
 
 string task_id
 string object_id
+string destination_id
 geometry_msgs/PoseStamped pickup_observation_pose
 geometry_msgs/PoseStamped delivery_pose
 uint8 active_arm

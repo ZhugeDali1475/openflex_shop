@@ -36,16 +36,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def collision_boxes(model_path):
     world = ET.parse(model_path).find("worldbody")
-    boxes = []
-    for name in ("thesis_shelf", "thesis_delivery_table"):
-        body = world.find(f"body[@name='{name}']")
-        if set(body.attrib) != {"name"}:
-            raise ValueError("Unsupported environment parent transform")
+
+    def local_offset(element):
+        values = element.get("pos")
+        return [float(value) for value in values.split()] if values else [0.0, 0.0, 0.0]
+
+    def collect(body, origin, boxes):
+        if body.get("quat") or body.get("euler"):
+            raise ValueError("Unsupported rotated environment body")
+        position = [origin[axis] + value for axis, value in enumerate(local_offset(body))]
         for geometry in body.findall("geom"):
             if geometry.get("type") != "box" or geometry.get("quat") or geometry.get("euler"):
                 raise ValueError("Expected world-aligned environment boxes")
-            boxes.append((geometry.get("name"), [float(value) for value in geometry.get("pos").split()],
+            offset = local_offset(geometry)
+            boxes.append((geometry.get("name"),
+                          [position[axis] + offset[axis] for axis in range(3)],
                           [2 * float(value) for value in geometry.get("size").split()]))
+        for child in body.findall("body"):
+            collect(child, position, boxes)
+
+    boxes = []
+    for name in ("thesis_shelf", "thesis_delivery_table"):
+        body = world.find(f"body[@name='{name}']")
+        if body is None:
+            raise ValueError(f"Missing environment body: {name}")
+        collect(body, [0.0, 0.0, 0.0], boxes)
     boxes.append(("openflex_grasp_safety_floor", [0.0, 0.0, -0.05], [20.0, 20.0, 0.1]))
     return boxes
 
@@ -66,14 +81,31 @@ class SafetyProbe(Node):
         self.readback = self.create_client(GetPlanningScene, "/get_planning_scene")
         self.validity = self.create_client(GetStateValidity, "/check_state_validity")
 
-    def call(self, client, request):
-        if not client.wait_for_service(timeout_sec=10):
-            raise RuntimeError(f"Unavailable planning service: {client.srv_name}")
-        future = client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=15)
-        if not future.done() or future.result() is None:
-            raise RuntimeError(f"No planning response: {client.srv_name}")
-        return future.result()
+    def call(self, client, request, attempts=3, timeout_sec=15.0):
+        problem = None
+        for attempt in range(1, attempts + 1):
+            if client.wait_for_service(timeout_sec=10):
+                future = client.call_async(deepcopy(request))
+                rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+                if future.done() and future.result() is not None:
+                    return future.result()
+                if not future.done():
+                    try:
+                        client.remove_pending_request(future)
+                    except (AttributeError, KeyError):
+                        pass
+                problem = RuntimeError(f"No planning response: {client.srv_name}")
+            else:
+                problem = RuntimeError(f"Unavailable planning service: {client.srv_name}")
+            if attempt < attempts:
+                self.get_logger().warn(f"Retrying planning call ({attempt}/{attempts - 1}): {problem}")
+                self.pause(0.5 * attempt)
+        raise RuntimeError(f"{problem} (after {attempts} attempts)")
+
+    def pause(self, seconds):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=max(0.0, min(0.1, deadline - time.monotonic())))
 
     def fresh(self, key):
         message, received = self.samples.get(key, (None, 0))

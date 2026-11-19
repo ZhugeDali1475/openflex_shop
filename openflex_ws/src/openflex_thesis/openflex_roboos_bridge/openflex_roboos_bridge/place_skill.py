@@ -10,6 +10,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profi
 from openflex_thesis_mujoco.release_verification import object_settled_on_surface
 
 from .action_journal import cancel_to_hold_and_audit
+from .destination_contract import LEFT_DESTINATION_ID, canonical_destination_id
 
 
 class PlaceSkill:
@@ -24,8 +25,16 @@ class PlaceSkill:
 
     def submit(self, arguments):
         if (set(arguments) != {'object_id', 'affordance_id', 'request_id', 'timeout_sec'}
-                or arguments['object_id'] != 'thesis_item_01' or arguments['affordance_id'] != 'delivery_zone'):
-            raise ValueError('Only the registered single object and delivery table are supported')
+                or arguments['object_id'] != 'thesis_item_01'
+                or arguments['affordance_id'] not in {'delivery_zone', 'sim_delivery_top_left'}):
+            raise ValueError('Only the registered single object and validated left delivery table are supported')
+        destination_id = canonical_destination_id(arguments['affordance_id'])
+        # The current online executor is still explicitly left-table only.
+        if destination_id != LEFT_DESTINATION_ID:
+            raise ValueError('Right delivery table is registered but not runtime route-validated')
+        # Keep the legacy station for navigation while preserving the canonical
+        # destination ID for the release request and result audit.
+        arguments = dict(arguments, affordance_id='delivery_zone', destination_id=destination_id)
         timeout = arguments['timeout_sec']
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or not 1 <= timeout <= 600:
             raise ValueError('timeout_sec must be a finite JSON number in 1-600')
@@ -35,11 +44,13 @@ class PlaceSkill:
             threading.Thread(target=self.execute, args=(arguments,), daemon=True).start()
         return record
 
-    def placement_still_verified(self, target):
+    def placement_still_verified(self, target, destination_id=LEFT_DESTINATION_ID):
         diagnostic = self.node.healthy(allow_attached=False)
-        affordance = self.node.registry['affordances']['delivery_zone']
+        affordance = self.node.registry['affordances'][canonical_destination_id(destination_id)]
         surface = affordance['surface_center_xyz']
         width, depth = affordance['surface_dimensions_xy']
+        if diagnostic.get('delivery_support_destination_id') != canonical_destination_id(destination_id):
+            return False
         return object_settled_on_surface(diagnostic['object_pose']['position_m'],
             diagnostic['object_pose']['orientation_xyzw'], [0.035, 0.03, 0.08], target,
             [surface[0], surface[1], surface[2] - 0.02], [width / 2, depth / 2, 0.02],
@@ -53,6 +64,7 @@ class PlaceSkill:
         status, success, detail, stopped, verified, uncertain = 'failed', False, '', False, False, False
         command = FixedPlaceControl()
         command.object_id, command.active_arm = arguments['object_id'], 2
+        command.destination_id = arguments['destination_id']
         command.header.frame_id = command.delivery_pose.header.frame_id = 'map'
         command.reason = request_id
         try:
@@ -62,10 +74,11 @@ class PlaceSkill:
             self.node.set_mode(ControlMode.HOLD)
             if not self.node.stopped() or not self.motion.joints_stopped():
                 raise RuntimeError('Measured base and arm stop required before place planning')
-            planned, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py', ['--search-base'])
+            planned, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py',
+                                           ['--search-base', '--destination', arguments['destination_id']])
             if not planned.get('place_paths_valid'):
                 raise RuntimeError(f'Complete carried-object place path rejected: {planned.get("blocked_at")}')
-            approach = self.node.execute({'request_id': request_id,
+            approach = self.node.execute({'request_id': request_id, 'target_id': 'delivery_zone',
                 'timeout_sec': min(90, self.motion.deadline - time.monotonic())},
                 target_override=planned['selected_base_xyyaw'], finalize=False, allow_attached=True)
             if not approach['success']:
@@ -78,7 +91,8 @@ class PlaceSkill:
             acquired = self.node.set_mode(ControlMode.MOVEIT)
             self.motion.base_lock_epoch = acquired['epoch']
             self.motion.base_lock = self.node.base_pose()
-            fresh, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py', [])
+            fresh, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py',
+                                         ['--destination', arguments['destination_id']])
             if not fresh.get('place_paths_valid'):
                 raise RuntimeError(f'Measured-base place path rejected: {fresh.get("blocked_at")}')
             for phase in fresh['phases']:
@@ -107,7 +121,9 @@ class PlaceSkill:
                     time.sleep(0.02)
                     continue
                 stamp = observed.header.stamp
-                if observed.object_id != command.object_id or (stamp.sec, stamp.nanosec) < (command.header.stamp.sec, command.header.stamp.nanosec):
+                if (observed.object_id != command.object_id
+                        or observed.destination_id != command.destination_id
+                        or (stamp.sec, stamp.nanosec) < (command.header.stamp.sec, command.header.stamp.nanosec)):
                     time.sleep(0.02)
                     continue
                 if observed.failure_code:
@@ -123,13 +139,14 @@ class PlaceSkill:
             acquired = self.node.set_mode(ControlMode.MOVEIT)
             self.motion.base_lock_epoch = acquired['epoch']
             self.motion.base_lock = self.node.base_pose()
-            retreat, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py', ['--retreat'])
+            retreat, _ = self.motion.probe(request_id, 'probe_openflex_place_trajectory.py',
+                                           ['--retreat', '--destination', arguments['destination_id']])
             if not retreat.get('place_paths_valid'):
                 raise RuntimeError(f'Post-release robot retreat rejected: {retreat.get("blocked_at")}')
             for phase in retreat['phases']:
                 self.motion.execute_trajectory(request_id, phase, False)
             self.motion.gate(attached=False)
-            if not self.placement_still_verified(target):
+            if not self.placement_still_verified(target, arguments['destination_id']):
                 raise RuntimeError('Fresh post-retreat object support, pose, openness or velocity disagrees with placement')
             self.node.store.event(request_id, 'post_retreat_placement_verified', {'target_map': target})
             status, success = 'succeeded', True

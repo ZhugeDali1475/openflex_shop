@@ -91,3 +91,26 @@ def test_continuous_motion_guard_does_not_wait_out_telemetry_loss():
 
     with pytest.raises(TelemetryUnavailable):
         NavigationNode.require_control_ack(SimpleNamespace(sample=sample), ControlMode.MOVEIT, 7)
+
+
+def test_revoked_ack_error_carries_the_failing_gate():
+    """A bare "revoked" cannot tell a stale receipt from a moving base."""
+    node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement(
+        fresh=False, mode_receipt_age_sec=0.613, actual_twist=[0.0, 0.0, 0.0])})
+    with pytest.raises(RuntimeError) as error:
+        NavigationNode.require_control_ack(node, ControlMode.MOVEIT, 7)
+    message = str(error.value)
+    assert 'revoked' in message
+    assert '0.613' in message
+    assert 'actual_twist' in message
+
+
+def test_timed_out_ack_wait_reports_the_observed_gate(monkeypatch):
+    node = SimpleNamespace(sample=lambda name: {'control_ack': acknowledgement(
+        arm_control_valid=False, actual_twist=[0.0, 0.0, 0.025])})
+    monkeypatch.setattr('openflex_roboos_bridge.navigation_node.time.sleep', lambda seconds: None)
+    with pytest.raises(TimeoutError) as error:
+        NavigationNode.wait_control_ack(node, ControlMode.MOVEIT, 7, timeout=0.001)
+    message = str(error.value)
+    assert 'has not acknowledged' in message
+    assert 'actual_twist' in message

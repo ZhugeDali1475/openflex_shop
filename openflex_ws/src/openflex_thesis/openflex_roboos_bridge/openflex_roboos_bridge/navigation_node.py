@@ -28,6 +28,12 @@ from .scene_registry import load_scene_registry
 from .telemetry_wait import TelemetryUnavailable, wait_for_fresh_stop
 
 
+# A received sample is stale once it is older than this, and a reader waits up
+# to this long for the next fresh sample before treating telemetry as lost.
+TELEMETRY_STALE_AGE_SEC = 0.5
+TELEMETRY_FRESH_WAIT_SEC = 1.5
+
+
 class NavigationNode(Node):
     def __init__(self):
         if os.environ.get("ROS_DOMAIN_ID") != "83" or os.environ.get("OPENFLEX_ENABLE_SIM_NAV") != "1":
@@ -62,6 +68,11 @@ class NavigationNode(Node):
             from .place_skill import PlaceSkill
 
             self.placement = PlaceSkill(self)
+        self.search = None
+        if os.environ.get('OPENFLEX_ENABLE_SIM_MANIPULATION') == '1':
+            from .search_skill import SearchSkill
+
+            self.search = SearchSkill(self)
         self.http = ThreadingHTTPServer(("127.0.0.1", 18553), handler_for(self))
         self.http_thread = threading.Thread(target=self.http.serve_forever, daemon=True)
         self.http_thread.start()
@@ -78,20 +89,31 @@ class NavigationNode(Node):
                 self.samples.pop("diagnostic", None)
 
     def sample(self, key):
-        with self.sample_lock:
-            message, received = deepcopy(self.samples.get(key, (None, 0)))
-        if message is None or time.monotonic() - received > 0.5:
-            receipt_age = time.monotonic() - received if message is not None else None
-            raise TelemetryUnavailable(f"Missing/stale telemetry: {key}; receipt_age_seconds={receipt_age}")
-        if key == "diagnostic":
-            stamp = message["stamp"]
-            source = stamp["sec"] * 1_000_000_000 + stamp["nanosec"]
-        else:
-            source = message.header.stamp.sec * 1_000_000_000 + message.header.stamp.nanosec
-        age = (self.get_clock().now().nanoseconds - source) / 1e9
-        if not -0.1 <= age <= 0.5:
-            raise TelemetryUnavailable(f"Telemetry clock mismatch: {key}")
-        return message
+        # A single late or dropped message must not abort an already verified
+        # motion: wait briefly for the next fresh sample and only then raise the
+        # same error. Freshness and clock agreement still gate every reading.
+        deadline = time.monotonic() + TELEMETRY_FRESH_WAIT_SEC
+        while True:
+            with self.sample_lock:
+                message, received = deepcopy(self.samples.get(key, (None, 0)))
+            now = time.monotonic()
+            if message is None or now - received > TELEMETRY_STALE_AGE_SEC:
+                receipt_age = now - received if message is not None else None
+                failure = TelemetryUnavailable(
+                    f"Missing/stale telemetry: {key}; receipt_age_seconds={receipt_age}")
+            else:
+                if key == "diagnostic":
+                    stamp = message["stamp"]
+                    source = stamp["sec"] * 1_000_000_000 + stamp["nanosec"]
+                else:
+                    source = message.header.stamp.sec * 1_000_000_000 + message.header.stamp.nanosec
+                age = (self.get_clock().now().nanoseconds - source) / 1e9
+                if -0.1 <= age <= 0.5:
+                    return message
+                failure = TelemetryUnavailable(f"Telemetry clock mismatch: {key}")
+            if now >= deadline:
+                raise failure
+            time.sleep(0.01)
 
     @staticmethod
     def yaw(pose):
@@ -145,12 +167,14 @@ class NavigationNode(Node):
 
     def wait_control_ack(self, mode, epoch, timeout=3.0):
         deadline = time.monotonic() + timeout
+        last = None
         while time.monotonic() < deadline:
             try:
                 acknowledgement = self.sample("diagnostic").get("control_ack") or {}
             except TelemetryUnavailable:
                 time.sleep(0.01)
                 continue
+            last = acknowledgement
             valid = (acknowledgement.get("mode") == mode and acknowledgement.get("epoch") == epoch
                 and acknowledgement.get("fresh") is True and acknowledgement.get("inputs_healthy") is True)
             if mode == ControlMode.MOVEIT:
@@ -160,7 +184,8 @@ class NavigationNode(Node):
             if valid:
                 return
             time.sleep(0.01)
-        raise TimeoutError(f"Simulator has not acknowledged control mode {mode}, epoch {epoch}")
+        raise TimeoutError(f"Simulator has not acknowledged control mode {mode}, epoch {epoch}: "
+                           + _acknowledgement_detail({'mode': mode, 'epoch': epoch}, last or {}))
 
     def require_control_ack(self, mode, epoch):
         acknowledgement = self.sample('diagnostic').get('control_ack') or {}
@@ -172,7 +197,8 @@ class NavigationNode(Node):
         elif mode == ControlMode.PLACE:
             valid = valid and acknowledgement.get('place_control_valid') is True
         if not valid:
-            raise RuntimeError(f'Executor control acknowledgement revoked: mode={mode}, epoch={epoch}')
+            raise RuntimeError('Executor control acknowledgement revoked: '
+                               + _acknowledgement_detail({'mode': mode, 'epoch': epoch}, acknowledgement))
         return acknowledgement
 
     def stopped(self, timeout=4):
@@ -217,8 +243,10 @@ class NavigationNode(Node):
             if not self.stopped():
                 raise RuntimeError("Base stop was not confirmed")
             target = target_override if target_override is not None else self.registry["stations"][arguments["target_id"]]["approach_candidate_xyyaw"]
+            route = self.registry["stations"].get(arguments.get("target_id"), {}).get("route_waypoints", [])
             payload = self.sample('diagnostic')['object_pose'] if carrying else None
-            check = self.guard.check(self.sample("joints"), self.base_pose(), target, payload=payload)
+            check = self.guard.check(self.sample("joints"), self.base_pose(), target,
+                                     payload=payload, via=route or None)
             self.store.event(request_id, "offline_geometry_preflight", check)
             if not check["accepted"]:
                 raise RuntimeError("Sampled path intersects robot/environment geometry")
@@ -310,6 +338,21 @@ class NavigationNode(Node):
         return super().destroy_node()
 
 
+def _acknowledgement_detail(expected, acknowledgement):
+    """Explain exactly which control gate failed, so a failure instant is diagnosable.
+
+    A bare "revoked" hides whether the receipt aged past the freshness window or
+    the base was not measured stationary; both are published on ``control_ack``.
+    """
+    observed = {key: acknowledgement.get(key) for key in (
+        'mode', 'epoch', 'fresh', 'inputs_healthy', 'mode_receipt_age_sec',
+        'receipt_gap_sec', 'receipt_gap_max_sec',
+        'publisher_stamp_gap_sec', 'publisher_stamp_gap_max_sec',
+        'actual_twist', 'arm_control_valid', 'place_control_valid')}
+    return ('expected ' + json.dumps(expected, sort_keys=True)
+            + ', observed ' + json.dumps(observed, sort_keys=True))
+
+
 def handler_for(node):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -328,6 +371,8 @@ def handler_for(node):
                     result = node.manipulation.submit(arguments)
                 elif self.path == '/place' and node.placement is not None:
                     result = node.placement.submit(arguments)
+                elif self.path == '/search_and_pick' and node.search is not None:
+                    result = node.search.submit(arguments)
                 elif self.path == "/status" and set(arguments) == {"request_id"}:
                     result = node.store.read(arguments["request_id"])
                 elif self.path == "/cancel" and set(arguments) == {"request_id"}:

@@ -1,5 +1,6 @@
 # Delivery is engineering closure, not a second learned-policy contribution.
 string object_id
+string destination_id
 geometry_msgs/PoseStamped delivery_pose
 uint8 active_arm
 float32 timeout_sec

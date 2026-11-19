@@ -86,7 +86,8 @@ def test_navigation_tools_are_explicit_opt_in():
     navigate = next(tool for tool in tools if tool.name == "navigate_to_target")
     assert navigate.annotations.readOnlyHint is False
     assert navigate.annotations.destructiveHint is True
-    assert navigate.inputSchema["properties"]["target_id"]["enum"] == ["pickup_zone", "delivery_zone"]
+    assert navigate.inputSchema["properties"]["target_id"]["enum"] == [
+        "pickup_zone", "delivery_zone", "sim_delivery_top_left", "sim_delivery_top_right"]
 
 
 def test_manipulation_requires_explicit_shared_gateway():
@@ -104,4 +105,5 @@ def test_placement_requires_separate_explicit_opt_in():
     tools = asyncio.run(create_server(enable_navigation=True, enable_manipulation=True, enable_placement=True).list_tools())
     place = next(tool for tool in tools if tool.name == 'place_to_affordance')
     assert place.annotations.destructiveHint is True
-    assert place.inputSchema['properties']['affordance_id']['const'] == 'delivery_zone'
+    assert place.inputSchema['properties']['affordance_id']['enum'] == [
+        'delivery_zone', 'sim_delivery_top_left', 'sim_delivery_top_right']

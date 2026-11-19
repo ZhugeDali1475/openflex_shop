@@ -144,6 +144,7 @@ class MockDependenciesNode(Node):
             status = PlaceStatus()
             status.header.stamp = now.to_msg()
             status.object_id = self.pending_place.object_id
+            status.destination_id = self.pending_place.destination_id
             status.target_reached = True
             status.released = True
             status.verified = True

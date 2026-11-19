@@ -8,6 +8,8 @@ from urllib.request import ProxyHandler, Request, build_opener
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import ToolAnnotations
 
+from .runtime_target_compat import navigate_compat, place_compat
+
 
 class SnapshotClient:
     def __init__(self, port=18552):
@@ -75,11 +77,10 @@ def create_server(port=18551, snapshot_port=18552, enable_navigation=False, enab
     if enable_navigation:
         @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
                                                  idempotentHint=True, openWorldHint=False))
-        def navigate_to_target(target_id: Literal["pickup_zone", "delivery_zone"], request_id: str,
+        def navigate_to_target(target_id: Literal["pickup_zone", "delivery_zone", "sim_delivery_top_left", "sim_delivery_top_right"], request_id: str,
                                timeout_sec: float = 60.0) -> dict:
-            """只在隔离 MuJoCo 中导航到登记站点；持物只允许交付位，需含货物轨迹检查和持续夹持验证。running 不等于成功；必须查询同一 request_id。禁止自由坐标。"""
-            return client.navigation("/navigate", {"target_id": target_id, "request_id": request_id,
-                                                    "timeout_sec": timeout_sec})
+            """只在隔离 MuJoCo 中导航到登记站点；当前仅 pickup_zone 与旧接口左交付台可运行，右台在路线验收前明确拒绝。持物需检查轨迹并持续验证夹持。running 不等于成功；必须查询同一 request_id。禁止自由坐标。"""
+            return navigate_compat(client, target_id, request_id, timeout_sec)
 
         @server.tool(annotations=annotations)
         def get_navigation_result(request_id: str) -> dict:
@@ -104,14 +105,21 @@ def create_server(port=18551, snapshot_port=18552, enable_navigation=False, enab
             """查询原请求的持久化真实技能结果。只有 succeeded、success=true 且 stopped_confirmed=true 才算技能成功；不是整项取送任务成功。"""
             return client.navigation('/status', {'request_id': request_id})
 
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                                 idempotentHint=True, openWorldHint=False))
+        def search_and_pick(query: str, request_id: str, timeout_sec: float = 600.0,
+                            color: Literal['red', 'blue', 'green', 'yellow', 'magenta'] = 'red') -> dict:
+            """隔离仿真目标搜索并抓取：用头部相机图像候选按查询消歧，只有唯一可见目标才抓取；空位/遮挡/错类/多义一律安全结束，不凭空抓取。running 必须查询同一 request_id。"""
+            return client.navigation('/search_and_pick', {'query': query, 'request_id': request_id,
+                                                          'timeout_sec': timeout_sec, 'color': color})
+
     if enable_placement:
         @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
                                                  idempotentHint=True, openWorldHint=False))
-        def place_to_affordance(object_id: Literal['thesis_item_01'], affordance_id: Literal['delivery_zone'],
+        def place_to_affordance(object_id: Literal['thesis_item_01'], affordance_id: Literal['delivery_zone', 'sim_delivery_top_left', 'sim_delivery_top_right'],
                                 request_id: str, timeout_sec: float = 600.0) -> dict:
-            """隔离仿真实际放置：持物碰撞检查、机械臂移动、原位开爪、真实接触落稳和撤臂后复核。不改写物体位姿；running 必须查询真实终态。"""
-            return client.navigation('/place', {'object_id': object_id, 'affordance_id': affordance_id,
-                                               'request_id': request_id, 'timeout_sec': timeout_sec})
+            """隔离仿真实际放置：目前左交付台沿用旧接口；右台在路线验收前于 MCP 边界明确拒绝。持物碰撞检查、原位开爪、接触落稳和撤臂后复核；running 必须查询真实终态。"""
+            return place_compat(client, object_id, affordance_id, request_id, timeout_sec)
 
     return server
 

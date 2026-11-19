@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-from copy import deepcopy
 from datetime import datetime
 import hashlib
 import json
@@ -23,10 +22,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'local_dependencies/roboos_client'))
 sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_thesis_mujoco'))
+sys.path.insert(0, str(ROOT / 'openflex_ws/src/openflex_thesis/openflex_roboos_bridge'))
 from flag_scale.flagscale.agent.collaboration import Collaborator
-from openflex_delivery_contract import DeliveryContract, MOTION_TOOLS, state_summary, terminal_summary
+from openflex_delivery_contract import (BudgetExhausted, COMMANDING_TOOLS, DeliveryContract,
+    LoopBudget, state_summary, terminal_summary)
 from openflex_delivery_experiment import reject_stale_frame, run_fixed
 from openflex_runner_safety import cancel_and_audit, check_stop, validate_selection
+from openflex_roboos_bridge.tool_surface import (MODEL_FACING_TOOLS, model_facing_tools,
+    validate_advertised_surface)
 
 
 MODEL = 'robobrain2.5-4b-gguf'
@@ -168,6 +171,7 @@ async def worker(arguments):
 
     output = arguments.output
     contract = DeliveryContract()
+    budget = LoopBudget()
     trace, model_trace, active = [], [], None
     fault_applied = False
     registry = collaboration()
@@ -195,22 +199,18 @@ async def worker(arguments):
             async with streamable_http_client('http://127.0.0.1:18556/mcp', http_client=client) as (reader, writer, _):
                 async with ClientSession(reader, writer) as session:
                     await session.initialize()
-                    advertised = {tool.name: tool for tool in (await session.list_tools()).tools}
-                    names = ['get_robot_state', 'observe_scene', 'navigate_to_target', 'grasp_object', 'place_to_affordance']
-                    tools = []
-                    for name in names:
-                        tool = advertised[name]
-                        schema = deepcopy(tool.inputSchema)
-                        schema['properties'].pop('request_id', None)
-                        schema['properties'].pop('timeout_sec', None)
-                        schema['required'] = [key for key in schema.get('required', []) if key not in ('request_id', 'timeout_sec')]
-                        schema['additionalProperties'] = False
-                        descriptions = {'get_robot_state': 'Read actual fresh state; also required after placement to independently verify completion.',
-                            'observe_scene': 'Read actual fresh camera image plus explicitly labeled simulation Oracle object.',
-                            'navigate_to_target': 'Navigate to pickup_zone before grasp, delivery_zone only after verified grasp. Blocks until measured terminal result.',
-                            'grasp_object': 'Guarded grasp of thesis_item_01 after pickup observation. Blocks for full checked grasp and transport posture.',
-                            'place_to_affordance': 'Actually place thesis_item_01 on delivery_zone after verified delivery navigation. Blocks through contact/settling/retraction.'}
-                        tools.append({'type': 'function', 'function': {'name': name, 'description': descriptions[name], 'parameters': schema}})
+                    advertised = {tool.name: tool.inputSchema for tool in (await session.list_tools()).tools}
+                    validate_advertised_surface(advertised)
+                    surface = model_facing_tools(advertised)
+                    descriptions = {'get_robot_state': 'Read actual fresh state; also required after placement to independently verify completion.',
+                        'observe_scene': 'Read actual fresh camera image plus explicitly labeled simulation Oracle object.',
+                        'navigate_to_target': 'Navigate to pickup_zone before grasp, delivery_zone only after verified grasp. Blocks until measured terminal result.',
+                        'grasp_object': 'Guarded grasp of thesis_item_01 after pickup observation. Blocks for full checked grasp and transport posture.',
+                        'place_to_affordance': 'Actually place thesis_item_01 on delivery_zone after verified delivery navigation. Blocks through contact/settling/retraction.',
+                        'search_and_pick': 'Composite image-derived search then verified grasp of the one registered item; fails closed on absent/occluded/wrong-class/ambiguous frames. Prefer it when the item location is not already confirmed.'}
+                    names = list(MODEL_FACING_TOOLS)
+                    tools = [{'type': 'function', 'function': {'name': name,
+                        'description': descriptions[name], 'parameters': surface[name]}} for name in names]
                     save(output / 'model_tool_contracts.json', tools)
                     registry.register_agent('openflex', json.dumps({'robot_name': 'openflex', 'robot_state': 'idle',
                         'robot_tool': names, 'physical_verification': False}), expire_second=1800)
@@ -250,9 +250,14 @@ async def worker(arguments):
                         nonlocal active, fault_applied
                         check_stop(output)
                         validate_selection(tools, name, parameters)
+                        if name in ('get_robot_state', 'observe_scene'):
+                            budget.spend('observations')
+                        elif name in COMMANDING_TOOLS:
+                            budget.spend('motion_calls')
                         try:
                             contract.validate(name, parameters)
                         except ValueError as error:
+                            budget.spend('replans')
                             rejected = {'status': 'rejected_before_execution', 'success': False,
                                 'detail': str(error), 'no_motion_sent': True}
                             trace.append({'selected_tool': name, 'model_arguments': parameters,
@@ -260,7 +265,7 @@ async def worker(arguments):
                             save(output / 'tool_trace.json', trace)
                             return CallToolResult(content=[TextContent(type='text', text=json.dumps(rejected))])
                         backend = dict(parameters)
-                        if name in MOTION_TOOLS:
+                        if name in COMMANDING_TOOLS:
                             backend.update(request_id=arguments.task_id + f'_skill_{len(trace):02d}',
                                            timeout_sec=90.0 if name == 'navigate_to_target' else 600.0)
                             active = backend['request_id']
@@ -279,7 +284,7 @@ async def worker(arguments):
                             'model_arguments': parameters, 'backend_arguments': backend, 'raw_result': raw,
                             'image_count': len(image_blocks)})
                         save(output / 'tool_trace.json', trace)
-                        if name in MOTION_TOOLS:
+                        if name in COMMANDING_TOOLS:
                             limit = time.monotonic() + backend['timeout_sec'] + 30
                             while raw.get('status') == 'running' and time.monotonic() < limit:
                                 check_stop(output)
@@ -296,7 +301,7 @@ async def worker(arguments):
                             compact = {'actual_camera': camera.get('status'), 'object_id': 'thesis_item_01',
                                 'identity_basis': 'fresh registered ROS object, Oracle pose, NOT visual recognition'}
                         else:
-                            compact = terminal_summary(raw) if name in MOTION_TOOLS else state_summary(raw)
+                            compact = terminal_summary(raw) if name in COMMANDING_TOOLS else state_summary(raw)
                         return CallToolResult(content=[TextContent(type='text', text=json.dumps(compact, ensure_ascii=False)), *image_blocks])
 
                     if arguments.policy == 'fixed':
@@ -305,6 +310,7 @@ async def worker(arguments):
                             master_worker_redis=False, final_measured_completion=contract.completed,
                             passed=contract.completed, policy='fixed',
                             scope='fixed_dispatch_same_MCP_ROS_MuJoCo_skills_NOT_PHYSICAL')
+                        result['budget'] = budget.as_dict()
                         return result
 
                     model = OpenAIServerModel(model_id=MODEL, api_base='http://127.0.0.1:4567/v1/', api_key='EMPTY',
@@ -314,6 +320,7 @@ async def worker(arguments):
 
                     def bounded_model(**kwargs):
                         check_stop(output)
+                        budget.spend('model_steps')
                         history = kwargs['messages']
                         history = [item for index, item in enumerate(history)
                             if not (isinstance(item.get('content'), list) and index < len(history) - 4)]
@@ -349,11 +356,15 @@ Do not imagine updates. Only the external final measured completion verifier can
                         result = await instance.run(subtask['task'])
                         result.update(task_id=arguments.task_id, physical_verification=False,
                             master_worker_redis=True, final_measured_completion=contract.completed)
+                        result['budget'] = budget.as_dict()
                     finally:
                         model.client.close()
     except BaseException as error:
         (output / 'failure_traceback.txt').write_text(traceback.format_exc())
-        result.update(success=False, status='failed', error=failure_detail(error), final_measured_completion=False)
+        result.update(success=False, status='failed', error=failure_detail(error),
+            final_measured_completion=False, budget=budget.as_dict())
+        if isinstance(error, BudgetExhausted):
+            result['status'] = 'budget_exhausted'
         if active is not None:
             async with httpx.AsyncClient(trust_env=False, timeout=10) as cleanup:
                 audit = await cancel_and_audit(cleanup, active, output)
@@ -363,6 +374,7 @@ Do not imagine updates. Only the external final measured completion verifier can
         if isinstance(error, (KeyboardInterrupt, asyncio.CancelledError)) and result['status'] != 'unknown':
             result['status'] = 'interrupted'
     finally:
+        save(output / 'budget.json', budget.as_dict())
         save(output / 'worker_result.json', result)
         if arguments.policy == 'model':
             registry.send('openflex_to_RoboOS', json.dumps({'robot_name': 'openflex', 'task_id': arguments.task_id,

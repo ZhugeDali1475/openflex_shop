@@ -29,8 +29,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 /usr/bin/python3 -s -m openflex_roboos_bridge.ros_snapshot --ros-args -p use_sim_time:=true \
-    -p scene_config:="${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml" \
-    -p scene_model:="${root}/local_dependencies/openflex_roboos/readonly_scene.xml" &
+    -p scene_config:="${OPENFLEX_SIM_SCENE_CONFIG:-${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml}" \
+    -p scene_model:="${OPENFLEX_SIM_SCENE_MODEL:-${root}/local_dependencies/openflex_roboos/readonly_scene.xml}" &
 snapshot_pid=$!
 env -u ALL_PROXY -u all_proxy -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy \
     "${python}" -I "${root}/scripts/openflex_mcp_entry.py" &

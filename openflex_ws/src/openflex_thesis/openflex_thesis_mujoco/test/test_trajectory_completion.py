@@ -20,7 +20,7 @@ def bridge():
         <actuator><position name="lift_pos" joint="lift_joint" kp="10"/></actuator></mujoco>''')
     data = mujoco.MjData(model)
     data.qpos[0] = 0.2
-    instance = SimpleNamespace(model=model, data=data, lock=RLock(), safety_stop=None,
+    instance = SimpleNamespace(model=model, data=data, lock=RLock(), control_mode_lock=RLock(), safety_stop=None,
         control_mode=ControlMode(mode=ControlMode.MOVEIT, inputs_healthy=True), control_mode_receipt=time.monotonic(),
         actual_twist=[0.0] * 3,
         active_controllers=set(), trajectories={}, trajectory_done={},
@@ -103,6 +103,8 @@ def test_safety_stop_aborts_and_clears_controller_state(bridge):
     request = goal()
     bridge.active_controllers.add('lift')
     bridge.safety_stop = {'contact': 'arm_shelf'}
+    bridge.get_logger = lambda: SimpleNamespace(warn=lambda message: None)
+    bridge._arm_control_status = lambda: {'safety_stop': True}
     current = handle(request)
     bridge._execute_trajectory(current, 'lift')
     assert current.history == ['aborted']

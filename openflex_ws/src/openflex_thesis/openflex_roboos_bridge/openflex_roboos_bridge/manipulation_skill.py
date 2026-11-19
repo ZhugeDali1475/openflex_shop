@@ -17,6 +17,7 @@ from trajectory_msgs.msg import JointTrajectory
 
 from .telemetry_wait import wait_for_fresh_stop
 from .action_journal import cancel_to_hold_and_audit, record_terminal, send_audited_goal
+from .attachment_evidence import validate_attachment_evidence
 
 
 class ManipulationSkill:
@@ -79,9 +80,19 @@ class ManipulationSkill:
         run_path.mkdir(exist_ok=True)
         log_path = run_path / f'{script}_{time.time_ns()}.log'
         probe_started = time.monotonic()
+        command = ['/usr/bin/python3', str(self.root / 'scripts' / script), *extra]
+        environment = os.environ.copy()
+        if script in {'probe_openflex_grasp_planning.py',
+                       'probe_openflex_grasp_trajectory.py',
+                       'probe_openflex_place_trajectory.py'}:
+            model_path = Path(self.node.get_parameter('scene_model').value).expanduser().resolve(strict=True)
+            command.extend(['--model-path', str(model_path)])
+            environment['OPENFLEX_SIM_SCENE_MODEL'] = str(model_path)
+            environment['OPENFLEX_SIM_SCENE_CONFIG'] = str(
+                Path(self.node.get_parameter('scene_config').value).expanduser().resolve(strict=True))
         with log_path.open('w') as stream:
-            process = subprocess.Popen(['/usr/bin/python3', str(self.root / 'scripts' / script), *extra],
-                cwd=self.root, stdout=stream, stderr=subprocess.STDOUT)
+            process = subprocess.Popen(command, cwd=self.root, env=environment,
+                stdout=stream, stderr=subprocess.STDOUT)
             try:
                 while process.poll() is None:
                     self.gate(attached=True)
@@ -195,7 +206,7 @@ class ManipulationSkill:
         return bool(status.object_id == 'thesis_item_01' and status.verified and status.contact_detected
                     and status.gripper_closed and status.object_retained and diagnostic.get('attached_arm') == 'right')
 
-    def execute(self, arguments):
+    def execute(self, arguments, finalize=True):
         request_id = arguments['request_id']
         self.deadline = time.monotonic() + float(arguments['timeout_sec'])
         status, success, detail, stopped, uncertain = 'failed', False, '', False, False
@@ -214,7 +225,8 @@ class ManipulationSkill:
             rotation = candidate['orientation']
             target = [candidate['position']['x'], candidate['position']['y'],
                       math.atan2(2 * rotation['w'] * rotation['z'], 1 - 2 * rotation['z'] ** 2)]
-            navigation = self.node.execute({'request_id': request_id, 'timeout_sec': min(90, self.deadline - time.monotonic())},
+            navigation = self.node.execute({'request_id': request_id, 'target_id': 'pickup_zone',
+                                           'timeout_sec': min(90, self.deadline - time.monotonic())},
                                            target_override=target, finalize=False)
             if not navigation['success']:
                 if navigation['status'] == 'canceled':
@@ -243,7 +255,13 @@ class ManipulationSkill:
                 time.sleep(0.02)
             if not self.retained():
                 raise RuntimeError('Independent jaw-bracketed retained-object verification failed')
-            self.node.store.event(request_id, 'retained_object_verified', {'provenance': 'MuJoCo jaw geometry proxy, not physical force sensing'})
+            diagnostic = self.node.sample('diagnostic')
+            attachment = validate_attachment_evidence(
+                diagnostic, object_id='thesis_item_01', arm='right')
+            self.node.store.event(request_id, 'retained_object_verified', {
+                'provenance': 'MuJoCo jaw geometry proxy, not physical force sensing',
+                'attachment_evidence': attachment,
+            })
             transport, _ = self.probe(request_id, 'probe_openflex_grasp_trajectory.py', [str(source), '--held-transport'])
             if not transport.get('attached_transport_path_valid'):
                 raise RuntimeError(f'Actual attached-object escape rejected: {transport.get("blocked_at")}')
@@ -272,7 +290,12 @@ class ManipulationSkill:
             self.handles.clear()
             self.base_lock = None
             self.base_lock_epoch = None
-            self.node.store.finish(request_id, status, success=success and stopped, detail=detail,
-                stopped_confirmed=stopped, physical_verification=False,
-                grasp_verified=success and stopped, transport_safe=success and stopped,
-                backend='existing_MuJoCo_controllers_MoveIt_planning_TC_WAM_Oracle_NOT_PHYSICAL')
+            outcome = dict(status=status, detail=detail, stopped_confirmed=stopped,
+                           physical_verification=False, success=success and stopped,
+                           grasp_verified=success and stopped, transport_safe=success and stopped,
+                           backend='existing_MuJoCo_controllers_MoveIt_planning_TC_WAM_Oracle_NOT_PHYSICAL')
+            if finalize:
+                self.node.store.finish(request_id, status, **{k: v for k, v in outcome.items()
+                                                              if k != 'status'})
+            else:
+                return outcome

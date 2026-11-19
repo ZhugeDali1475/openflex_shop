@@ -38,6 +38,7 @@ class VelocityArbiter:
         self.epoch = 0
         self.stopped_since: Optional[float] = None
         self.last_measured_sec: Optional[float] = None
+        self.last_measured_velocity: Optional[Velocity] = None
         self.sources: Dict[int, Tuple[Velocity, float]] = {}
         self.affordance_valid = False
         self.affordance_physical = False
@@ -45,6 +46,7 @@ class VelocityArbiter:
         self.grasp_authorized = False
 
     def update_measured_velocity(self, velocity: Velocity, now_sec: float) -> None:
+        self.last_measured_velocity = velocity
         self.last_measured_sec = now_sec
         stopped = (
             abs(velocity.vx) <= self.config.stopped_linear_mps
@@ -77,13 +79,27 @@ class VelocityArbiter:
             raise ValueError("source mode must be NAV2, ACT or RECOVERY")
         self.sources[mode] = velocity, now_sec
 
-    def confirmed_stopped(self, now_sec: float) -> bool:
+    def confirmed_stopped(self, now_sec: float, stale_sec: Optional[float] = None) -> bool:
         return bool(
             self.last_measured_sec is not None
-            and now_sec - self.last_measured_sec <= self.config.measured_timeout_sec
+            and now_sec - self.last_measured_sec <= (
+                self.config.measured_timeout_sec if stale_sec is None else stale_sec)
             and self.stopped_since is not None
             and now_sec - self.stopped_since >= self.config.stop_confirm_sec
         )
+
+    def stop_diagnostics(self, now_sec: float) -> dict:
+        """Raw fields behind confirmed_stopped(), for logging only."""
+        return {
+            "now_sec": round(float(now_sec), 3),
+            "last_measured_sec": None if self.last_measured_sec is None else round(self.last_measured_sec, 3),
+            "measured_age_sec": None if self.last_measured_sec is None else round(now_sec - self.last_measured_sec, 3),
+            "stopped_since": None if self.stopped_since is None else round(self.stopped_since, 3),
+            "measured_velocity": None if self.last_measured_velocity is None else [
+                round(float(self.last_measured_velocity.vx), 4),
+                round(float(self.last_measured_velocity.vy), 4),
+                round(float(self.last_measured_velocity.wz), 4)],
+        }
 
     def act_safety_valid(self) -> bool:
         return bool(

@@ -38,6 +38,14 @@ if [[ "${OPENFLEX_ENABLE_SIM_PLACE:-0}" == "1" ]]; then
     echo 'Explicit simulation placement opt-in: guarded actual-pose release only; scene mutation remains disabled.'
 fi
 mkdir -p "${root}/local_dependencies/openflex_roboos"
+# Optional audited scene override: an explicit runtime profile replaces the legacy
+# derived scene generator. Both paths must be provided together.
+scene_params=()
+if [[ -n "${OPENFLEX_SIM_SCENE_MODEL:-}" ]]; then
+    [[ -n "${OPENFLEX_SIM_SCENE_CONFIG:-}" ]] || { echo "OPENFLEX_SIM_SCENE_MODEL requires OPENFLEX_SIM_SCENE_CONFIG" >&2; exit 1; }
+    scene_params=(--params-file "${OPENFLEX_SIM_SCENE_CONFIG}" -p scene_model_path:="${OPENFLEX_SIM_SCENE_MODEL}")
+    echo "Bridge scene override: ${OPENFLEX_SIM_SCENE_MODEL}"
+fi
 echo "Starting only the existing MuJoCo bridge in ROS domain ${ROS_DOMAIN_ID}."
 echo "No mission, Nav2, MoveIt executor, oracle grasp planner or automatic client."
 exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; main()' \
@@ -45,6 +53,7 @@ exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; m
     --params-file "${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml" \
     -p enable_viewer:=false -p publish_rgbd:=true -p image_width:=320 -p image_height:=240 \
     -p use_sim_time:=false \
+    "${scene_params[@]}" \
     -p derived_model_path:="${root}/local_dependencies/openflex_roboos/readonly_scene.xml" \
     -r /thesis/cmd_vel_selected:="${selected_velocity_topic}" \
     -r /thesis/place/control:="${place_topic}" \

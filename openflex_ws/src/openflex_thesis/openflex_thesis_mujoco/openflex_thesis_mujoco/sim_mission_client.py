@@ -14,6 +14,7 @@ class SimMissionClient(Node):
         self.declare_parameter("object_id", "thesis_item_01")
         self.declare_parameter("active_arm", 2)
         self.declare_parameter("pickup_observation_pose", [0.0, 0.0, 0.0])
+        self.declare_parameter("pickup_navigation_pose", [0.0, 0.0, 0.0])
         self.declare_parameter("delivery_pose", [-0.85, -0.80, 0.0])
         self.declare_parameter("coarse_top_k", 5)
         self.declare_parameter("refined_top_k", 5)
@@ -27,17 +28,20 @@ class SimMissionClient(Node):
             return
         self.sent = True
         pickup = [float(value) for value in self.get_parameter("pickup_observation_pose").value]
+        pickup_navigation = [float(value) for value in self.get_parameter("pickup_navigation_pose").value]
         delivery = [float(value) for value in self.get_parameter("delivery_pose").value]
         if len(pickup) != 3 or len(delivery) != 3:
             raise ValueError("pickup_observation_pose and delivery_pose need [x, y, yaw]")
+        if len(pickup_navigation) != 3:
+            raise ValueError("pickup_navigation_pose needs [x, y, yaw]")
         goal = RunPickDeliver.Goal()
         goal.task_id = str(self.get_parameter("task_id").value)
         goal.object_id = str(self.get_parameter("object_id").value)
         goal.pickup_observation_pose.header.frame_id = "map"
-        goal.pickup_observation_pose.pose.position.x = pickup[0]
-        goal.pickup_observation_pose.pose.position.y = pickup[1]
-        goal.pickup_observation_pose.pose.orientation.z = __import__("math").sin(0.5 * pickup[2])
-        goal.pickup_observation_pose.pose.orientation.w = __import__("math").cos(0.5 * pickup[2])
+        goal.pickup_observation_pose.pose.position.x = pickup_navigation[0]
+        goal.pickup_observation_pose.pose.position.y = pickup_navigation[1]
+        goal.pickup_observation_pose.pose.orientation.z = __import__("math").sin(0.5 * pickup_navigation[2])
+        goal.pickup_observation_pose.pose.orientation.w = __import__("math").cos(0.5 * pickup_navigation[2])
         goal.delivery_pose.header.frame_id = "map"
         goal.delivery_pose.pose.position.x = delivery[0]
         goal.delivery_pose.pose.position.y = delivery[1]

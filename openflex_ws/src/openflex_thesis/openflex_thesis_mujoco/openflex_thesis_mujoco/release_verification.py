@@ -53,3 +53,39 @@ def object_settled_on_surface(position, orientation, half_size, target, surface_
     surface_z = surface_center[2] + surface_half_size[2]
     return bool(abs(bottom - surface_z) <= 0.002
                 and math.hypot(*velocity[:3]) <= 0.01 and math.hypot(*velocity[3:]) <= 0.05)
+
+
+# Measured limits of the isolated fixture (ROS domain 83, MuJoCo only).
+#
+# The delivery counter centre sits ~1.1 m from the registered delivery approach
+# pose.  A planning-only probe of the real right-arm grasp (``place_trajectory``)
+# showed that MoveIt ``/compute_ik`` returns NO_IK_SOLUTION for a release centre
+# 0.62 m from the base, and that for this grasp the arm-feasible band is a narrow
+# strip near the table's near edge: map x in [-1.860, -1.845] for the left
+# delivery pose ``(-1.30, 3.60, pi)`` (i.e. 0.545-0.560 m of reach).  The centre
+# of that strip is used here.  ``SURFACE_EDGE_MARGIN_M`` keeps the object (half
+# extent 0.035 m) fully on the surface with a 1 cm buffer, which is the same
+# bound the independent ``release_request_rejection`` footprint check enforces.
+RELEASE_REACH_M = 0.5525
+SURFACE_EDGE_MARGIN_M = 0.045
+RELEASE_DROP_CLEARANCE_M = 0.015
+
+
+def reachable_release_center(base_xy, surface_center_xyz, half_size,
+                             reach=RELEASE_REACH_M, edge_margin=SURFACE_EDGE_MARGIN_M):
+    """Point on the delivery surface that a measured base can actually release onto.
+
+    Walks ``reach`` metres from the base towards the surface centre and rejects the
+    result when it falls outside the surface footprint (minus ``edge_margin``). The
+    returned ``z`` carries the small short-drop clearance above the settled height.
+    """
+    delta_x, delta_y = surface_center_xyz[0] - base_xy[0], surface_center_xyz[1] - base_xy[1]
+    distance = math.hypot(delta_x, delta_y)
+    if distance <= 1.0e-6:
+        return None
+    step = min(reach, distance)
+    point = [base_xy[0] + delta_x / distance * step, base_xy[1] + delta_y / distance * step]
+    if (abs(point[0] - surface_center_xyz[0]) > half_size[0] - edge_margin
+            or abs(point[1] - surface_center_xyz[1]) > half_size[1] - edge_margin):
+        return None
+    return [point[0], point[1], surface_center_xyz[2] + 0.08 + RELEASE_DROP_CLEARANCE_M]

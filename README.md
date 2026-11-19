@@ -6,7 +6,9 @@
 ## 从这里开始
 
 - [任务计划与阶段验收](LLM_HIERARCHICAL_ROBOT_TASK_PLAN_CN.md)
+- [工作空间地图与比赛半区场景入口](WORKSPACE_MAP_CN.md)
 - [当前安全问题与下一步](SAFETY_AND_TODO_CN.md)
+- [多商品商超场景：离线构建与验收边界](OPENFLEX_RETAIL_SCENE_CN.md)
 - [本地 GGUF 模型部署](ROBOBRAIN25_GGUF_LOCAL_CN.md)
 - [RoboOS 模型客户端适配](ROBOOS_GGUF_INTEGRATION_CN.md)
 - [OpenFlex 只读 MCP／ROS 接入](OPENFLEX_ROBOOS_READONLY_CN.md)

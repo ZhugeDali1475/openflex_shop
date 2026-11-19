@@ -47,10 +47,53 @@
 
 ## 离线研究与商超资产审计
 
+`audit_openflex_scene_inventory.py` 只读盘点本地 retail fixture 的货架/交付台 body、manifest 商品数和 scene 哈希；
+不启动 ROS、不推进 MuJoCo。输出目录须为新目录。它把 v7 标记为已验收单红运行回归基线，把 v3 标记为单红静态场景源，
+其他同拓扑版本只列为匹配资产，不自动等同于已验收运行环境。
+
+```bash
+python3 scripts/audit_openflex_scene_inventory.py \
+  --output local_dependencies/openflex_thesis/scene_inventory_NEW
+```
+
+`openflex_roboos_bridge/skill_contracts.py` 是无 ROS/MuJoCo 依赖的原子/组合 Skill 契约草案，
+定义请求/结果字段、终态、证据引用和组合步骤依赖校验；当前仅为离线契约，不是运行时调度器。
+回归测试：
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
+  scripts/tests/test_openflex_skill_contracts.py \
+  scripts/tests/test_openflex_scene_inventory.py
+```
+
 `audit_openflex_research_assets.py` 用SQLite只读事务、XML及Office文档解析核验库存、模型覆盖与中期来源；
 加 `--render` 仅在独立进程执行 `mj_forward` 生成静态截图，不执行 `mj_step`、ROS或机器人控制。
 输出必须为新目录，禁止输出到原商超资产或中期目录；不会把不匹配的中文SKU猜成YCB模型。
 相关论文与算法研究定位见 `thesis/商超轮臂机器人_研究主线与算法实验方案_CN.md`。
+
+`build_openflex_retail_scene.py`只在新输出目录合成机器人与商超静态场景及六个显式仿真实例；
+`--collision-mode mesh|box`用于重建同网格基线与包围盒碰撞候选；
+`audit_openflex_retail_dynamics.py`在指定独立MJCF副本上推进MuJoCo动力学，记录商品接触和速度。
+`export_openflex_retail_moveit_objects.py`仅导出未配准坐标系中的六商品碰撞盒JSON供离线检查，
+不是当前单商品桥接器可加载的MoveIt场景。
+第二个工具不连接ROS或控制器，不修改实时仿真，也不等价于抓取、导航或落稳安全验收；
+原始网格碰撞基线未通过筛查，包围盒碰撞候选在商品—货架子问题中通过，不能据此放行整机。
+不能为了消除报警而关闭货架碰撞或覆盖现场。
+
+`retail_object_lifecycle.py`提供纯Python的离线商品状态契约及单测，约束商品从世界到选中、附着、
+放置再回到世界的集合转移，只允许一个目标附着，并保留其他商品为世界对象。它只检查结构化状态和调用方传入的布尔门，
+不核验传感器证据，不做坐标配准，不调用ROS／MoveIt，不能替代运行时PlanningScene同步或安全验收。
+当前导出清单仍标记`runtime_consumable=false`、`execution_enabled=false`。
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
+  scripts/tests/test_openflex_retail_lifecycle.py
+```
+
+```bash
+python3 scripts/build_openflex_retail_scene.py --output local_dependencies/openflex_thesis/retail_fixture_NEW --render
+python3 scripts/audit_openflex_retail_dynamics.py --output local_dependencies/openflex_thesis/retail_dynamics_NEW
+```
 
 ```bash
 MUJOCO_GL=egl python3 scripts/audit_openflex_research_assets.py --output local_dependencies/openflex_thesis/NEW_RESEARCH_AUDIT --render

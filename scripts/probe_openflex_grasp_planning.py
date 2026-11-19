@@ -136,12 +136,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--search-base', action='store_true')
     parser.add_argument('--refined', action='store_true')
+    parser.add_argument('--model-path', type=Path,
+                        default=Path(os.environ.get(
+                            'OPENFLEX_SIM_SCENE_MODEL',
+                            str(ROOT / 'local_dependencies/openflex_roboos/readonly_scene.xml'))))
     arguments = parser.parse_args()
     if os.environ.get('ROS_DOMAIN_ID') != '83':
         raise RuntimeError('Use isolated ROS_DOMAIN_ID=83')
     output = ROOT / 'local_dependencies/openflex_roboos/runs' / datetime.now().strftime('grasp_planning_%Y%m%d_%H%M%S_%f')
     output.mkdir(parents=True)
-    model_path = ROOT / 'local_dependencies/openflex_roboos/readonly_scene.xml'
+    model_path = arguments.model_path.expanduser().resolve(strict=True)
     rclpy.init()
     node = PlanningProbe()
     report = {'grasp_execution_authorized': False}

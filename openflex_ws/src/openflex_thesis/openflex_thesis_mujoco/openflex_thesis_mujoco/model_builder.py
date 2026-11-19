@@ -162,11 +162,8 @@ def _add_scene(worldbody, spec: SceneSpec) -> None:
     )
 
 
-def build_thesis_model(
-    upstream_model_path: str = "",
-    output_path: str = "/tmp/openflex_thesis_mujoco_scene.xml",
-    scene: SceneSpec = SceneSpec(),
-) -> Path:
+def prepare_robot_tree(upstream_model_path: str = ""):
+    """Prepare an independent robot XML tree without adding a task scene."""
     source = resolve_upstream_model(upstream_model_path)
     tree = ET.parse(source)
     root = tree.getroot()
@@ -230,6 +227,16 @@ def build_thesis_model(
                 },
             )
 
+    return tree, worldbody
+
+
+def build_thesis_model(
+    upstream_model_path: str = "",
+    output_path: str = "/tmp/openflex_thesis_mujoco_scene.xml",
+    scene: SceneSpec = SceneSpec(),
+) -> Path:
+    tree, worldbody = prepare_robot_tree(upstream_model_path)
+    root = tree.getroot()
     _add_scene(worldbody, scene)
     equality = root.find("equality")
     if equality is None:

@@ -138,8 +138,21 @@ def start(arguments):
                            ('readonly', 'run_openflex_readonly_bridge.sh'),
                            ('simulation', 'run_openflex_sim_navigation.sh'),
                            ('planning', 'run_openflex_manipulation_preflight.sh')]:
-        environment = ['OPENFLEX_ENABLE_SIM_NAV=1', 'OPENFLEX_ENABLE_SIM_MANIPULATION=1',
-                       'OPENFLEX_ENABLE_SIM_PLACE=1', 'OPENFLEX_MOTION_PROFILE=' + profile] if name == 'simulation' else []
+        environment = []
+        if name == 'simulation':
+            environment += ['OPENFLEX_ENABLE_SIM_NAV=1', 'OPENFLEX_ENABLE_SIM_MANIPULATION=1',
+                            'OPENFLEX_ENABLE_SIM_PLACE=1', 'OPENFLEX_MOTION_PROFILE=' + profile]
+        if name in ('readonly', 'simulation'):
+            for key in ('OPENFLEX_SIM_SCENE_MODEL', 'OPENFLEX_SIM_SCENE_CONFIG'):
+                if os.environ.get(key):
+                    environment.append(f'{key}={os.environ[key]}')
+        if name == 'planning':
+            # The planning preflight consumes YAML shelf geometry. Keep this
+            # separate from OPENFLEX_SIM_SCENE_MODEL, which is an MJCF path.
+            for key in ('OPENFLEX_SIM_SCENE_MODEL', 'OPENFLEX_SIM_SHELF_SCENE_CONFIG',
+                        'OPENFLEX_SIM_SHELF_SCENE'):
+                if os.environ.get(key):
+                    environment.append(key + '=' + os.environ[key])
         start_unit(name, ['/bin/bash', str(ROOT / 'scripts' / filename)], environment)
         if name == 'simulation':
             save(profile_path, {'motion_profile': profile, 'physical_verification': False})
@@ -147,9 +160,13 @@ def start(arguments):
                          str(ROOT / 'scripts/openflex_mcp_entry.py'), '--port', '18556',
                          '--enable-navigation', '--enable-manipulation', '--enable-placement'])
     if arguments.gui:
+        viewer_environment = ['DISPLAY=' + os.environ.get('DISPLAY', ':0'),
+                              'XAUTHORITY=' + os.environ.get('XAUTHORITY', '/run/user/1000/gdm/Xauthority')]
+        for key in ('OPENFLEX_SIM_SCENE_MODEL',):
+            if os.environ.get(key):
+                viewer_environment.append(f'{key}={os.environ[key]}')
         start_unit('viewer', ['/bin/bash', str(ROOT / 'scripts/run_openflex_live_viewer.sh')],
-                   ['DISPLAY=' + os.environ.get('DISPLAY', ':0'),
-                    'XAUTHORITY=' + os.environ.get('XAUTHORITY', '/run/user/1000/gdm/Xauthority')])
+                   viewer_environment)
     return status()
 
 
@@ -199,9 +216,13 @@ def safe_stop(arguments):
             raise RuntimeError('Stopped state not confirmed; services left running, no force kill or false success')
         if arguments.shutdown_services:
             units = [UNITS[name] for name in ('viewer', 'skills', 'planning', 'simulation', 'readonly', 'model', 'redis')]
+            # Some profiles run the MCP gateway as one unit only; stopping a
+            # unit that this installation never loaded must not abort shutdown.
             units += ['openflex-roboos-navigation-mcp', 'openflex-roboos-manipulation-mcp']
             for unit in units:
-                subprocess.run(['systemctl', '--user', 'stop', unit], check=True)
+                subprocess.run(['systemctl', '--user', 'stop', unit], check=False)
+                if active(unit):
+                    raise RuntimeError(f'{unit} did not stop')
         return report
     except BaseException as error:
         report['error'] = str(error)

@@ -18,7 +18,7 @@ async def run(arguments, output):
     request_id = arguments.request_id or datetime.now().strftime('mcp_grasp_%Y%m%d_%H%M%S_%f')
     events = []
     async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
-        async with streamable_http_client('http://127.0.0.1:18555/mcp', http_client=client) as (reader, writer, _):
+        async with streamable_http_client(f'http://127.0.0.1:{arguments.port}/mcp', http_client=client) as (reader, writer, _):
             async with ClientSession(reader, writer) as session:
                 await session.initialize()
 
@@ -74,6 +74,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--request-id')
     parser.add_argument('--timeout-sec', type=float, default=600.0)
+    parser.add_argument('--port', type=int, default=18555,
+                        help='isolated MCP skills gateway port (18555 grasp-only, 18556 delivery)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--cancel-during-motion', action='store_true')
     modes.add_argument('--expect-timeout', action='store_true')

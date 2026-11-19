@@ -181,6 +181,7 @@ class MissionOrchestratorNode(RecoveryMissionMixin, Node):
         valid = bool(
             request.task_id
             and request.object_id
+            and request.destination_id in ("", "delivery_zone", "sim_delivery_top_left")
             and request.active_arm in (request.ARM_LEFT, request.ARM_RIGHT)
         )
         return GoalResponse.ACCEPT if not self.busy and valid else GoalResponse.REJECT
@@ -392,6 +393,7 @@ class MissionOrchestratorNode(RecoveryMissionMixin, Node):
         request = goal_handle.request
         goal = ExecuteFixedPlace.Goal()
         goal.object_id = request.object_id
+        goal.destination_id = request.destination_id
         goal.delivery_pose = deepcopy(request.delivery_pose)
         goal.active_arm = request.active_arm
         goal.timeout_sec = float(self.get_parameter("fixed_place_timeout_sec").value)

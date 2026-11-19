@@ -14,6 +14,17 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 from .async_tools import ros_sleep
 
+LEFT_DESTINATION_ID = "sim_delivery_top_left"
+_DESTINATION_ALIASES = {"delivery_zone": LEFT_DESTINATION_ID,
+                        "sim_delivery_top_left": LEFT_DESTINATION_ID}
+
+
+def canonical_destination_id(destination_id: str) -> str:
+    try:
+        return _DESTINATION_ALIASES[destination_id]
+    except KeyError as error:
+        raise ValueError(f"Unknown delivery destination: {destination_id}") from error
+
 
 class FixedPlaceSupervisorNode(Node):
     def __init__(self) -> None:
@@ -77,6 +88,7 @@ class FixedPlaceSupervisorNode(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.enabled = enabled
         msg.object_id = goal.object_id
+        msg.destination_id = canonical_destination_id(goal.destination_id or LEFT_DESTINATION_ID)
         msg.delivery_pose = deepcopy(goal.delivery_pose)
         msg.active_arm = goal.active_arm
         msg.reason = reason
@@ -116,6 +128,10 @@ class FixedPlaceSupervisorNode(Node):
                     <= float(self.get_parameter("status_timeout_sec").value)
                 )
                 if fresh and status.object_id == goal.object_id:
+                    expected_destination = canonical_destination_id(goal.destination_id or LEFT_DESTINATION_ID)
+                    if status.destination_id != expected_destination:
+                        self.command(goal, False, "place destination mismatch")
+                        return self.abort(goal_handle, 64, "place status destination mismatch")
                     if status.failure_code:
                         self.command(goal, False, "place executor failed")
                         return self.abort(goal_handle, status.failure_code, status.detail)

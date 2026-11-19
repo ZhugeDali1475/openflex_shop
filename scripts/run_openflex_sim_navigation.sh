@@ -47,8 +47,8 @@ children+=("$!")
 children+=("$!")
 sleep 4
 /usr/bin/python3 -m openflex_roboos_bridge.navigation_node --ros-args -p use_sim_time:=true \
-    -p scene_config:="${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml" \
-    -p scene_model:="${runtime}/readonly_scene.xml" \
+    -p scene_config:="${OPENFLEX_SIM_SCENE_CONFIG:-${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml}" \
+    -p scene_model:="${OPENFLEX_SIM_SCENE_MODEL:-${runtime}/readonly_scene.xml}" \
     -p journal:="${runtime}/navigation_operations.jsonl" &
 children+=("$!")
 if [[ "${OPENFLEX_ENABLE_SIM_PLACE:-0}" == "1" ]]; then

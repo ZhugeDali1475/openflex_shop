@@ -2,6 +2,7 @@
 std_msgs/Header header
 bool enabled
 string object_id
+string destination_id
 geometry_msgs/PoseStamped delivery_pose
 uint8 active_arm
 string reason
