@@ -256,3 +256,17 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 推理环境事实（只读探测，未运行模型）：本机 Python 3.10.12，`torch 2.12.0+cu130` 且 `cuda_available=True`；`transformers` **不可导入**（感知 worker 依赖未装）；`graspnet-baseline` 下无编译好的 `pointnet2`/`knn` CUDA `.so`。依赖清单 `requirements-graspnet.lock.txt`/`requirements-perception.lock.txt` 固定 `torch==2.7.1+cu126` 与 nvcc 12.6，与本机 2.12.0+cu130 不一致。即：**资产在位且哈希可信，但感知/GraspNet 推理运行时在本环境尚未就绪**，本任务不安装/不下载。
 
 结论：资产可用性的"存在性 + 完整性 + 许可证"已确认，但"CUDA 扩展/推理运行时可用"未满足，因此本阶段仍不能宣称视觉抓取后端可运行；阶段 A 与计划第 56 行条目继续不勾选。
+
+## 16. 视觉抓姿规划链的证据分层接入（2026-11-19）
+
+第 12–14 节把纯视觉抓姿规划链打通为不含仿真身份的数据链路，但该链尚未把结果写进第 10 节的"感知/评测分离"证据层。本轮新增 `openflex_roboos_bridge/visual_grasp_evidence.py`，把 `VisualGraspPlanRequest` 接入该 schema，仍不启动 ROS/仿真、不发运动。
+
+- `planning_perception_evidence()`：把规划请求载荷包进 `PerceptionEvidence.record`（`boundary=visual_grasp_planning`、`perception_track_id`、`task_target`、`planning_frame`、`candidate_count`、`visual_grasp_plan`），并即时调用 `to_dict()` 触发 schema 校验；构造即失败，不延迟到写出。
+- `planning_evaluation_evidence()`：默认生成 `mujoco_object_id=null`、`physical_verification=false` 的评测占位；仅当评测侧显式给出仿真身份才允许标 `physical_verification=true`。
+- `planning_evidence_pair()`：返回 `perception`/`evaluation` 两条记录；任一非法（如载荷被注入非空 `object_id`）立即抛 `VisualGraspEvidenceError`。
+
+新增 `scripts/tests/test_visual_grasp_evidence.py`（4 例）：感知/评测层分离、载荷注入仿真身份被拒、评测层缺身份不得标物理验证、缺 `VisualGraspPlanRequest`/帧引用被拒；并确认证据可 JSON 序列化。
+
+阶段 A ROS-free 相关回归最新为 `151 passed`；`py_compile` 与 `git diff --check` 通过。
+
+仍未完成，阶段 A 与计划第 56 行条目继续未通过：这是 ROS-free 证据契约，不代表已有在线运行批次；运行时 TF/时间戳新鲜度、节点/订阅图审计、MoveIt transport、GraspNet 推理运行时（见第 15 节）与执行后真值关联均未完成。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
