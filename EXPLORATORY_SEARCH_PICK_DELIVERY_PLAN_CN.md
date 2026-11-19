@@ -54,7 +54,7 @@
 - (✓) 新增 ROS-free `VisualGraspPointCloudInput` 契约：校验 `TargetObservation`、同相机帧/时间戳、商品与场景 XYZ 点云、有限值和最少点数，并序列化为不含 `object_id` 的 FitGrasp 适配载荷；该契约不调用 ROS、不执行运动。
 - (✓) 搜索观测现在显式记录拟执行手臂（本阶段固定右臂），可通过上述视觉点云契约；MuJoCo 当前头部 RGB-D 话题及 `map→head optical` TF 已静态核对，头部相机标定来源仍标记为仿真估计、非物理标定。
 - ( ) 将现有视觉点云抓姿链适配到本任务的 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口；不得把公共 `PickObject` 的注册 `object_id` 校验或另一套机器人控制入口当作视觉身份链路。
-- ( ) 建立感知证据与评测真值分离的日志 schema，记录 `physical_verification=false`。
+- (✓) 建立感知证据与评测真值分离的日志 schema：每次搜索尝试独立保存 `*_perception.json` 与 `*_evaluation.json`；感知层拒绝非空仿真 ID，评测层默认 `physical_verification=false`。
 - ( ) 完成静态测试和只读运行时审计；不发运动指令。
 
 门槛：源码、配置和日志都能证明在线输入无真值泄漏；纯视觉 profile 可启动且 Oracle 不在进程/订阅图中。未满足则停留在 A。

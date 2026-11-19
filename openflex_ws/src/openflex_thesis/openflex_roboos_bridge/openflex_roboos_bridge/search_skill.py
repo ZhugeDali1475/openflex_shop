@@ -35,6 +35,7 @@ from .target_search_contract import (
     resolve_search_target,
 )
 from .target_observation import observation_from_candidate
+from .evidence_schema import PerceptionEvidence, SimulationEvaluationEvidence
 
 
 COLORS = ("red", "blue", "green", "yellow", "magenta")
@@ -148,6 +149,26 @@ class SearchSkill:
         record["attempt"] = index
         (directory / f"attempt{index:02d}_resolution.json").write_text(
             json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
+        perception = PerceptionEvidence(
+            request_id=directory.name.removeprefix("search_"), attempt=index,
+            frame_sha256=resolution.frame_sha256,
+            frame_ref=record["frame_ref"], depth_ref=record["depth_ref"], record=record,
+        ).to_dict()
+        (directory / f"attempt{index:02d}_perception.json").write_text(
+            json.dumps(perception, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        )
+        evaluation = SimulationEvaluationEvidence(
+            request_id=directory.name.removeprefix("search_"), attempt=index
+        ).to_dict()
+        (directory / f"attempt{index:02d}_evaluation.json").write_text(
+            json.dumps(evaluation, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+        )
+        record["perception_evidence_ref"] = str(
+            (directory / f"attempt{index:02d}_perception.json").relative_to(self.root)
+        )
+        record["simulation_evaluation_ref"] = str(
+            (directory / f"attempt{index:02d}_evaluation.json").relative_to(self.root)
+        )
         return record
 
     # ---- operation ---------------------------------------------------

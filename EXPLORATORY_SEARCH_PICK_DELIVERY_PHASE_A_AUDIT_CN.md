@@ -147,3 +147,14 @@ SearchSkill._fresh_frame / analyze_once
 MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_color/image_raw,color/camera_info}`，三者采用 `thesis_head_color_optical_frame` 和同一仿真时间戳；并静态发布 `map→thesis_head_color_optical_frame`。`camera_spec.py` 明确相机位姿来源是 `simulation_mesh_estimated_not_physically_calibrated`。这说明静态接口形状可满足 RGB-D 回投影和坐标变换输入，但不构成 ROS 运行时新鲜度/TF 查询验证，也不等同于真实手眼标定。当前抓姿适配将继续限定为右臂和头部相机候选；在线规划前必须验证该 frame 到执行器规划坐标系的 TF、时间一致性和碰撞场景，不能把 MuJoCo 商品真值用于规划。
 
 本轮回归：阶段 A ROS-free 相关测试 `97 passed`；新增搜索观测→点云抓姿契约贯通用例。Python 语法编译和 `git diff --check` 通过；没有运行 ROS 或仿真。
+
+## 10. 感知证据/评测真值分层（2026-11-19）
+
+新增 ROS-free `evidence_schema.py`，并接入 `SearchSkill.save_evidence()`：
+
+- 每次尝试分别生成 `attemptNN_perception.json` 和 `attemptNN_evaluation.json`，两者由 `evidence_layer` 明确区分，并从原分辨率记录引用 RGB、深度和帧哈希。
+- 感知记录明确 `physical_verification=false`，递归拒绝非空的 `mujoco_object_id`、`object_id`、`selected_object_id`、`truth_object_id`、Oracle/MuJoCo ID 字段；其中显式 null 可用于表达“无真值关联”。
+- 评测记录默认 `mujoco_object_id=null`、`physical_verification=false`；只有评测侧显式给出仿真身份后才允许标为物理验证，感知记录本身永远不接受该身份。
+- operation journal 中的 observation 仍可包含状态和证据引用；每条事件载荷含有可独立解析的感知记录，而两类原始 JSON 文件分别持久化。该 schema 尚未接入物理评测器的真值关联流程。
+
+阶段 A 本地 ROS-free 回归现为 `100 passed`；Python 语法编译和 `git diff --check` 通过。本轮没有启动 ROS/仿真或发运动。此项完成日志契约，不代表已有在线运行批次或评测器隔离已经运行时验证。
