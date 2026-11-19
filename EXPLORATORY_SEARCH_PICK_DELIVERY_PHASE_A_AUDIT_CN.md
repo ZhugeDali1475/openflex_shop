@@ -234,3 +234,25 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 阶段 A ROS-free 相关回归最新为 `141 passed`；`py_compile` 与 `git diff --check` 通过。
 
 仍未完成，阶段 A 与计划第 56 行条目继续未通过：未接真实 GraspNet 模型资产与 `FitGrasp` ROS action、未做运行时 TF/时间戳新鲜度与订阅图审计、未接 MoveIt action transport、评测真值仍只在执行后由独立通道关联。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
+
+## 15. 抓取/感知模型资产与许可证静态核查（2026-11-19）
+
+对应执行计划第 6 节"明确实际抓取模型可用性"。本轮只读核查依赖清单、资产路径与许可证，不下载/恢复任何资产，不启动 ROS/仿真，不导入 torch/transformers。新增只读脚本 `scripts/audit_openflex_model_assets.py` 与测试 `scripts/tests/test_openflex_model_assets.py`（6 例，含"资产缺失即跳过"的真实环境集成用例）。
+
+资产事实（本机 `/home/wgb/openflex_shop/openflex_models`，`.gitignore` 第 21 行忽略 `/openflex_models/`，未纳入 git）：
+
+- 四个必需文件全部在位：`Qwen3.5-4B/config.json`、`sam2.1-hiera-small/config.json`、`graspnet-baseline/checkpoint-rs.tar`、`SHA256SUMS`；与 `openflex_grasp/.../backend_health.REQUIRED_MODEL_FILES` 一致。
+- `SHA256SUMS` 共 27 条，逐文件 sha256 校验 27/27 通过（0 不匹配、0 缺失）。即本机资产与清单完整一致；此前第 8 节"未验证本机存在"的表述现更新为"存在且哈希一致"。
+- 清单路径不可移植：条目使用另一台机器的绝对前缀 `/home/openflex/old/openflex_models/`（`path_portable=false`）；`backend_health.validate_model_root` 仅查存在性、不校验哈希，故哈希校验目前只有本审计脚本执行。
+- 无 AnyGrasp SDK/权重残留（`anygrasp_assets_present=[]`）；仓库仅存 AnyGrasp 的迁移记录文档和文献 html，与第 1.2 节"不恢复 AnyGrasp"一致。
+
+许可证（脚本内 `LICENSE_TABLE` 记录，供论文引用核对）：
+
+- `Qwen3.5-4B`：Apache-2.0（目录内含 LICENSE，README 元数据 license: apache-2.0）。
+- `sam2.1-hiera-small`：README 元数据 license: apache-2.0，但目录内未随附独立 LICENSE 文件（来源为 Meta segment-anything-2，Apache-2.0）。
+- `graspnet-baseline`（代码与 checklist 权重）：SJTU "Academic or Non-Profit Organization Noncommercial Research Use Only" —— 非商业研究用途；论文化使用与再分发需遵守。
+- ROS 包：`openflex_grasp`/`openflex_grasp_interfaces`/`openflex_grasp_supermarket_scene_adapter` 为 Apache-2.0；`openflex_grasp_moveit` 为 CC-BY-NC-SA-4.0（非商业）。
+
+推理环境事实（只读探测，未运行模型）：本机 Python 3.10.12，`torch 2.12.0+cu130` 且 `cuda_available=True`；`transformers` **不可导入**（感知 worker 依赖未装）；`graspnet-baseline` 下无编译好的 `pointnet2`/`knn` CUDA `.so`。依赖清单 `requirements-graspnet.lock.txt`/`requirements-perception.lock.txt` 固定 `torch==2.7.1+cu126` 与 nvcc 12.6，与本机 2.12.0+cu130 不一致。即：**资产在位且哈希可信，但感知/GraspNet 推理运行时在本环境尚未就绪**，本任务不安装/不下载。
+
+结论：资产可用性的"存在性 + 完整性 + 许可证"已确认，但"CUDA 扩展/推理运行时可用"未满足，因此本阶段仍不能宣称视觉抓取后端可运行；阶段 A 与计划第 56 行条目继续不勾选。
