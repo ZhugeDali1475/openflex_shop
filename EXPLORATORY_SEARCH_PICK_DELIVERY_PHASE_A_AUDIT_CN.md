@@ -158,3 +158,31 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 - operation journal 中的 observation 仍可包含状态和证据引用；每条事件载荷含有可独立解析的感知记录，而两类原始 JSON 文件分别持久化。该 schema 尚未接入物理评测器的真值关联流程。
 
 阶段 A 本地 ROS-free 回归现为 `100 passed`；Python 语法编译和 `git diff --check` 通过。本轮没有启动 ROS/仿真或发运动。此项完成日志契约，不代表已有在线运行批次或评测器隔离已经运行时验证。
+
+## 11. TC-WAM、AnyGrasp 与 MoveIt 目标接口复核（2026-11-19）
+
+本轮只读检查 Action 定义、gateway、Oracle、TC-WAM server/evaluator、MoveIt executor 和规划探针；没有启动 ROS/仿真，也没有发出运动。当前仓库 HEAD 为 `acc7d26`（`Separate perception and evaluation evidence`）；此前第 1 节中的 `2a0e9db` 是该次初审的历史基线，不是当前 HEAD。工作区仅保留原有 `openflex_ws/` 删除项。
+
+### 11.1 现有接口为什么不能直接接视觉观测
+
+- `GenerateGrasps.action` 的 `target` 类型是 `ObjectMemory`。它必须携带 `object_id`、带坐标的 pose、`map_version`、可见/授权状态；请求虽有 `require_physical_perception`，但该布尔值只作为生成策略提示/结果验收门，不能把视觉点云变成该 Action 的目标输入。
+- `AnyGraspGatewayNode` 将完整 `goal.target` 原样复制到 `AnyGraspRequest`，再以 `object_id + map_version + stage` 关联响应。Gateway 本身没有 RGB-D、点云、检测 ID 或视觉位姿转换逻辑。
+- 仓库中的 `OracleAnyGraspNode` 直接读取 `request.target.pose.pose` 构造规则化候选，并明确写 `physical_perception=false`、`source=mujoco_ground_truth_oracle_NOT_PHYSICAL`。所以当前 thesis Action 链上由 Oracle 回答时，候选是由目标真值位姿构造，而非视觉推理。
+- `ComputeTcWam.action` 同样以 `ObjectMemory target` 加 `GraspCandidateArray` 为输入。TC-WAM server/evaluator 以 `object_id/map_version` 检查同一目标，并从该 memory 的 pose、可见性和抓取授权状态建立目标状态、进行稳健性扰动和基座/手臂候选评估。它是候选/可达性规划链，不是视觉目标适配器。
+- `ExecuteMoveItGrasp.action` 及 `moveit_grasp_executor_node.py` 继续要求 target、粗规划和精化候选的 object ID/map version 一致；执行器还订阅 `/thesis/object_memory`，以该记忆身份/位姿做新鲜度确认、抓取验证和附着身份管理。货架碰撞物则可从独立 `shelf_scene_file` 静态载入并应用到 MoveIt PlanningScene。这意味着“静态货架几何”与“仿真目标身份/目标位姿”是两类依赖，前者有可复用入口，后者仍被现有执行器硬编码为 `ObjectMemory`。
+- `scripts/probe_openflex_grasp_planning.py` 明确订阅 `/thesis/object_memory`，从最新 `thesis_item_01` memory 调 GenerateGrasps 和 ComputeTcWam，并设置 `require_physical_perception=False`。该探针只验证仿真真值候选规划/碰撞检查，不是视觉输入链路。
+
+### 11.2 可复用部分与必须隔离/改造部分
+
+可复用：现有 RGB-D 检测/分割产出的商品点云和场景点云；`FitGrasp.action` 的 `product_points + scene_points + arm_name` 输入形态；`graspnet_worker` 的点云抓姿候选拟合；MoveIt executor 中货架静态碰撞场景加载、当前机器人状态、IK/碰撞校验、轨迹执行及夹爪控制的实现思路。
+
+不能直接复用为纯视觉链：以 `ObjectMemory` 为目标的 `GenerateGrasps → ComputeTcWam → ExecuteMoveItGrasp` 目标身份闭环；依赖 `object_id/map_version` 的响应关联；从 MuJoCo memory pose 创建候选、扰动目标或授权附着的路径。也不能把 `TargetObservation` 伪造为 `ObjectMemory`，或把 `FitGrasp` 的抓姿结果直接当作已通过全身碰撞检查的 MoveIt 轨迹。
+
+下一步接口边界建议（设计建议，不是已实现能力）：
+
+1. 纯视觉目标包以 `TargetObservation`/视觉 track ID、RGB-D 点云、时间戳、相机 frame 和已验证 TF 为唯一输入，调用 `FitGrasp` 或其明确标注的视觉抓姿 backend；返回候选抓姿及其 frame/stamp/track ID，不含仿真 object ID。
+2. 视觉规划适配器把候选抓姿转换到 MoveIt planning frame，并使用独立目标碰撞几何（来自分割点云的保守包围体或经验证的目标模型）与静态货架场景联合检查；规划输入只含机器人实测状态、候选位姿和碰撞场景，不订阅 `/thesis/object_memory`。
+3. 执行身份使用 perception track/request ID 与候选序号；仿真桥仅在执行后通过独立评测通道把接触、保留/附着、释放结果关联到仿真对象真值。评测 ID 不回流到候选生成、规划或在线目标选择。
+4. 若现有 executor 无法在不读取 ObjectMemory 的条件下提供独立抓取验证/附着状态，则新建视觉授权的执行边界或先抽离运动/场景原语；不得通过伪造 memory 绕过 fail-closed 检查。
+
+此接口仍需后续实现并补 ROS-free 伪造真值注入测试、场景碰撞集成测试和 ROS 运行时订阅图核验。阶段 A 的“视觉点云接入 MuJoCo 相机/MoveIt/评测”条目及阶段门槛均未完成；阶段 B 仍不得开始。

@@ -123,3 +123,11 @@
 - (✓) 已新增观测契约和预检 Oracle 显式开关；相关离线契约/搜索/tool 回归 90 项通过。
 - ( ) 阶段 A 尚未通过：视觉观测尚未接入真实抓取规划动作，且启动器尚未做 ROS 运行时节点/订阅审计；当前任何抓取请求都必须 fail-closed。
 - ( ) 阶段 B 及以后。
+
+### 6.1 阶段 A 最新审计补充（2026-11-19）
+
+- 当前 HEAD：`acc7d26`（感知证据与评测真值分离）；本轮提交之前已无本任务未提交代码改动，工作区只存在既有 `openflex_ws/` 删除项。
+- 已静态复核 `GenerateGrasps → AnyGrasp gateway/Oracle → ComputeTcWam → MoveIt grasp executor`：现有链路从 `ObjectMemory` 取得目标 pose/身份，并用 `object_id + map_version` 做请求、候选和执行关联；MoveIt 执行器也订阅 `/thesis/object_memory` 做新鲜度/身份验证和仿真附着管理。因此 ROS-free `TargetObservation/VisualGraspPointCloudInput` 还没有可直接调用的 ROS 规划入口。
+- 可复用边界：`FitGrasp` 接收视觉商品/场景点云并返回抓姿候选；MoveIt 执行器可单独装载静态货架碰撞场景。不可复用为纯视觉证据：当前 `GenerateGrasps/ComputeTcWam/ExecuteMoveItGrasp` 所需 ObjectMemory 目标语义及 Oracle pose 候选。
+- 推荐先定义不含仿真 ID 的视觉候选/规划接口，再隔离验证“视觉候选 + 独立目标碰撞几何 + 静态货架场景 + MoveIt 规划”；评测真值只允许由仿真桥在动作后关联，不能进入目标选择或规划输入。详细字段依赖和边界见阶段 A 审计第 11 节。
+- 阶段 A 仍未通过；本轮未启动 ROS/仿真、未做运行时订阅审计、未发出运动，也未改变任何任务完成项状态。
