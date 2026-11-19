@@ -37,8 +37,8 @@ def advertised():
             'request_id': {'type': 'string'}, 'timeout_sec': {'type': 'number'}},
             ('target_id', 'request_id')),
         'grasp_object': schema({
-            'object_id': {'type': 'string'}, 'request_id': {'type': 'string'},
-            'timeout_sec': {'type': 'number'}}, ('object_id', 'request_id')),
+            'perception_track_id': {'type': 'string'}, 'request_id': {'type': 'string'},
+            'timeout_sec': {'type': 'number'}}, ('perception_track_id', 'request_id')),
         'place_to_affordance': schema({
             'object_id': {'type': 'string'}, 'affordance_id': {'type': 'string'},
             'request_id': {'type': 'string'}, 'timeout_sec': {'type': 'number'}},
@@ -70,6 +70,9 @@ def test_projection_drops_host_arguments_and_narrows_registered_enums():
     assert navigate['properties']['target_id']['enum'] == list(REGISTERED_VALUES['target_id'])
     assert 'anyOf' not in navigate['properties']['target_id']
     assert 'sim_delivery_top_right' not in str(surface)
+    grasp = surface['grasp_object']
+    assert set(grasp['properties']) == {'perception_track_id'}
+    assert grasp['properties']['perception_track_id']['type'] == 'string'
 
 
 def test_unauthorized_delivery_table_is_never_offered_or_registered():
@@ -118,9 +121,18 @@ def test_declared_model_arguments_cannot_grow_without_the_projection_noticing():
     with pytest.raises(ValueError, match='free-coordinate/debug'):
         model_facing_tools(widened)
     narrowed = advertised()
-    narrowed['grasp_object']['properties'].pop('object_id')
+    narrowed['grasp_object']['properties'].pop('perception_track_id')
     with pytest.raises(ValueError, match='do not match the declared surface'):
         model_facing_tools(narrowed)
+
+
+def test_grasp_surface_rejects_simulator_object_id():
+    legacy = advertised()
+    legacy['grasp_object']['properties'] = {
+        'object_id': {'type': 'string'}, 'request_id': {'type': 'string'},
+        'timeout_sec': {'type': 'number'}}
+    with pytest.raises(ValueError, match='never object_id'):
+        model_facing_tools(legacy)
 
 
 def test_a_projected_surface_that_advertises_the_right_table_is_rejected():

@@ -55,7 +55,7 @@ MODEL_FACING_ARGUMENTS = {
     "get_robot_state": (),
     "observe_scene": (),
     "navigate_to_target": ("target_id",),
-    "grasp_object": ("object_id",),
+    "grasp_object": ("perception_track_id",),
     "place_to_affordance": ("object_id", "affordance_id"),
     "search_and_pick": ("query", "color"),
 }
@@ -64,7 +64,7 @@ MODEL_FACING_ARGUMENTS = {
 # runtime-validated registry: the right delivery table is intentionally absent.
 REGISTERED_VALUES = {
     "target_id": ("pickup_zone", "delivery_zone"),
-    "object_id": ("thesis_item_01",),
+    "object_id": ("thesis_item_01",),  # placement remains simulator-lifecycle scoped
     "affordance_id": ("delivery_zone",),
     "color": ("red", "blue", "green", "yellow", "magenta"),
 }
@@ -113,6 +113,8 @@ def project_schema(name, schema):
     expected = set(MODEL_FACING_ARGUMENTS[name])
     properties = dict(schema.get("properties") or {})
     check_argument_names(name, properties)
+    if name == "grasp_object" and "object_id" in properties:
+        raise ValueError("grasp_object must accept a visual perception_track_id, never object_id")
     model_visible = {key: value for key, value in properties.items()
                      if key not in ("request_id", "timeout_sec")}
     if set(model_visible) != expected:

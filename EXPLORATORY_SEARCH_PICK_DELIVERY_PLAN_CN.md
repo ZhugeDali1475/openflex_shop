@@ -47,8 +47,9 @@
 - (✓) 新增 ROS-free `TargetObservation` 数据契约与拒绝 Oracle/无效深度/无效 TF 的单元测试；尚未接入在线抓取主链，故身份解耦整体仍未完成。
 - (✓) 移除 `SearchSkill` 的 `expected_slot`/`nominal_pose_xyzyaw` 调用和搜索时目标登记深度/像素先验。
 - (✓) `resolve_search_target` 在无 expected slot 时扫描整帧 RGB-D，输出帧级视觉 token 且不返回仿真 `object_id`；旧槽位模式仅保留作回归对照（当前 token 不是跨帧追踪 ID）。
-- ( ) 使抓取请求显式携带视觉观测；缺深度、点云、时间戳或 TF 时拒绝。
-- ( ) 增加纯视觉 profile：默认不启动/订阅 `oracle_anygrasp`、`/thesis/object_observation`、`/thesis/object_memory`。
+- (✓) 抓取工具面改为 `perception_track_id`，新增视觉抓取输入校验；缺深度/时间戳/TF、Oracle 来源或传入 `object_id` 时拒绝。当前执行器仍在未接入视觉后端时 fail-closed，不发运动。
+- (✓) 预检启动器默认不启动 `oracle_anygrasp`、`object_memory`；Oracle 仅由显式 `OPENFLEX_ENABLE_ORACLE_GRASP=1` 加入对照进程。
+- (✓) 将通过 RGB-D 搜索的帧级候选序列化为 `TargetObservation` 并写入搜索证据；尚无跨帧持久 tracker，不能将帧级 token 冒称为稳定跟踪器。
 - ( ) 建立感知证据与评测真值分离的日志 schema，记录 `physical_verification=false`。
 - ( ) 完成静态测试和只读运行时审计；不发运动指令。
 
@@ -115,6 +116,6 @@
 
 - (✓) 已冻结目标、边界、L1/L2 分层和停止条件。
 - (✓) 已完成阶段 A 初审并确认两个阻塞：登记槽位先验、Oracle 抓取候选。
-- (✓) 已新增观测契约和预检 Oracle 显式开关；相关离线契约/搜索/tool 回归 80 项通过。
-- ( ) 阶段 A 尚未通过：抓取主链/MCP 仍强制仿真 `object_id`，视觉观测尚未接入规划器；启动器改动也未做 ROS 运行时审计。
+- (✓) 已新增观测契约和预检 Oracle 显式开关；相关离线契约/搜索/tool 回归 90 项通过。
+- ( ) 阶段 A 尚未通过：视觉观测尚未接入真实抓取规划动作，且启动器尚未做 ROS 运行时节点/订阅审计；当前任何抓取请求都必须 fail-closed。
 - ( ) 阶段 B 及以后。

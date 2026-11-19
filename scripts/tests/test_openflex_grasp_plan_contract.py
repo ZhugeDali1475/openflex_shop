@@ -8,9 +8,35 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "openflex_ws/src/openflex_thesis/openflex_roboos_bridge"))
 from openflex_roboos_bridge.grasp_plan_contract import (  # noqa: E402
     GraspCandidate,
+    validate_visual_grasp_input,
     GraspPlanError,
     evaluate_grasp_candidate,
 )
+from openflex_roboos_bridge.target_observation import TargetObservation, TargetObservationError  # noqa: E402
+
+
+def visual_observation(**overrides):
+    values = dict(perception_track_id="track_red_001", task_target="red", color="red",
+                  bbox_px=(1, 2, 10, 12), position_camera_xyz=(0.1, 0.0, 1.2),
+                  position_map_xyz=(1.0, 2.0, 0.8), depth_valid_fraction=0.9,
+                  timestamp_sec=1.0, camera_frame="camera", map_frame="map",
+                  tf_valid=True, confidence=0.95)
+    values.update(overrides)
+    return TargetObservation(**values)
+
+
+def test_visual_grasp_input_is_explicitly_non_oracle():
+    result = validate_visual_grasp_input(visual_observation())
+    assert result["perception_track_id"] == "track_red_001"
+    assert result["oracle_input"] is False
+    assert result["physical_verification"] is False
+
+
+def test_visual_grasp_rejects_simulator_identity_or_invalid_observation():
+    with pytest.raises(GraspPlanError):
+        validate_visual_grasp_input("thesis_item_01")
+    with pytest.raises(GraspPlanError):
+        validate_visual_grasp_input(visual_observation(tf_valid=False))
 
 
 def candidate(**updates):

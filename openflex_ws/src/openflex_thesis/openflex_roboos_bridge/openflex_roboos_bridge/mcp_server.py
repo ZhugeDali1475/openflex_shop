@@ -96,9 +96,12 @@ def create_server(port=18551, snapshot_port=18552, enable_navigation=False, enab
     if enable_manipulation:
         @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
                                                  idempotentHint=True, openWorldHint=False))
-        def grasp_object(object_id: Literal['thesis_item_01'], request_id: str, timeout_sec: float = 600.0) -> dict:
-            """隔离仿真单商品抓取：先全机器人和持物轨迹检查，再串行导航对位、精抓、独立夹持验证与撤回。返回 running 必须查询，失败不能当作持物成功。"""
-            return client.navigation('/grasp', {'object_id': object_id, 'request_id': request_id, 'timeout_sec': timeout_sec})
+        def grasp_object(perception_track_id: str, request_id: str, timeout_sec: float = 600.0) -> dict:
+            """仅接受实时 RGB-D 目标观测的视觉身份；没有对应新鲜 TargetObservation 时服务端必须拒绝，禁止传 MuJoCo object_id。"""
+            if not isinstance(perception_track_id, str) or not perception_track_id.startswith('track_'):
+                raise ValueError('perception_track_id must come from an authorized visual observation')
+            return client.navigation('/grasp', {'perception_track_id': perception_track_id,
+                                                 'request_id': request_id, 'timeout_sec': timeout_sec})
 
         @server.tool(annotations=annotations)
         def get_skill_result(request_id: str) -> dict:

@@ -5,10 +5,34 @@ import math
 from typing import Mapping, Tuple
 
 from .competition_registry import TARGET_OBJECT_ID
+from .target_observation import TargetObservation, TargetObservationError
 
 
 class GraspPlanError(ValueError):
     pass
+
+
+def validate_visual_grasp_input(observation: TargetObservation) -> Mapping[str, object]:
+    """Validate the only input accepted by a future pure-vision grasp backend.
+
+    This is intentionally separate from the legacy simulator-object planner.
+    It proves the boundary at the API layer without pretending that the current
+    MuJoCo planning probe is an RGB-D grasp model.
+    """
+    if not isinstance(observation, TargetObservation):
+        raise GraspPlanError("visual grasp requires a TargetObservation, not object_id")
+    try:
+        observation.validate_for_grasp()
+    except TargetObservationError as error:
+        raise GraspPlanError(str(error)) from error
+    return {
+        "perception_track_id": observation.perception_track_id,
+        "task_target": observation.task_target,
+        "position_map_xyz": list(observation.position_map_xyz),
+        "source": observation.source,
+        "physical_verification": False,
+        "oracle_input": False,
+    }
 
 
 @dataclass(frozen=True)

@@ -44,8 +44,11 @@ class ManipulationSkill:
         self.released_target = None
 
     def submit(self, arguments):
-        if set(arguments) != {'object_id', 'request_id', 'timeout_sec'} or arguments['object_id'] != 'thesis_item_01':
-            raise ValueError('Only the verified single simulation object is supported')
+        if set(arguments) != {'perception_track_id', 'request_id', 'timeout_sec'}:
+            raise ValueError('Grasp requires a visual perception_track_id, request_id and timeout_sec')
+        track_id = arguments['perception_track_id']
+        if not isinstance(track_id, str) or not track_id.startswith('track_'):
+            raise ValueError('perception_track_id must come from an authorized RGB-D observation')
         if isinstance(arguments['timeout_sec'], bool) or not isinstance(arguments['timeout_sec'], (int, float)):
             raise ValueError('timeout_sec must be a JSON number')
         timeout = float(arguments['timeout_sec'])
@@ -211,6 +214,10 @@ class ManipulationSkill:
         self.deadline = time.monotonic() + float(arguments['timeout_sec'])
         status, success, detail, stopped, uncertain = 'failed', False, '', False, False
         try:
+            # The current trajectory probe still consumes simulator object
+            # memory.  Refuse explicitly instead of translating a visual track
+            # back into thesis_item_01 and creating a false visual result.
+            raise RuntimeError('Visual TargetObservation grasp backend is not integrated; no simulator object fallback')
             self.gate()
             self.node.set_mode(ControlMode.HOLD)
             if not self.node.stopped() or not self.joints_stopped():

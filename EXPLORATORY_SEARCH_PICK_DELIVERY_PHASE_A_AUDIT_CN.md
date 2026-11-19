@@ -107,10 +107,12 @@ SearchSkill._fresh_frame / analyze_once
 依据执行计划 v2，当前仅完成契约/启动边界的第一步，不代表阶段 A 通过：
 
 - 新增 `openflex_roboos_bridge/target_observation.py`：定义 ROS-free `TargetObservation`，携带任务语义、视觉 track ID、RGB-D 坐标、有效深度比例、时间戳、TF、置信度和来源；拒绝无效 TF、零有效深度、非有限坐标及 Oracle/MuJoCo 来源。输出中明确 `mujoco_object_id=null`、`physical_verification=false`。
-- 新增 `scripts/tests/test_target_observation_contract.py` 和“未知槽位、偏离旧注册位置”的整帧搜索测试；相关契约、搜索、MCP/tool surface 回归 `80 passed`。命令：`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/tests/test_target_observation_contract.py scripts/tests/test_openflex_target_search.py scripts/tests/test_openflex_target_resolution_contract.py scripts/tests/test_openflex_retail_search.py scripts/tests/test_openflex_mcp_target_compat.py scripts/tests/test_openflex_tool_surface.py scripts/tests/test_openflex_delivery_contract.py`。禁用自动插件是因为系统 pytest 与用户目录 anyio 插件版本不兼容（插件导入报 `No module named '_pytest.scope'`）。
+- 新增契约、搜索未知槽位用例、抓取输入校验用例和 MCP tool-surface 约束；阶段 A 相关回归最新为 `90 passed`。命令：`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q scripts/tests/test_target_observation_contract.py scripts/tests/test_openflex_target_search.py scripts/tests/test_openflex_target_resolution_contract.py scripts/tests/test_openflex_retail_search.py scripts/tests/test_openflex_mcp_target_compat.py scripts/tests/test_openflex_tool_surface.py scripts/tests/test_openflex_delivery_contract.py scripts/tests/test_openflex_grasp_plan_contract.py`。禁用自动插件是因为系统 pytest 与用户目录 anyio 插件版本不兼容（插件导入报 `No module named '_pytest.scope'`）。
 - `scripts/openflex_manipulation_preflight.launch.py` 现默认不启动 `object_memory` 和 `oracle_anygrasp`；仅显式 `OPENFLEX_ENABLE_ORACLE_GRASP=1` 才加入这两个对照组件。该启动文件已通过 `py_compile`，尚未启动 ROS 栈验证实际节点图。
 - `git diff --check` 通过；新增契约文件和启动器语法编译通过。
 
 进一步修复：`SearchSkill` 已不再读取 registry nominal slot；无 expected slot 的整帧解析会返回帧级视觉候选 token（当前字段名为 `perception_track_id`，尚不是跨帧 tracker）；并在当前阶段故意拒绝把候选交给仍要求仿真 ID 的抓取器，因此不会发运动命令。旧 slot-bound 解析仅保留给历史回归测试，不能作为未知槽位能力证据。
 
-仍未完成且保持阻塞：MCP 和 `ManipulationSkill` 仍以 `object_id` 为抓取接口；`TargetObservation` 尚未接入规划器；启动器改动尚未做 ROS 运行时节点/订阅审计。故不进入阶段 B。原有 `openflex_ws/` 删除项保持原样。
+进一步修复：MCP/tool surface 和 `ManipulationSkill.submit` 已改为接收 `perception_track_id`；`grasp_plan_contract.validate_visual_grasp_input` 会拒绝字符串 `object_id`、无效 TF/深度和 Oracle 来源。SearchSkill 会把 RGB-D 候选保存为 `TargetObservation`，但当前执行器在视觉规划后端接入前明确返回失败且不发运动。
+
+仍未完成且保持阻塞：`TargetObservation` 尚未接入真实抓取规划动作；启动器改动尚未做 ROS 运行时节点/订阅审计。故不进入阶段 B。原有 `openflex_ws/` 删除项保持原样。

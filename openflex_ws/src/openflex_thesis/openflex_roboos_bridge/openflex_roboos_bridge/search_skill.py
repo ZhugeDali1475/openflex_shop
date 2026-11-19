@@ -34,6 +34,7 @@ from .target_search_contract import (
     analyze_frame,
     resolve_search_target,
 )
+from .target_observation import observation_from_candidate
 
 
 COLORS = ("red", "blue", "green", "yellow", "magenta")
@@ -109,7 +110,27 @@ class SearchSkill:
         pose = self._camera_pose()
         analysis = analyze_frame(rgb, depth, intrinsics, pose, color=color)
         resolution = resolve_search_target(analysis, query, color=color, object_id=None)
-        artifacts = {"rgb": rgb, "depth": depth, "analysis": analysis}
+        observation = None
+        if resolution.outcome == "authorized":
+            candidate = next(item for item in analysis.candidates
+                             if item.candidate_id == resolution.selected_candidate_id)
+            x0, y0, x1, y1 = candidate.bbox_px
+            u, v = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+            depth_m = float(candidate.depth_m)
+            position_camera = ((u - intrinsics.cx) * depth_m / intrinsics.fx,
+                               (v - intrinsics.cy) * depth_m / intrinsics.fy, depth_m)
+            depth_roi = depth[max(0, y0):min(depth.shape[0], y1 + 1),
+                              max(0, x0):min(depth.shape[1], x1 + 1)]
+            depth_valid_fraction = float(np.count_nonzero(depth_roi > 0) / depth_roi.size) if depth_roi.size else 0.0
+            timestamp = _stamp_seconds(color_message.header.stamp)
+            observation = observation_from_candidate(
+                candidate, task_target=query, timestamp_sec=timestamp,
+                camera_frame=self.color_frame, map_frame="map",
+                position_camera_xyz=position_camera,
+                depth_valid_fraction=depth_valid_fraction,
+                track_id=resolution.selected_perception_track_id)
+        artifacts = {"rgb": rgb, "depth": depth, "analysis": analysis,
+                     "observation": observation}
         return resolution, artifacts
 
     def save_evidence(self, directory: Path, index: int, resolution, artifacts):
@@ -119,6 +140,8 @@ class SearchSkill:
         Image.fromarray(artifacts["rgb"]).save(image_path)
         Image.fromarray(artifacts["depth"]).save(depth_path)
         record = resolution.to_dict()
+        if artifacts.get("observation") is not None:
+            record["target_observation"] = artifacts["observation"].to_dict()
         record["frame_ref"] = str(image_path.relative_to(self.root))
         record["depth_ref"] = str(depth_path.relative_to(self.root))
         record["attempt"] = index
