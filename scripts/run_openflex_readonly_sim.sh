@@ -46,6 +46,26 @@ if [[ -n "${OPENFLEX_SIM_SCENE_MODEL:-}" ]]; then
     scene_params=(--params-file "${OPENFLEX_SIM_SCENE_CONFIG}" -p scene_model_path:="${OPENFLEX_SIM_SCENE_MODEL}")
     echo "Bridge scene override: ${OPENFLEX_SIM_SCENE_MODEL}"
 fi
+# ROS 2 Humble does not apply a plain ``-r <action>:=<new>`` rule to an action
+# server: the graph names are the hidden ``<action>/_action/<leaf>`` topics and
+# services, so the rule never matches and the action keeps its canonical name.
+# Expand every disabled action into its hidden names so the disabled endpoint is
+# what actually appears in the graph (verified on Humble: remapping the hidden
+# names renames the discovered action).
+action_remaps=()
+for spec in \
+    "/lift_joint_controller/follow_joint_trajectory:${lift_action}" \
+    "/left_joint_trajectory_controller/follow_joint_trajectory:/openflex_readonly_disabled/left_arm" \
+    "/right_joint_trajectory_controller/follow_joint_trajectory:${right_arm_action}" \
+    "/left_gripper_controller/gripper_cmd:/openflex_readonly_disabled/left_gripper" \
+    "/right_gripper_controller/gripper_cmd:${right_gripper_action}"; do
+    source_action="${spec%%:*}"
+    target_action="${spec#*:}"
+    [[ "${source_action}" == "${target_action}" ]] && continue
+    for leaf in feedback status send_goal cancel_goal get_result; do
+        action_remaps+=(-r "${source_action}/_action/${leaf}:=${target_action}/_action/${leaf}")
+    done
+done
 echo "Starting only the existing MuJoCo bridge in ROS domain ${ROS_DOMAIN_ID}."
 echo "No mission, Nav2, MoveIt executor, oracle grasp planner or automatic client."
 exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; main()' \
@@ -61,8 +81,4 @@ exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; m
     -r /thesis_sim/reset_nominal:=/openflex_readonly_disabled/reset_nominal \
     -r /thesis_sim/randomize:=/openflex_readonly_disabled/randomize \
     -r /thesis_sim/drop_object:=/openflex_readonly_disabled/drop_object \
-    -r /lift_joint_controller/follow_joint_trajectory:="${lift_action}" \
-    -r /left_joint_trajectory_controller/follow_joint_trajectory:=/openflex_readonly_disabled/left_arm \
-    -r /right_joint_trajectory_controller/follow_joint_trajectory:="${right_arm_action}" \
-    -r /left_gripper_controller/gripper_cmd:=/openflex_readonly_disabled/left_gripper \
-    -r /right_gripper_controller/gripper_cmd:="${right_gripper_action}"
+    "${action_remaps[@]}"

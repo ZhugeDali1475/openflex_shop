@@ -90,7 +90,7 @@ SearchSkill._fresh_frame / analyze_once
 - ( ) 完成身份解耦：视觉 `perception_track_id`、任务语义目标与 MuJoCo `object_id` 分离。
 - ( ) 建立纯视觉抓取运行模式，保证该模式不启动/调用 Oracle；Oracle 对照使用独立开关和批次。
 - ( ) 建立感知日志与评测真值分离的 schema，并为本阶段生成运行证据。
-- ( ) 在线运行时复核节点、话题、输入来源及相机帧；本轮没有启动 ROS，因此尚未完成。
+- (✓) 在线运行时复核节点、话题、输入来源及相机帧（隔离域 83，只读 MuJoCo 桥；见第 18 节）。纯视觉抓姿 Skill 链本身未启动，在线抓取输入仍 fail-closed。
 
 ## 6. 下一步（仍属于阶段 A）
 
@@ -298,3 +298,26 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 计划第 6 节"明确实际抓取模型可用性"的**推理运行时可用性**本轮已满足：资产哈希/许可（第 15 节）+ CUDA 扩展重建 + checkpoint 推理 PASS + 感知 venv 可导入。环境产物（`.venvs/`、`/home/wgb/.cuda/`、`openflex_models/`）均在仓库外或已 gitignore，本轮提交只含脚本、测试与本文档。
 - 阶段 A **仍未通过**：计划书阶段 A 的另一条门槛仍是隔离域 83 下的只读运行时审计（节点/话题/TF 新鲜度/订阅图），本轮未启动 ROS/仿真、未做该审计、未发运动。视觉抓姿链的在线 transport（`FitGrasp` ROS action、MoveIt transport）与执行后真值关联也仍未接。
+
+## 18. 隔离域 83 只读运行时审计（2026-11-19）
+
+经用户授权，本轮首次实际启动 ROS 2（Humble，`ROS_DOMAIN_ID=83`）做只观察在线审计：只运行仓库既有 `scripts/run_openflex_readonly_sim.sh`（仅 MuJoCo 桥节点，无 mission/Nav2/MoveIt/Oracle/自动客户端），不发任何运动指令，审计后立即关停并确认图为空。环境使用仓库既有 `openflex_ws/install_v2`。
+
+### 18.1 观测到的运行时图
+
+- 节点（启动后）：`/openflex_thesis_mujoco_bridge`、`/mujoco_control_mode_receiver`。无 Oracle、AnyGrasp gateway、MoveIt、Nav2 或 mission 节点/进程（`ps` 复核一致）。
+- 真值/运动入口被切断：`/thesis/object_memory` 话题在图中不存在；桥节点改为订阅 `/openflex_readonly_disabled/object_memory`，其发布者数为 0。`cmd_vel`、`place_control` 同样重映射到 `openflex_readonly_disabled/*`（发布者 0）；`reset_nominal`/`randomize`/`drop_object` 服务重映射为 `openflex_readonly_disabled/*`。
+- 相机与 TF：`/thesis_sim/head/color/image_raw` 约 4 Hz；`/tf` 含 `map→odom→base_link` 及 `map→thesis_head_color_optical_frame`（平移 `[0.253, 0, 1.312]`，四元数 `[-0.5, 0.5, -0.5, 0.5]`），与第 13 节“头部相机在 `map` 的位姿是运行时读数”一致。
+- 安全审计：桥节点在约 30 s（约 15005 次采样）内持续输出 `MUJOCO_SAFETY_AUDIT ... "violation": false`。
+- 关停后复核：域 83 节点列表与话题列表（除 `parameter_events`/`rosout`）均为空，无残留仿真进程。
+
+### 18.2 新发现并已修复：只读 profile 的运动 action 重映射在 Humble 下失效
+
+- 首次捕获发现：`-r /right_joint_trajectory_controller/follow_joint_trajectory:=/openflex_readonly_disabled/right_arm` 等规则未生效——隐藏 `_action/*` 话题仍是 `/right_joint_trajectory_controller/follow_joint_trajectory/_action/status` 等规范名。用隔离最小 rclpy `ActionServer` 实验复现：`-r probe_action:=remapped_action` 后 `ros2 action list` 仍显示 `/probe_action`。原因是 ROS 2 中 action 的图名是隐藏的 `<action>/_action/{feedback,status,send_goal,cancel_goal,get_result}` 话题/服务，精确名重映射规则不匹配 action 名本身。
+- 影响：只读 profile 下臂/升降/夹爪 action 仍以规范名对外暴露，"禁用"只由“不启动客户端”保证，而非由重映射强制。
+- 修复（`scripts/run_openflex_readonly_sim.sh`）：把每个待禁用 action 展开为其 5 个 `_action/*` 隐藏名再重映射（enabled 路径为 identity 时跳过）。隔离实验确认重映射隐藏名可真正改名。修复后复跑只读仿真：5 个运动 action 变为 `/openflex_readonly_disabled/{lift,right_arm,right_gripper,left_arm,left_gripper}`，规范名 action 不存在；其余图事实不变。
+
+### 18.3 结论与仍未覆盖的部分
+
+- 已核对：纯只读桥 profile 可启动；Oracle 不在进程/订阅图中；真值/运动通道在图上无发布者；头部相机与 `map→head` TF 在线可用；运动 action 现已真正改名隔离。计划阶段 A"只读运行时审计（节点/话题/输入来源/相机帧）"条目录入证据。
+- 仍未覆盖（阶段 A 不能因此标为通过）：本轮未启动视觉抓姿 Skill 链、`FitGrasp` ROS action、MoveIt transport 与评测真值关联，故"将现有视觉点云抓姿链适配到 MuJoCo 相机/场景坐标/TF/仿真 MoveIt/评测接口"条目仍未完成；桥节点发布的 `/thesis/object_observation` 是仿真真值派生观测（noise=0，confidence=0.99），只作为仿真观测口，不是物理感知证据。
