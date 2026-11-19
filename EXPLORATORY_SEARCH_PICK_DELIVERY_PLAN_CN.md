@@ -51,6 +51,7 @@
 - (✓) 预检启动器默认不启动 `oracle_anygrasp`、`object_memory`；Oracle 仅由显式 `OPENFLEX_ENABLE_ORACLE_GRASP=1` 加入对照进程。
 - (✓) 将通过 RGB-D 搜索的帧级候选序列化为 `TargetObservation` 并写入搜索证据；尚无跨帧持久 tracker，不能将帧级 token 冒称为稳定跟踪器。
 - (✓) 静态核查仓库现有 `openflex_grasp`：Qwen/SAM2 同帧 RGB-D 分割与点云、GraspNet `FitGrasp` 可作为视觉抓姿候选技术基础；其接口边界和未接通原因已记入阶段 A 审计。此项只确认代码能力，不代表模型资产可用或闭环已集成。
+- (✓) 新增 ROS-free `VisualGraspPointCloudInput` 契约：校验 `TargetObservation`、同相机帧/时间戳、商品与场景 XYZ 点云、有限值和最少点数，并序列化为不含 `object_id` 的 FitGrasp 适配载荷；该契约不调用 ROS、不执行运动。
 - ( ) 将现有视觉点云抓姿链适配到本任务的 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口；不得把公共 `PickObject` 的注册 `object_id` 校验或另一套机器人控制入口当作视觉身份链路。
 - ( ) 建立感知证据与评测真值分离的日志 schema，记录 `physical_verification=false`。
 - ( ) 完成静态测试和只读运行时审计；不发运动指令。

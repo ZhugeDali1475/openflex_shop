@@ -130,3 +130,14 @@ SearchSkill._fresh_frame / analyze_once
 结论：下一项应设计 `TargetObservation/RGB-D point cloud → FitGrasp` 的无 ROS 纯数据适配契约和仿真规划边界；FitGrasp 仅返回抓姿，不应负责执行。只有在视觉位姿能进入不读取 MuJoCo 目标真值的仿真 MoveIt 场景/规划链、且日志把感知输入和真值评测分开后，才可做在线只观察审计。阶段 A 仍未通过。
 
 离线检查说明：本轮曾尝试把 `test_openflex_manipulation_submission.py` 加入 pytest 批次，但该环境虽有 `rclpy`，缺少构建生成的 `openflex_thesis_msgs` Python 模块，收集阶段报 `ModuleNotFoundError`；该测试未运行，不将其计入通过数。应使用前述 ROS-free 契约测试批次作本阶段有效回归。
+
+## 9. ROS-free 点云适配契约（2026-11-19）
+
+新增 `openflex_roboos_bridge/visual_grasp_input.py` 的 `VisualGraspPointCloudInput`，作为视觉观测进入未来 FitGrasp transport adapter 前的唯一数据边界：
+
+- 只接受已经通过 `TargetObservation.validate_for_grasp()` 的视觉观测；保留 `perception_track_id`，没有 `object_id` 字段。
+- 商品点云和场景点云必须是同一相机帧、同一时间戳，XYZ 有限且每份默认至少 100 点；带颜色的商品点云会在边界处裁成 XYZ，不改变来源。
+- `to_fit_grasp_payload()` 只返回 ROS-free 字典和 NumPy XYZ 数组，明确 `oracle_input=false`、`physical_verification=false`；它不是 `FitGrasp.Goal`，不会发 action 或运动。
+- 新增 `test_visual_grasp_input_contract.py`，覆盖身份隔离、帧/时间戳一致性、点数和非有限值拒绝。
+
+这一步固定了“感知点云可以被抓姿后端消费”的接口，但仍没有解决相机/TF 配置、GraspNet 模型资产、仿真 MoveIt 场景碰撞、执行器身份和评测真值分离。因此阶段 A 继续保持未通过。
