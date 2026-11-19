@@ -133,3 +133,4 @@
 - 阶段 A 仍未通过；本轮未启动 ROS/仿真、未做运行时订阅审计、未发出运动，也未改变任何任务完成项状态。
 - 已按第 11 节接口建议新增 ROS-free `VisualGraspPlanRequest` 契约（`visual_grasp_planning.py`）：从视觉点云推导独立目标碰撞体、把候选抓姿变换到规划帧、并与静态货架障碍和实测机器人状态组合成不含仿真身份的规划请求；具备 13 例拒绝路径/变换测试，离线批次最新 `126 passed`。此契约尚未接入 MuJoCo TF/时间戳运行时、GraspNet 资产、MoveIt transport 与评测真值关联，故计划“视觉点云抓姿链适配”条目不勾选。
 - 已新增 ROS-free 场景/TF 绑定 `visual_grasp_scene.py`：解析货架场景 YAML 为保守障碍 AABB、强制 `场景 frame==规划帧==观测 map_frame`、从实测头部相机 TF 构造相机→规划变换，并组装不含仿真身份的规划请求；新增 8 例测试（含真实 `sim_shelf_scene.yaml`），离线批次最新 `134 passed`。头部相机在 `map` 的位姿仍是运行时读数，运行时 TF 新鲜度/订阅图审计与 MoveIt transport 仍未做，故计划条目继续不勾选。
+- 已新增 ROS-free 抓姿拟合传输适配 `visual_grasp_fit_adapter.py`：把视觉点云输入塑造成 `FitGrasp` 请求载荷，并校验拟合结果（成功、非 Oracle、同帧同时间戳、单位四元数）后转为规划候选，串起“点云→FitGrasp→候选→规划请求”的纯数据链路；新增 7 例测试并含端到端贯通，离线批次最新 `141 passed`。真实 GraspNet 资产、`FitGrasp` ROS action、运行时 TF/订阅审计与 MoveIt transport 仍未做，故计划条目继续不勾选。

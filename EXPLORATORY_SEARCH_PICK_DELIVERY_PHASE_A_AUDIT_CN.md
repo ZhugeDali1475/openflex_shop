@@ -220,3 +220,17 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 阶段 A ROS-free 相关回归最新为 `134 passed`；`py_compile` 与 `git diff --check` 通过。
 
 仍未完成，阶段 A 与计划第 56 行条目继续未通过：未查询运行时 TF/时间戳新鲜度、未把请求接到 MoveIt action transport、未载入 GraspNet 资产、未做节点/订阅图运行时审计，评测真值仍只在执行后由独立通道关联。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
+
+## 14. 视觉点云↔FitGrasp 传输适配契约（2026-11-19）
+
+第 12/13 节分别固定了“点云→规划请求”与“场景/TF 绑定”，中间的抓姿拟合环节仍无 ROS-free 契约。本轮新增 `openflex_roboos_bridge/visual_grasp_fit_adapter.py`，把“视觉点云→FitGrasp→抓姿候选”闭合为纯数据链路：`TargetObservation → VisualGraspPointCloudInput → FitGraspRequestPayload →（未来 FitGrasp server / GraspNet worker）→ FitGraspResult → GraspCandidatePose → VisualGraspPlanRequest`。不调用 ROS action、不载入模型、不发运动。
+
+- `FitGraspRequestPayload.from_visual_input()`：从视觉输入生成 `FitGrasp.Goal` 的 ROS-free 类比（`detection_id=perception_track_id`、`arm_name`、`grasp_strategy`、相机帧/时间戳、商品与场景 XYZ、`timeout_sec`），并标 `oracle_input=false`；拒绝字符串 `object_id`、空策略或非法超时。
+- `FitGraspResult`：`FitGrasp.action` 结果的 ROS-free 类比（成功标志、帧/时间戳、抓姿位置/四元数、`required_width_m`、`score`、候选计数、可选预抓姿、来源）。
+- `grasp_candidates_from_result()`：结果必须成功、来源非 Oracle/MuJoCo、帧与时间戳与点云一致、候选数 ≥1、宽度/得分有限、四元数为单位四元数；通过后产出相机帧 `GraspCandidatePose`。
+
+新增 `scripts/tests/test_visual_grasp_fit_adapter.py`（7 例）：请求载荷不含仿真身份、结果转候选、失败/空结果/帧/时间戳/Oracle/四元数/`object_id` 拒绝，以及“点云→FitGrasp 载荷→结果→候选→场景约束规划请求”的端到端 ROS-free 贯通。
+
+阶段 A ROS-free 相关回归最新为 `141 passed`；`py_compile` 与 `git diff --check` 通过。
+
+仍未完成，阶段 A 与计划第 56 行条目继续未通过：未接真实 GraspNet 模型资产与 `FitGrasp` ROS action、未做运行时 TF/时间戳新鲜度与订阅图审计、未接 MoveIt action transport、评测真值仍只在执行后由独立通道关联。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
