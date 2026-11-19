@@ -131,3 +131,4 @@
 - 可复用边界：`FitGrasp` 接收视觉商品/场景点云并返回抓姿候选；MoveIt 执行器可单独装载静态货架碰撞场景。不可复用为纯视觉证据：当前 `GenerateGrasps/ComputeTcWam/ExecuteMoveItGrasp` 所需 ObjectMemory 目标语义及 Oracle pose 候选。
 - 推荐先定义不含仿真 ID 的视觉候选/规划接口，再隔离验证“视觉候选 + 独立目标碰撞几何 + 静态货架场景 + MoveIt 规划”；评测真值只允许由仿真桥在动作后关联，不能进入目标选择或规划输入。详细字段依赖和边界见阶段 A 审计第 11 节。
 - 阶段 A 仍未通过；本轮未启动 ROS/仿真、未做运行时订阅审计、未发出运动，也未改变任何任务完成项状态。
+- 已按第 11 节接口建议新增 ROS-free `VisualGraspPlanRequest` 契约（`visual_grasp_planning.py`）：从视觉点云推导独立目标碰撞体、把候选抓姿变换到规划帧、并与静态货架障碍和实测机器人状态组合成不含仿真身份的规划请求；具备 13 例拒绝路径/变换测试，离线批次最新 `126 passed`。此契约尚未接入 MuJoCo TF/时间戳运行时、GraspNet 资产、MoveIt transport 与评测真值关联，故计划“视觉点云抓姿链适配”条目不勾选。

@@ -186,3 +186,22 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 4. 若现有 executor 无法在不读取 ObjectMemory 的条件下提供独立抓取验证/附着状态，则新建视觉授权的执行边界或先抽离运动/场景原语；不得通过伪造 memory 绕过 fail-closed 检查。
 
 此接口仍需后续实现并补 ROS-free 伪造真值注入测试、场景碰撞集成测试和 ROS 运行时订阅图核验。阶段 A 的“视觉点云接入 MuJoCo 相机/MoveIt/评测”条目及阶段门槛均未完成；阶段 B 仍不得开始。
+
+## 12. 视觉抓姿→MoveIt 规划请求的 ROS-free 契约（2026-11-19）
+
+针对第 11 节给出的接口边界建议 1–2，本轮新增纯数据契约 `openflex_roboos_bridge/visual_grasp_planning.py`，把“视觉点云抓姿候选”与“仿真真值规划链”在数据层显式分开。本轮只读/离线实现与测试，没有启动 ROS/仿真，也没有发出运动。
+
+- `FrameTransform`：以四元数/平移表示相机光学帧在规划帧中的位姿；拒绝非有限值和非单位四元数，提供点变换。
+- `Aabb`：单一坐标系下的轴对齐包围盒；拒绝反向或退化（`max<=min`）盒。`aabb_from_pointcloud()` 从分割商品点云（相机帧）取保守包围盒并可加 padding，`transform_aabb()` 将 8 个角点变换后重取包围盒，得到规划帧下的独立目标碰撞体。
+- `GraspCandidatePose`：拟合得到的抓姿，只有 `candidate_id`、相机帧位置/姿态、`score`、`required_width_m`；`candidate_id` 若形如 `mujoco*`/`thesis_item*` 或含 `object_id` 直接拒绝。
+- `VisualGraspPlanRequest`：由 `VisualGraspPointCloudInput`、规划帧、相机→规划 `FrameTransform`、静态货架障碍 AABB 列表、候选抓姿列表和机器人实测关节状态构造。`to_planning_payload()` 输出仅含 `robot_state`、规划帧候选位姿、`collision_scene{target_aabb, static_obstacles}`，并显式写入 `oracle_input=false`、`object_memory_used=false`、`physical_verification=false`；序列化前有递归守卫，任何非空仿真身份键（`object_id`/`mujoco_object_id`/…）都会报错。
+
+失败即关闭（fail-closed）覆盖：空静态障碍、空候选、`camera_frame` 与观测不一致、Oracle/MuJoCo 来源观测、非单位四元数、退化 AABB、关节名/位置长度不一致、候选 ID 携带仿真身份、传入字符串 `object_id` 而非视觉输入。新增 `scripts/tests/test_visual_grasp_planning.py`（13 例）验证相机→规划帧位姿变换、包围盒保守性、目标碰撞体的相对/旋转两种情形，以及上述拒绝路径和“工造真值注入”用例。
+
+阶段 A ROS-free 相关回归最新为 `126 passed`；`py_compile` 与 `git diff --check` 通过。
+
+仍未完成、因此阶段 A 与计划第 56 行条目保持未通过：
+
+- 该契约尚未接到真实 MuJoCo 头部相机 TF/时间戳运行时查询，也未验证货架障碍 AABB 与实际 `shelf_scene` 的运行时一致性。
+- 未实现 ROS action transport 到 MoveIt、未载入 GraspNet 模型资产，也未做节点/订阅图运行时审计；`ManipulationSkill.execute()` 仍对视觉后端 fail-closed，不发运动。
+- 评测真值仅在执行后由独立通道关联这一环尚未实现；本契约只保证规划输入不含仿真身份，不代表闭环已接通。
