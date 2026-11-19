@@ -257,6 +257,8 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 结论：资产可用性的"存在性 + 完整性 + 许可证"已确认，但"CUDA 扩展/推理运行时可用"未满足，因此本阶段仍不能宣称视觉抓取后端可运行；阶段 A 与计划第 56 行条目继续不勾选。
 
+> 更新（2026-11-19）：经用户明确授权后，本机已完成 GraspNet 推理依赖校验与 CUDA 扩展重建，"推理运行时可用"结论见第 17 节；本节记录的"未就绪/不安装"是当轮事实。
+
 ## 16. 视觉抓姿规划链的证据分层接入（2026-11-19）
 
 第 12–14 节把纯视觉抓姿规划链打通为不含仿真身份的数据链路，但该链尚未把结果写进第 10 节的"感知/评测分离"证据层。本轮新增 `openflex_roboos_bridge/visual_grasp_evidence.py`，把 `VisualGraspPlanRequest` 接入该 schema，仍不启动 ROS/仿真、不发运动。
@@ -270,3 +272,29 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 阶段 A ROS-free 相关回归最新为 `151 passed`；`py_compile` 与 `git diff --check` 通过。
 
 仍未完成，阶段 A 与计划第 56 行条目继续未通过：这是 ROS-free 证据契约，不代表已有在线运行批次；运行时 TF/时间戳新鲜度、节点/订阅图审计、MoveIt transport、GraspNet 推理运行时（见第 15 节）与执行后真值关联均未完成。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
+
+## 17. GraspNet 推理依赖与 CUDA 扩展就绪核查（2026-11-19）
+
+经用户明确授权后，本轮在本机完成迁移 venv 的抓取/感知推理依赖校验与 CUDA 扩展重建。改动只落在仓库外的环境目录（`/home/wgb/.cuda/`）与已被 gitignore 的 `.venvs/`，不触碰任何跟踪源码或资产，不启动 ROS/仿真、不发运动。
+
+### 17.1 迁移 venv 修复与运行时事实
+
+- 迁移 venv `.venvs/openflex_graspnet`、`.venvs/openflex_perception` 的 `bin/*` 脚本 shebang 仍指向旧部署根 `/home/openflex/openflex_shop/...`，在本机不可执行。已用脚本把 56 个脚本（graspnet 32、perception 24）的 shebang 改指 `/home/wgb/openflex_shop/...`，其余字节不变；`pip --version` 现可正常工作。
+- `.venvs/` 已被 `.gitignore` 忽略，不进入提交；`pyvenv.cfg` 保持 `home=/usr/bin`、`version=3.10.12`。
+- 运行时事实：graspnet venv `torch 2.7.1+cu126`（`cuda_available=True`，设备算力 `(8,9)`）、`numpy 1.26.4`、`scipy 1.15.3`、`open3d 0.19.0`；perception venv `torch 2.7.1+cu126`、`transformers 5.15.0`。
+
+### 17.2 本机 CUDA 12.6 工具链与扩展重建
+
+- 系统无 nvcc/CUDA；`nvidia-cuda-nvcc-cu12` pip wheel 不含 `nvcc`。本轮从 NVIDIA 官方 apt 仓库本地解包 `cuda-nvcc-12-6`/`cuda-nvvm-12-6`/`cuda-cudart-dev-12-6`/`cuda-cudart-12-6`/`cuda-cccl-12-6` 到仓库外 `/home/wgb/.cuda/cuda-12.6-local/usr/local/cuda-12.6`（`CUDA_HOME`），合并 pip 头文件并软链 `libcudart.so`；`nvcc --version` = 12.6.85，最小 CUDA 程序 `-arch=sm_86` 编译+运行通过。
+- 按 `COMPATIBILITY_MATRIX_CN.md` 要求在目标环境重编译（禁止复制 `.so`）：`TORCH_CUDA_ARCH_LIST="8.6;8.9"`、`pip wheel . --no-build-isolation --no-deps` 重建 `pointnet2` 与 `knn_pytorch`，卸载旧 sm_86 egg（备份到 `/home/wgb/.cuda/backup_eggs/`）后装入新 wheel。新 `.so` 位于 venv `site-packages`，引用本机 `/home/wgb/.cuda/...`，确认是本机产物。
+
+### 17.3 可复现校验脚本与结果
+
+- 新增只读脚本 `scripts/audit_openflex_graspnet_runtime.py`（+ `scripts/tests/test_openflex_graspnet_runtime.py`，10 例）：用系统 Python 通过 subprocess 调用 venv 解释器做探针，绝不在系统解释器里 import torch；venv 缺失即 `skipped`，探针内强制 `import torch` 先于扩展。
+- 检查覆盖：venv `bin` shebang 无残留外部根；`pointnet2._ext` + `knn_pytorch` 加载并在本机 GPU 上跑通 fps/gather/ball_query/group_points/cylinder_query/three_nn/three_interpolate/knn；`GraspNetBackend` 加载 `checkpoint-rs.tar` 并在仓库自带 `doc/example_data` 上推理；perception venv 导入 torch/transformers。
+- 实跑结果：`cuda_ops` 全 PASS；`checkpoint_inference` 用 513,688 点得 `(326,17)` 全有限，score 0.0144..1.3318（与迁移记录 P4-09 一致）；`perception_import` PASS；`overall_ok=true`。脚本不写文件、不起 ROS/仿真、不发运动。
+
+### 17.4 与阶段 A 门槛的关系
+
+- 计划第 6 节"明确实际抓取模型可用性"的**推理运行时可用性**本轮已满足：资产哈希/许可（第 15 节）+ CUDA 扩展重建 + checkpoint 推理 PASS + 感知 venv 可导入。环境产物（`.venvs/`、`/home/wgb/.cuda/`、`openflex_models/`）均在仓库外或已 gitignore，本轮提交只含脚本、测试与本文档。
+- 阶段 A **仍未通过**：计划书阶段 A 的另一条门槛仍是隔离域 83 下的只读运行时审计（节点/话题/TF 新鲜度/订阅图），本轮未启动 ROS/仿真、未做该审计、未发运动。视觉抓姿链的在线 transport（`FitGrasp` ROS action、MoveIt transport）与执行后真值关联也仍未接。
