@@ -85,7 +85,8 @@ def observation_from_candidate(candidate, *, task_target: str, timestamp_sec: fl
                                camera_frame: str, map_frame: str,
                                position_camera_xyz, depth_valid_fraction: float = 1.0,
                                track_id: Optional[str] = None, tf_valid: bool = True,
-                               source: str = "rgbd_visual_observation") -> TargetObservation:
+                               source: str = "rgbd_visual_observation",
+                               arm_name: Optional[str] = None) -> TargetObservation:
     """Build and validate an observation from an image-derived candidate."""
     pose = candidate.pose_xyzyaw
     if pose is None:
@@ -98,6 +99,7 @@ def observation_from_candidate(candidate, *, task_target: str, timestamp_sec: fl
         position_map_xyz=tuple(float(value) for value in pose[:3]),
         depth_valid_fraction=float(depth_valid_fraction), timestamp_sec=float(timestamp_sec),
         camera_frame=camera_frame, map_frame=map_frame, tf_valid=tf_valid,
-        confidence=float(candidate.confidence), source=source)
+        confidence=float(candidate.confidence), source=source,
+        metadata={} if arm_name is None else {"arm_name": arm_name})
     observation.validate_for_grasp()
     return observation

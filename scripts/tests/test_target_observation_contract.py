@@ -33,6 +33,26 @@ def test_visual_observation_is_graspable_and_has_no_sim_identity():
     assert record["physical_verification"] is False
 
 
+def test_candidate_observation_can_record_explicit_manipulation_arm():
+    from types import SimpleNamespace
+    from openflex_roboos_bridge.target_observation import observation_from_candidate
+
+    candidate = SimpleNamespace(
+        pose_xyzyaw=(1.0, 2.0, 0.8, 0.0),
+        bbox_px=(10, 10, 30, 30),
+        candidate_id="red-1",
+        color="red",
+        confidence=0.9,
+    )
+    result = observation_from_candidate(
+        candidate, task_target="red", timestamp_sec=12.5,
+        camera_frame="camera_optical", map_frame="map",
+        position_camera_xyz=(0.1, 0.0, 1.0), arm_name="right",
+    )
+    assert result.metadata["arm_name"] == "right"
+    assert result.to_dict()["mujoco_object_id"] is None
+
+
 @pytest.mark.parametrize("overrides", [
     {"tf_valid": False},
     {"depth_valid_fraction": 0.0},

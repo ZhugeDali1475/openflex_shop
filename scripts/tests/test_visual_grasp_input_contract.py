@@ -7,7 +7,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "openflex_ws/src/openflex_thesis/openflex_roboos_bridge"))
 
-from openflex_roboos_bridge.target_observation import TargetObservation  # noqa: E402
+from openflex_roboos_bridge.target_observation import (  # noqa: E402
+    TargetObservation,
+    observation_from_candidate,
+)
 from openflex_roboos_bridge.visual_grasp_input import (  # noqa: E402
     VisualGraspInputError,
     VisualGraspPointCloudInput,
@@ -45,6 +48,27 @@ def test_visual_point_clouds_serialize_without_simulator_identity():
     assert payload["oracle_input"] is False
     assert "object_id" not in payload
     assert payload["product_xyz"].shape == (100, 3)
+
+
+def test_search_candidate_observation_flows_into_visual_grasp_contract():
+    from types import SimpleNamespace
+
+    candidate = SimpleNamespace(
+        pose_xyzyaw=(1.0, 2.0, 0.8, 0.0), bbox_px=(1, 2, 10, 12),
+        candidate_id="red-1", color="red", confidence=0.9,
+    )
+    found = observation_from_candidate(
+        candidate, task_target="red", timestamp_sec=12.5,
+        camera_frame="camera_optical", map_frame="map",
+        position_camera_xyz=(0.1, 0.0, 1.0), track_id="track_red_001",
+        arm_name="right",
+    )
+    product, scene = clouds()
+    adapted = VisualGraspPointCloudInput(
+        found, product, scene, "camera_optical", 12.5
+    ).to_fit_grasp_payload()
+    assert adapted["arm_name"] == "right"
+    assert adapted["perception_track_id"] == "track_red_001"
 
 
 @pytest.mark.parametrize("kwargs", [

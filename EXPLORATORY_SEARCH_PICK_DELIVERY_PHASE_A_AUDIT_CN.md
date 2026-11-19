@@ -141,3 +141,9 @@ SearchSkill._fresh_frame / analyze_once
 - 新增 `test_visual_grasp_input_contract.py`，覆盖身份隔离、帧/时间戳一致性、点数和非有限值拒绝。
 
 这一步固定了“感知点云可以被抓姿后端消费”的接口，但仍没有解决相机/TF 配置、GraspNet 模型资产、仿真 MoveIt 场景碰撞、执行器身份和评测真值分离。因此阶段 A 继续保持未通过。
+
+继续静态复核发现并修复一处数据契约断点：`SearchSkill` 使用头部相机观察，却没有给 `TargetObservation` 标出之后负责抓取的手臂，无法满足 FitGrasp 的左右臂参数。现在候选转观测 helper 接受可选 `arm_name`，当前任务显式填 `right`；新增端到端 ROS-free 测试确认搜索候选观测能通过点云抓姿输入契约。这里的 `right` 是任务执行配置，不是从视觉推断出的物体信息。
+
+MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_color/image_raw,color/camera_info}`，三者采用 `thesis_head_color_optical_frame` 和同一仿真时间戳；并静态发布 `map→thesis_head_color_optical_frame`。`camera_spec.py` 明确相机位姿来源是 `simulation_mesh_estimated_not_physically_calibrated`。这说明静态接口形状可满足 RGB-D 回投影和坐标变换输入，但不构成 ROS 运行时新鲜度/TF 查询验证，也不等同于真实手眼标定。当前抓姿适配将继续限定为右臂和头部相机候选；在线规划前必须验证该 frame 到执行器规划坐标系的 TF、时间一致性和碰撞场景，不能把 MuJoCo 商品真值用于规划。
+
+本轮回归：阶段 A ROS-free 相关测试 `97 passed`；新增搜索观测→点云抓姿契约贯通用例。Python 语法编译和 `git diff --check` 通过；没有运行 ROS 或仿真。

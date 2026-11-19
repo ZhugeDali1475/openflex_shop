@@ -128,7 +128,8 @@ class SearchSkill:
                 camera_frame=self.color_frame, map_frame="map",
                 position_camera_xyz=position_camera,
                 depth_valid_fraction=depth_valid_fraction,
-                track_id=resolution.selected_perception_track_id)
+                track_id=resolution.selected_perception_track_id,
+                arm_name="right")
         artifacts = {"rgb": rgb, "depth": depth, "analysis": analysis,
                      "observation": observation}
         return resolution, artifacts
