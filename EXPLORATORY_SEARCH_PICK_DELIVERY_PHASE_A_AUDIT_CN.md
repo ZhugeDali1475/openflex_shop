@@ -116,3 +116,17 @@ SearchSkill._fresh_frame / analyze_once
 进一步修复：MCP/tool surface 和 `ManipulationSkill.submit` 已改为接收 `perception_track_id`；`grasp_plan_contract.validate_visual_grasp_input` 会拒绝字符串 `object_id`、无效 TF/深度和 Oracle 来源。SearchSkill 会把 RGB-D 候选保存为 `TargetObservation`，但当前执行器在视觉规划后端接入前明确返回失败且不发运动。
 
 仍未完成且保持阻塞：`TargetObservation` 尚未接入真实抓取规划动作；启动器改动尚未做 ROS 运行时节点/订阅审计。故不进入阶段 B。原有 `openflex_ws/` 删除项保持原样。
+
+## 8. 现有 RGB-D/GraspNet 组件可复用性复核（2026-11-19）
+
+本次只读检查 `openflex_ws/src/openflex_grasp`，没有启动节点、下载模型或发出运动：
+
+- `detect_object_server.py` 同步订阅左右腕部 RGB、深度、CameraInfo，调用 Qwen 定位和 SAM2 分割，再从同帧深度构造商品点云及场景点云。点云坐标属于相机帧，消息携带该帧与时间戳。
+- `FitGrasp.action` 的输入是 `detection_id`、`arm_name`、策略及 `product_points`/`scene_points`；没有 MuJoCo `object_id` 字段。`graspnet_worker.py` 对这两份点云做 GraspNet 推理和抓姿拟合，再用 TF 变换抓取轴。
+- 因此，GraspNet worker 的“抓姿候选拟合”边界可以消费视觉点云，是可复用算法候选；它不等同于当前毕业设计链已经调用了该 worker。
+- 现有公共链仍有身份与执行耦合：`PickObject` 从 `GetDetectionSnapshot` 取快照后要求 `snapshot.object_id == goal.object_id`，其 Detect 入口也保留注册商品/站位语义；Pick 后续连接的是这套腕部相机、MoveIt 及控制器接口。毕业设计当前 `SearchSkill` 输出 `TargetObservation`，而 `ManipulationSkill` 的 MuJoCo 轨迹规划器仍依赖仿真物体记忆。因此不能直接把 `TargetObservation` 填成 `ObjectMemory`，也不能仅凭 FitGrasp 的点云接口就跳过身份、TF、规划场景、执行器和评测真值隔离的适配。
+- 外部模型路径默认指向 `openflex_models` 下的 GraspNet checkpoint、Qwen、SAM2；静态代码/文档检查未验证这些资产在本机存在、许可证、CUDA 扩展或推理环境可用性。本阶段不下载或恢复资产。
+
+结论：下一项应设计 `TargetObservation/RGB-D point cloud → FitGrasp` 的无 ROS 纯数据适配契约和仿真规划边界；FitGrasp 仅返回抓姿，不应负责执行。只有在视觉位姿能进入不读取 MuJoCo 目标真值的仿真 MoveIt 场景/规划链、且日志把感知输入和真值评测分开后，才可做在线只观察审计。阶段 A 仍未通过。
+
+离线检查说明：本轮曾尝试把 `test_openflex_manipulation_submission.py` 加入 pytest 批次，但该环境虽有 `rclpy`，缺少构建生成的 `openflex_thesis_msgs` Python 模块，收集阶段报 `ModuleNotFoundError`；该测试未运行，不将其计入通过数。应使用前述 ROS-free 契约测试批次作本阶段有效回归。

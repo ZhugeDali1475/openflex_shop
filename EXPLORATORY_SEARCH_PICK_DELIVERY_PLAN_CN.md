@@ -50,6 +50,8 @@
 - (✓) 抓取工具面改为 `perception_track_id`，新增视觉抓取输入校验；缺深度/时间戳/TF、Oracle 来源或传入 `object_id` 时拒绝。当前执行器仍在未接入视觉后端时 fail-closed，不发运动。
 - (✓) 预检启动器默认不启动 `oracle_anygrasp`、`object_memory`；Oracle 仅由显式 `OPENFLEX_ENABLE_ORACLE_GRASP=1` 加入对照进程。
 - (✓) 将通过 RGB-D 搜索的帧级候选序列化为 `TargetObservation` 并写入搜索证据；尚无跨帧持久 tracker，不能将帧级 token 冒称为稳定跟踪器。
+- (✓) 静态核查仓库现有 `openflex_grasp`：Qwen/SAM2 同帧 RGB-D 分割与点云、GraspNet `FitGrasp` 可作为视觉抓姿候选技术基础；其接口边界和未接通原因已记入阶段 A 审计。此项只确认代码能力，不代表模型资产可用或闭环已集成。
+- ( ) 将现有视觉点云抓姿链适配到本任务的 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口；不得把公共 `PickObject` 的注册 `object_id` 校验或另一套机器人控制入口当作视觉身份链路。
 - ( ) 建立感知证据与评测真值分离的日志 schema，记录 `physical_verification=false`。
 - ( ) 完成静态测试和只读运行时审计；不发运动指令。
 
@@ -115,7 +117,7 @@
 ## 6. 当前状态
 
 - (✓) 已冻结目标、边界、L1/L2 分层和停止条件。
-- (✓) 已完成阶段 A 初审并确认两个阻塞：登记槽位先验、Oracle 抓取候选。
+- (✓) 已完成阶段 A 初审并确认两个阻塞：登记槽位先验、Oracle 抓取候选；并识别到可复用的 RGB-D/GraspNet 组件，但它尚未接入本任务执行链。
 - (✓) 已新增观测契约和预检 Oracle 显式开关；相关离线契约/搜索/tool 回归 90 项通过。
 - ( ) 阶段 A 尚未通过：视觉观测尚未接入真实抓取规划动作，且启动器尚未做 ROS 运行时节点/订阅审计；当前任何抓取请求都必须 fail-closed。
 - ( ) 阶段 B 及以后。
