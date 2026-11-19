@@ -205,3 +205,18 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 - 该契约尚未接到真实 MuJoCo 头部相机 TF/时间戳运行时查询，也未验证货架障碍 AABB 与实际 `shelf_scene` 的运行时一致性。
 - 未实现 ROS action transport 到 MoveIt、未载入 GraspNet 模型资产，也未做节点/订阅图运行时审计；`ManipulationSkill.execute()` 仍对视觉后端 fail-closed，不发运动。
 - 评测真值仅在执行后由独立通道关联这一环尚未实现；本契约只保证规划输入不含仿真身份，不代表闭环已接通。
+
+## 13. 静态货架场景与头部相机 TF 的 ROS-free 绑定（2026-11-19）
+
+第 12 节的 `VisualGraspPlanRequest` 只接受“已经给定的规划帧障碍与相机→规划变换”。本轮新增 `openflex_roboos_bridge/visual_grasp_scene.py`，用纯数据方式把仓库现有静态货架场景与 MuJoCo 头部相机 TF 接到该契约，仍不启动 ROS/仿真、不发运动。
+
+- `load_shelf_scene()` 解析货架场景 YAML（路径或映射）：要求非空 `frame_id`、非空 `collision_objects`、每个对象 `shape=box`、尺寸为正、位置/姿态有限、`id` 唯一；把每个带姿态的盒子按 8 角点变换取保守 AABB，得到规划帧下的独立障碍列表。`calibrated` 仅作为来源信息记录（与预检启动器 `require_calibrated_scene=False` 的仿真规划口径一致），不表态为物理标定。
+- `frame_transform_from_tf()` 从实测 TF 读数构造相机→规划 `FrameTransform`，并强制 `parent_frame==planning_frame`、`child_frame==观测相机帧`，对应 MuJoCo bridge 的 `map→thesis_head_color_optical_frame` 广播；非单位四元数/非有限值拒绝。
+- `build_visual_grasp_plan_request()` 把视觉点云输入、实测 TF、货架场景和机器人关节状态组合成 `VisualGraspPlanRequest`，并强制 `场景 frame == 规划帧 == 观测 map_frame`（镜像 `moveit_evaluator_node.shelf_objects_in_candidate_base` 的“scene frame 必须等于目标帧”检查）。
+- 新增 `scripts/tests/test_visual_grasp_scene.py`（8 例）：直接读取仓库跟踪的 `openflex_thesis_mujoco/config/sim_shelf_scene.yaml`，核对帧名/标定标志/6 个障碍与后挡板保守 AABB；验证旋转盒保守性、畸形场景拒绝、TF 帧角色与四元数拒绝、端到端构建请求、场景帧/规划帧/`object_id` 拒绝路径。
+
+静态事实澄清：头部相机在 `map` 中的位姿由 `bridge_node._mujoco_body_pose` 在运行时逐帧发布（`camera_spec.HEAD_CAMERA` 只是相对 `head_yaw_link` 的挂载偏移），所以该变换确实是运行时读数，不能离线写死；本模块只定义“给定一次 TF 读数如何安全绑定”，不替代运行时新鲜度/TF 查询。
+
+阶段 A ROS-free 相关回归最新为 `134 passed`；`py_compile` 与 `git diff --check` 通过。
+
+仍未完成，阶段 A 与计划第 56 行条目继续未通过：未查询运行时 TF/时间戳新鲜度、未把请求接到 MoveIt action transport、未载入 GraspNet 资产、未做节点/订阅图运行时审计，评测真值仍只在执行后由独立通道关联。`ManipulationSkill.execute()` 保持对视觉后端 fail-closed。
