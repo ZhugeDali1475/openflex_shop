@@ -23,12 +23,17 @@ import math
 from typing import Mapping, Optional, Sequence, Tuple
 
 from .competition_registry import TARGET_OBJECT_ID
+from .target_observation import TargetObservation, TargetObservationError
 
 DEFAULT_MIN_CONFIDENCE = 0.8
 DEFAULT_MIN_BLOB_PIXELS = 24
 DEFAULT_OCCLUSION_DEPTH_MARGIN_M = 0.04
 DEFAULT_REGION_RADIUS_PX = 9
 DEFAULT_MAX_ASPECT_RATIO = 4.0
+# A pixel must be strongly saturated to count as a colour candidate.  Dark shelf
+# shading renders as low-saturation blue-grey; without this gate it would be
+# classified as a foreign-colour object and force a wrong-class refusal.
+DEFAULT_MIN_SATURATION = 0.5
 DEFAULT_SLOT_RADIUS_PX = 26
 DEFAULT_SLOT_DEPTH_TOLERANCE_M = 0.25
 
@@ -160,7 +165,7 @@ def color_mask(rgb, color: str):
     import numpy as np
 
     hue, delta, maximum = _rgb_to_hsv(rgb.astype(np.float32) / 255.0)
-    saturated = (maximum >= 0.25) & (delta >= 0.25 * np.maximum(maximum, 1e-6))
+    saturated = (maximum >= 0.25) & (delta >= DEFAULT_MIN_SATURATION * np.maximum(maximum, 1e-6))
     mask = np.zeros(hue.shape, dtype=bool)
     for name, buckets in _HUE_BUCKETS:
         if name != color:
@@ -359,6 +364,7 @@ def analyze_frame(rgb, depth_mm, intrinsics: CameraIntrinsics, camera_pose: Came
         "candidate_count": len(candidates),
         "max_aspect_ratio": max_aspect_ratio,
         "slot_verdict": region.state,
+        "depth_valid_fraction": round(depth_valid_fraction(depth_mm), 6),
         "pose_source": "image_depth_backprojection_map_frame",
         "yaw_source": "registered_slot_geometry_not_perception" if expected_point_map is not None
                       else "unobserved_default_zero_not_object_orientation",
@@ -453,3 +459,77 @@ def resolve_search_target(analysis: FrameAnalysis, query: str, *,
                                           "identity_source": "visual_frame_candidate",
                                           "mujoco_object_id_used": False,
                                           "legacy_slot_binding": slot_constrained})
+
+
+class TargetSearchError(ValueError):
+    """Raised when a search resolution cannot become a visual observation."""
+
+
+def depth_valid_fraction(depth_mm, *, minimum_m: float = 0.05) -> float:
+    """Fraction of frame pixels that carry a usable depth return."""
+
+    import numpy as np
+
+    values = np.asarray(depth_mm, dtype=np.float32) / 1000.0
+    if values.size == 0:
+        raise TargetSearchError("depth frame is empty")
+    usable = np.isfinite(values) & (values > minimum_m)
+    return float(np.count_nonzero(usable) / values.size)
+
+
+def observation_from_resolution(resolution: SearchResolution, *, intrinsics: CameraIntrinsics,
+                                camera_pose: CameraPose, timestamp_sec: float,
+                                camera_frame: str, map_frame: str,
+                                task_target: Optional[str] = None,
+                                arm_name: str = "right",
+                                depth_frame_mm=None) -> TargetObservation:
+    """Convert an authorized, unique, localized resolution into a frame observation.
+
+    Refuses anything that is not a single visible, depth-confirmed target-colour
+    candidate: the caller may only grasp what this returns.  The observation
+    carries a visual ``perception_track_id`` and never a simulator identity.
+    """
+
+    if not isinstance(resolution, SearchResolution):
+        raise TargetSearchError("a SearchResolution is required")
+    if resolution.outcome != "authorized":
+        raise TargetSearchError(
+            f"refusing observation from {resolution.outcome} resolution: {resolution.reason}")
+    candidate = next((item for item in resolution.candidates
+                      if item.candidate_id == resolution.selected_candidate_id), None)
+    if candidate is None:
+        raise TargetSearchError("authorized resolution has no matching candidate")
+    if candidate.depth_m is None or candidate.pose_xyzyaw is None:
+        raise TargetSearchError("candidate lacks depth or map pose; not localizable")
+    if not resolution.selected_perception_track_id:
+        raise TargetSearchError("authorized resolution has no visual perception track id")
+    position_map = tuple(float(value) for value in candidate.pose_xyzyaw[:3])
+    position_camera = map_to_camera(camera_pose, position_map)
+    x0, y0, x1, y1 = candidate.bbox_px
+    if depth_frame_mm is None:
+        valid_fraction = 1.0
+    else:
+        valid_fraction = depth_valid_fraction(depth_frame_mm)
+        if valid_fraction <= 0.0:
+            raise TargetSearchError("depth frame has no valid returns")
+    try:
+        observation = TargetObservation(
+            perception_track_id=resolution.selected_perception_track_id,
+            task_target=task_target or resolution.requested_color, color=candidate.color,
+            bbox_px=(int(x0), int(y0), int(x1), int(y1)),
+            position_camera_xyz=position_camera, position_map_xyz=position_map,
+            depth_valid_fraction=valid_fraction, timestamp_sec=float(timestamp_sec),
+            camera_frame=str(camera_frame), map_frame=str(map_frame), tf_valid=True,
+            confidence=float(candidate.confidence),
+            source="rgbd_full_frame_color_search",
+            metadata={"arm_name": arm_name, "query": resolution.query,
+                      "reason": resolution.reason,
+                      "candidate_id": candidate.candidate_id,
+                      "identity_source": "visual_frame_candidate",
+                      "slot_coordinates_used": resolution.selected_object_id is not None,
+                      "mujoco_object_id_used": False},
+        )
+        observation.validate_for_grasp()
+    except TargetObservationError as error:
+        raise TargetSearchError(str(error)) from error
+    return observation

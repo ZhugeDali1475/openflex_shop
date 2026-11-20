@@ -38,8 +38,10 @@ sys.path.insert(0, str(ROOT / "openflex_ws/src/openflex_thesis/openflex_roboos_b
 from openflex_roboos_bridge.target_search_contract import (  # noqa: E402
     CameraIntrinsics,
     CameraPose,
+    TargetSearchError,
     analyze_frame,
-    project_point,
+    depth_valid_fraction,
+    observation_from_resolution,
     resolve_search_target,
 )
 
@@ -116,16 +118,18 @@ def paint(rgb, depth_mm, center, radius, color, depth_m):
     depth_mm[y0:y1, x0:x1] = int(round(depth_m * 1000))
 
 
-def run_case(name, rgb, depth_mm, intrinsics, pose, slot, query, color, edit=None):
+def run_case(name, rgb, depth_mm, intrinsics, pose, query, color, *, expected_point_map=None,
+             edit=None):
     frame_rgb, frame_depth = rgb.copy(), depth_mm.copy()
     detail = "captured frame unmodified"
     if edit is not None:
         detail = edit(frame_rgb, frame_depth)
-    analysis = analyze_frame(frame_rgb, frame_depth, intrinsics, pose, expected_point_map=slot,
-                             color=color)
+    analysis = analyze_frame(frame_rgb, frame_depth, intrinsics, pose,
+                             expected_point_map=expected_point_map, color=color)
     resolution = resolve_search_target(analysis, query, color=color)
-    return {
+    record = {
         "case": name,
+        "mode": "region_anchored_diagnostics" if expected_point_map is not None else "full_frame_search",
         "edit": detail,
         "outcome": resolution.outcome,
         "reason": resolution.reason,
@@ -134,8 +138,16 @@ def run_case(name, rgb, depth_mm, intrinsics, pose, slot, query, color, edit=Non
         "slot_verdict": analysis.region.state,
         "candidate_count": len(analysis.candidates),
         "frame_sha256": analysis.frame_sha256,
+        "depth_valid_fraction": analysis.model_output["depth_valid_fraction"],
         "rgb": frame_rgb,
-    }, resolution
+    }
+    if resolution.outcome == "authorized":
+        observation = observation_from_resolution(
+            resolution, intrinsics=intrinsics, camera_pose=pose, timestamp_sec=time.time(),
+            camera_frame="thesis_head_color_optical_frame", map_frame="map",
+            task_target=query, depth_frame_mm=frame_depth)
+        record["observation"] = observation.to_dict()
+    return record, resolution
 
 
 def main():
@@ -160,15 +172,26 @@ def main():
         node.destroy_node()
         rclpy.shutdown()
 
-    state = snapshot()
-    registered = state["scene_registry"]["objects"][arguments.object_id]
-    slot = tuple(registered["nominal_pose_xyzyaw"][:3])
-    projection = project_point(pose, intrinsics, slot)
-    if projection is None:
-        raise RuntimeError("registered slot is not in the camera frustum")
-    center = (int(round(projection[0])), int(round(projection[1])))
-    expected_depth = float(projection[2])
-    oracle = state["sources"]["object_observation"]["data"]
+    # The look-at anchor for the occluded/empty diagnostics is taken from the
+    # image itself (the visible target-colour candidate), never from the
+    # registered object slot.  Authorization never uses it at all.
+    base_analysis = analyze_frame(rgb, depth_mm, intrinsics, pose, color=arguments.color)
+    visible = [candidate for candidate in base_analysis.candidates
+               if candidate.color == arguments.color and candidate.visible
+               and candidate.depth_m is not None and candidate.pose_xyzyaw is not None]
+    if len(visible) != 1:
+        raise RuntimeError(f"expected exactly one visible {arguments.color} candidate, got {len(visible)}")
+    anchor_candidate = visible[0]
+    slot = tuple(float(value) for value in anchor_candidate.pose_xyzyaw[:3])
+    x0, y0, x1, y1 = anchor_candidate.bbox_px
+    center = (int((x0 + x1) // 2), int((y0 + y1) // 2))
+    expected_depth = float(anchor_candidate.depth_m)
+    oracle = {"unavailable": "read-only snapshot endpoint not queried"}
+    try:
+        state = snapshot()
+        oracle = state["sources"]["object_observation"]["data"]
+    except Exception as error:  # cross-check only; never used for selection
+        oracle = {"unavailable": str(error)}
 
     Image.fromarray(rgb).save(output / "frame.png")
     Image.fromarray(depth_mm).save(output / "depth.png")
@@ -176,63 +199,98 @@ def main():
         "scope": "isolated_MuJoCo_online_head_camera_frame_NOT_PHYSICAL",
         "object_id": arguments.object_id,
         "frame_sha256": hashlib.sha256(np.ascontiguousarray(rgb).tobytes()).hexdigest(),
+        "depth_sha256": hashlib.sha256(np.ascontiguousarray(depth_mm).tobytes()).hexdigest(),
+        "depth_valid_fraction": round(depth_valid_fraction(depth_mm), 6),
         "width": intrinsics.width, "height": intrinsics.height,
         "k": [intrinsics.fx, 0.0, intrinsics.cx, 0.0, intrinsics.fy, intrinsics.cy, 0.0, 0.0, 1.0],
         "camera_pose_map": {"translation": pose.translation_xyz, "quaternion_xyzw": pose.quaternion_xyzw},
-        "slot_point_map": slot, "slot_pixel": list(center), "slot_depth_m": round(expected_depth, 5),
-        "oracle_object_observation": {"object_id": oracle.get("object_id"),
-                                      "visible": oracle.get("visible"),
-                                      "confidence": oracle.get("confidence")},
+        "diagnostic_anchor_source": "image_derived_visible_candidate_not_registered_slot",
+        "anchor_candidate_id": anchor_candidate.candidate_id,
+        "anchor_point_map": list(slot), "anchor_pixel": list(center),
+        "anchor_depth_m": round(expected_depth, 5),
+        "oracle_object_observation_cross_check": {"object_id": oracle.get("object_id"),
+                                                  "visible": oracle.get("visible"),
+                                                  "confidence": oracle.get("confidence")},
         "oracle_used_for_selection": False,
-        "scene_sha256": state["scene_registry"]["sources"]["model_sha256"],
     }
     (output / "capture.json").write_text(json.dumps(capture_record, ensure_ascii=False, indent=2) + "\n")
 
+    # Cover the whole detected blob so an edit cannot leave target-colour residue.
+    cover = max(x1 - x0, y1 - y0) // 2 + 4
+
     def occluded(frame_rgb, frame_depth):
-        paint(frame_rgb, frame_depth, center, 14, GREY, expected_depth - 0.25)
-        return "grey occluder painted 0.25 m in front of the registered slot"
+        paint(frame_rgb, frame_depth, center, cover, GREY, expected_depth - 0.25)
+        return "grey occluder painted 0.25 m in front of the look-at anchor"
 
     def wrong_class(frame_rgb, frame_depth):
-        paint(frame_rgb, frame_depth, center, 12, BLUE, expected_depth)
-        return f"a {arguments.wrong_color} object painted at the registered slot depth"
+        paint(frame_rgb, frame_depth, center, cover, BLUE, expected_depth)
+        return f"a {arguments.wrong_color} object painted over the observed object"
 
     def empty_slot(frame_rgb, frame_depth):
-        paint(frame_rgb, frame_depth, center, 14, GREY, expected_depth + 0.35)
-        return "slot cleared to plain background 0.35 m behind the object"
+        paint(frame_rgb, frame_depth, center, cover, GREY, expected_depth + 0.35)
+        return "look-at anchor cleared to plain background 0.35 m behind the object"
+
+    def secondary_pixel():
+        height, width = rgb.shape[:2]
+        gap = 2 * cover + 8
+        for du, dv in ((gap, 0), (-gap, 0), (0, -gap), (gap, -gap), (-gap, -gap)):
+            u2, v2 = center[0] + du, center[1] + dv
+            if cover <= u2 < width - cover and cover <= v2 < height - cover:
+                return (u2, v2)
+        raise RuntimeError("no in-frame space for the second red instance")
 
     def ambiguous(frame_rgb, frame_depth):
-        paint(frame_rgb, frame_depth, center, 7, RED, expected_depth)
-        paint(frame_rgb, frame_depth, (center[0] + 20, center[1]), 7, RED, expected_depth)
-        return "a second red instance painted 20 px from the slot (guard case; out of P4.3 scope)"
+        paint(frame_rgb, frame_depth, secondary_pixel(), cover, RED, expected_depth)
+        return "a second red instance painted clear of the first (guard case)"
 
-    cases = [
-        ("visible", None),
-        ("occluded", occluded),
-        ("wrong_class", wrong_class),
-        ("empty_slot", empty_slot),
-        ("ambiguous_guard", ambiguous),
-    ]
+    def absent(frame_rgb, frame_depth):
+        paint(frame_rgb, frame_depth, center, cover, GREY, expected_depth + 0.35)
+        return "no target-colour surface anywhere in the frame"
+
+    # Full-frame authorization: no slot coordinate is ever supplied.
+    full_frame_cases = [("full_visible", None), ("full_wrong_class", wrong_class),
+                        ("full_ambiguous", ambiguous), ("full_absent", absent)]
+    # Region-anchored diagnostics: a caller-supplied look-at anchor is required to
+    # separate an occluder from an empty region; these never authorize.
+    anchored_cases = [("anchored_visible", None), ("anchored_occluded", occluded),
+                      ("anchored_empty", empty_slot)]
+
     results = []
-    for name, edit in cases:
-        record, resolution = run_case(name, rgb, depth_mm, intrinsics, pose, slot,
-                                      arguments.query, arguments.color, edit)
+    for name, edit in full_frame_cases:
+        record, resolution = run_case(name, rgb, depth_mm, intrinsics, pose, arguments.query,
+                                      arguments.color, edit=edit)
+        Image.fromarray(record.pop("rgb")).save(output / f"case_{name}.png")
+        record["resolution"] = resolution.to_dict()
+        results.append(record)
+    for name, edit in anchored_cases:
+        record, resolution = run_case(name, rgb, depth_mm, intrinsics, pose, arguments.query,
+                                      arguments.color, expected_point_map=slot, edit=edit)
         Image.fromarray(record.pop("rgb")).save(output / f"case_{name}.png")
         record["resolution"] = resolution.to_dict()
         results.append(record)
 
+    by_case = {item["case"]: item for item in results}
+    expected = {"full_visible": "target_visible", "full_wrong_class": "wrong_class",
+                "full_ambiguous": "ambiguous_candidates", "full_absent": "target_absent",
+                "anchored_visible": "target_visible", "anchored_occluded": "target_occluded",
+                "anchored_empty": "empty_slot"}
+    authorized = {"full_visible", "anchored_visible"}
     report = {
         "scope": "P4.3_target_search_fail_closed_audit_isolated_MuJoCo_NOT_PHYSICAL",
         "physical_verification": False,
         "robot_motion_executed": False,
         "selection_basis": "image_derived_candidates_not_oracle_object_id",
+        "authorization_reads_slot_coordinates": False,
+        "region_anchor_source": "registered_scene_slot_for_occluded_empty_diagnostics_only",
         "query": arguments.query,
         "cases": results,
-        "expected": {"visible": "target_visible", "occluded": "target_occluded",
-                     "wrong_class": "wrong_class", "empty_slot": "empty_slot",
-                     "ambiguous_guard": "ambiguous_candidates"},
+        "expected": expected,
+        "full_frame_mode": "authorizes only from image-derived candidates; no look-at prior",
+        "anchored_mode": "occluded/empty diagnostics at a caller-supplied anchor; never authorizes",
     }
-    report["passed"] = all(item["outcome"] == ("authorized" if item["case"] == "visible" else "failed")
-                           and item["reason"] == report["expected"][item["case"]] for item in results)
+    report["passed"] = all(
+        by_case[name]["outcome"] == ("authorized" if name in authorized else "failed")
+        and by_case[name]["reason"] == expected[name] for name in expected)
     (output / "cases.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({"output": str(output), "passed": report["passed"],
                       "cases": {item["case"]: item["reason"] for item in results}},
@@ -241,4 +299,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

@@ -343,3 +343,27 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 结论：计划阶段 A“将现有视觉点云抓姿链适配到 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口”条目已有在线只读证据；阶段 A 的门槛（在线输入无真值泄漏、纯视觉 profile 可启动、Oracle 不在进程/订阅图中）在在线运行层面得到支持。
 - 仍未覆盖（属阶段 B/D，不在本轮范围）：尚未有分割/GraspNet 感知前端（本轮用深度窗口 + 由观测质心构造的夹具候选位姿代替，非训练模型输出）；候选末端状态尚未经 IK 校验；未做连续路径与附着物间隙规划；未执行任何轨迹。目标体积因窗口包含货架层板而偏保守（y 向约 1.35 m）。`ManipulationSkill.execute()` 仍对视觉后端 fail-closed，且未启动。
+
+## 20. 阶段 B：单视点 RGB-D 红色商品搜索（2026-11-20）
+
+阶段 B 的目标是把一帧实拍（仿真）头部 RGB-D 变成“可抓取或具名拒绝”的视觉目标，并证明五类条件都有可复现证据、搜索授权不读槽位坐标。图像派生候选与 fail-closed 解析原本已在 `target_search_contract.py`；本轮补齐整帧无槽位授权、`TargetObservation` 输出、深度有效率与随机位置回归，并在隔离域 83 跑通在线审计。
+
+### 20.1 契约层新增
+
+- `depth_valid_fraction(depth_mm)`：帧内可用深度返回占比，写入 `FrameAnalysis.model_output`，用于“深度有效率”判定。
+- `observation_from_resolution(...)` + `TargetSearchError`：只有 `authorized`（唯一可见、有深度、有 `map` 位姿、具视觉 track id）的解析才能变成 `TargetObservation`；其余原因（`ambiguous_candidates`/`wrong_class`/`target_occluded`/`empty_slot`/`target_absent`/`below_confidence`）一律抛错。观测只带视觉 `perception_track_id`，不带仿真身份，并显式记录 `slot_coordinates_used`/`mujoco_object_id_used=false`。
+- 收紧颜色门限：新增 `DEFAULT_MIN_SATURATION=0.5`。原先货架暗部（RGB 均值约 (85,106,144)、饱和比约 0.47）被误判为“蓝色物体”，整帧模式下会让移除目标后报 `wrong_class`；收紧后该面不再成为候选，与模块“中性/暗面不参与候选”的设计一致（真实红色物体饱和比约 0.83，安全通过）。
+- 新增 `scripts/tests/test_openflex_search_observation.py`（11 例）：深度有效率、授权观测、五类拒绝都不产出观测、无效深度不授权、以及 24 次随机位置回归（图像内随机位置、随机深度，断言定位误差 < 3 px 且搜索不使用槽位先验）。
+
+### 20.2 在线只读审计（隔离域 83）
+
+- `scripts/audit_openflex_target_search.py` 改为双模式，并在真实头部帧上运行：
+  - **整帧授权模式（`full_frame_search`）**：完全不提供注视先验，只按图像候选授权。覆盖 `full_visible`（授权）、`full_wrong_class`（`wrong_class`）、`full_ambiguous`（`ambiguous_candidates`）、`full_absent`（`target_absent`）。
+  - **区域锚定诊断模式（`region_anchored_diagnostics`）**：遮挡与空位在单帧里必须有一个“注视点”才能与“本来就没有”区分开，故由调用方给出锚点；本轮锚点**取自图像本身**（可见候选的质心/深度，`diagnostic_anchor_source=image_derived_visible_candidate_not_registered_slot`），绝不读登记槽位，且该模式从不授权。覆盖 `anchored_visible`/`anchored_occluded`/`anchored_empty`。
+- 采集记录（`capture.json`）：RGB/深度 SHA-256、深度有效率、宽高、内参 K、相机在 `map` 的位姿、锚点候选 id/像素/深度、`oracle_used_for_selection=false`，以及可选的 oracle 交叉核对（本轮快照端点不可用，记为 unavailable）。
+- 本轮结果：7 个用例全部符合预期（`passed: true`）；授权用例产出 `TargetObservation`（`track_...`、`task_target`、`depth_valid_fraction=1.0`、`position_map_xyz≈(1.085, 0.003, 0.840)`，与仿真物体名义位姿一致但由图像反投影得到）。`authorization_reads_slot_coordinates=false` 写入报告。全程无运动。
+
+### 20.3 结论与仍未覆盖
+
+- 结论：计划阶段 B 条目与门槛（可见/遮挡/空位/错类/歧义五类可复现证据、授权不读槽位坐标）在本轮在线只读审计与 ROS-free 回归中得到支持。
+- 仍未覆盖：没有跨帧持久 tracker（`perception_track_id` 是帧内 token）；`yaw` 仍是未观测默认值，不是物体朝向；遮挡/空位依赖调用方锚点，纯整帧模式只能给出 `target_absent`；“随机槽位”回归目前是图像内随机位置（只读 profile 下 `/thesis_sim/randomize` 被禁用，未做场景级随机化）；只有单一“单红”场景，未覆盖多货架/多实例。以上属阶段 C 及以后。
