@@ -32,14 +32,21 @@ from rclpy.executors import (
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
-from sensor_msgs.msg import CameraInfo, Image, JointState
+from sensor_msgs.msg import CameraInfo, Image, Imu, JointState, PointCloud2, PointField
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
 
 from .math_utils import clamp, compose_pose, normalize_angle, relative_pose, yaw_to_quaternion
 from .model_builder import build_thesis_model
-from .camera_spec import HEAD_CAMERA
+from .camera_spec import HEAD_CAMERA, MID360_LIDAR
+from .lidar_sim import (
+    cast_points,
+    lidar_directions,
+    lidar_geomgroup_mask,
+    robot_geom_groups,
+    xyzw_from_wxyz,
+)
 from .trajectory import TrajectoryPoint, TrajectorySampler, duration_to_seconds, measured_goal_reached
 from .contact_audit import forbidden_environment_contact, forbidden_payload_contact
 from .release_verification import object_settled_on_surface, release_request_rejection
@@ -48,6 +55,8 @@ try:
     import mujoco
 except ImportError:  # The package can still be built and pure helpers can be tested.
     mujoco = None
+
+import numpy as np
 
 
 LEFT_ARM_JOINTS = tuple(f"openarmx_left_joint{index}" for index in range(1, 8))
@@ -201,6 +210,17 @@ class MujocoBridgeNode(Node):
             )
             self.camera_thread.start()
             self.renderers_ready.wait(timeout=180.0)
+        self.lidar_thread = None
+        self.imu_thread = None
+        if bool(self.get_parameter("publish_lidar").value):
+            self.lidar_thread = threading.Thread(
+                target=self._lidar_loop, name="mujoco-lidar", daemon=True
+            )
+            self.lidar_thread.start()
+            self.imu_thread = threading.Thread(
+                target=self._imu_loop, name="mujoco-imu", daemon=True
+            )
+            self.imu_thread.start()
         self.gil_heartbeat_steady = True
         self.sim_thread = threading.Thread(
             target=self._simulation_loop, name="mujoco-step", daemon=True
@@ -225,6 +245,14 @@ class MujocoBridgeNode(Node):
             "publish_rate_hz": 50.0,
             "publish_rgbd": True,
             "camera_rate_hz": 5.0,
+            "publish_lidar": False,
+            "lidar_rate_hz": 10.0,
+            "lidar_azimuth_bins": 240,
+            "lidar_channels": 8,
+            "lidar_min_range_m": 0.5,
+            "lidar_max_range_m": 20.0,
+            "lidar_noise_std_m": 0.0,
+            "imu_rate_hz": 100.0,
             "image_width": 320,
             "image_height": 240,
             "command_timeout_sec": 0.25,
@@ -321,6 +349,22 @@ class MujocoBridgeNode(Node):
                 mujoco.mjtObj.mjOBJ_JOINT, occluder_joint
             )
         self.base_link_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "base_link")
+        self.lidar_body_id = self._id(mujoco.mjtObj.mjOBJ_BODY, MID360_LIDAR.parent_body)
+        self.lidar_exclude_body = self._id(mujoco.mjtObj.mjOBJ_BODY, "openflex_robot_yaw_root")
+        # ``mj_multiRay``'s bodyexclude only drops the excluded body's own geoms,
+        # not its descendants, so excluding the robot root still lets every ray
+        # hit the robot mesh beside the sensor.  Mask the whole robot body tree by
+        # geom group instead (the generated scene splits robot vs. environment).
+        robot_groups = robot_geom_groups(
+            self.model.geom_group,
+            self.model.geom_bodyid,
+            self.model.body_parentid,
+            self.lidar_exclude_body,
+        )
+        environment_groups = (
+            set(int(self.model.geom_group[geom]) for geom in range(self.model.ngeom)) - robot_groups
+        )
+        self._lidar_geomgroup = lidar_geomgroup_mask(robot_groups, environment_groups)
         self.object_body_id = self._id(mujoco.mjtObj.mjOBJ_BODY, "thesis_object")
         self.hand_body_ids = {
             arm: self._id(mujoco.mjtObj.mjOBJ_BODY, f"openarmx_{arm}_hand_tcp")
@@ -367,6 +411,13 @@ class MujocoBridgeNode(Node):
                     CameraInfo, f"{topic_prefix}/color/camera_info", 5
                 ),
             }
+        self.lidar_pub = None
+        self.imu_pub = None
+        if bool(self.get_parameter("publish_lidar").value):
+            self.lidar_pub = self.create_publisher(PointCloud2, "/livox/lidar", 5)
+            self.imu_pub = self.create_publisher(Imu, "/livox/imu", 50)
+            self._lidar_dirs = self._build_lidar_directions()
+            self._lidar_imu_state = None
         self.grasp_pub = self.create_publisher(GraspStatus, "/thesis/grasp_status", 20)
         self.place_pub = self.create_publisher(PlaceStatus, "/thesis/place/status", 20)
         self.metadata_pub = self.create_publisher(
@@ -1294,6 +1345,190 @@ class MujocoBridgeNode(Node):
                 renderer.close()
             self.renderers = {}
 
+    # -- simulated MID-360 lidar + IMU --------------------------------------
+    def _build_lidar_directions(self):
+        return lidar_directions(
+            MID360_LIDAR,
+            self.get_parameter("lidar_channels").value,
+            self.get_parameter("lidar_azimuth_bins").value,
+        )
+
+    @staticmethod
+    def _quaternion_to_matrix(quaternion_wxyz):
+        w, x, y, z = (float(value) for value in quaternion_wxyz)
+        norm = math.sqrt(w * w + x * x + y * y + z * z) or 1.0
+        w, x, y, z = w / norm, x / norm, y / norm, z / norm
+        return np.array([
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ], dtype=np.float64)
+
+    def _publish_lidar(self, data, stamp: Time) -> None:
+        """Ray-cast a MID-360-like point cloud and publish it in the sensor frame."""
+
+        if self.lidar_pub is None:
+            return
+        body_id = self.lidar_body_id
+        point = np.asarray(data.xpos[body_id], dtype=np.float64)
+        rotation = self._quaternion_to_matrix(data.xquat[body_id])
+        directions = self._lidar_dirs
+        rays = directions.shape[0]
+        world_vectors = directions @ rotation.T
+        geomid = np.zeros(rays, dtype=np.int32)
+        distances = np.zeros(rays, dtype=np.float64)
+        mujoco.mj_multiRay(self.model, data, point, world_vectors.reshape(-1),
+                           self._lidar_geomgroup, 1, -1,
+                           geomid, distances, rays,
+                           float(self.get_parameter("lidar_max_range_m").value))
+        hit = distances >= 0.0
+        # frame the cloud with map -> mid360_link TF (the bridge owns the tree)
+        transform = TransformStamped()
+        transform.header.stamp = deepcopy(stamp)
+        transform.header.frame_id = "map"
+        transform.child_frame_id = MID360_LIDAR.frame
+        transform.transform.translation.x, transform.transform.translation.y, \
+            transform.transform.translation.z = (float(value) for value in point)
+        quaternion = xyzw_from_wxyz(data.xquat[body_id])
+        transform.transform.rotation.x, transform.transform.rotation.y, \
+            transform.transform.rotation.z, transform.transform.rotation.w = quaternion
+        self.tf_broadcaster.sendTransform(transform)
+        if not hit.any():
+            return
+        sensor_points, _ = cast_points(
+            directions,
+            distances,
+            min_range_m=float(self.get_parameter("lidar_min_range_m").value),
+            hit_mask=hit,
+            noise_std_m=float(self.get_parameter("lidar_noise_std_m").value),
+        )
+        if sensor_points.shape[0] == 0:
+            return
+        cloud = PointCloud2()
+        cloud.header.stamp = deepcopy(stamp)
+        cloud.header.frame_id = MID360_LIDAR.frame
+        cloud.height = 1
+        cloud.width = int(sensor_points.shape[0])
+        cloud.fields = [
+            PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1),
+        ]
+        cloud.is_bigendian = False
+        cloud.point_step = 16
+        cloud.row_step = cloud.point_step * cloud.width
+        cloud.is_dense = False
+        buffer = np.empty((sensor_points.shape[0], 4), dtype=np.float32)
+        buffer[:, :3] = sensor_points
+        buffer[:, 3] = 1.0
+        cloud.data = buffer.tobytes()
+        self.lidar_pub.publish(cloud)
+
+    def _publish_imu(self, quaternion_wxyz, position, rotation, stamp: Time) -> None:
+        """Publish an IMU sample whose specific force / rate come from pose differences.
+
+        This is a deliberately low-fidelity IMU: the angular rate and the sensor
+        specific force are finite differences of the ray-cast sensor pose, so fast
+        transients are smoothed.  Orientation is declared unavailable
+        (covariance -1) because the bridge only has an uncalibrated estimate.
+        """
+
+        if self.imu_pub is None:
+            return
+        now_sec = float(stamp.sec) + float(stamp.nanosec) * 1.0e-9
+        state = self._lidar_imu_state
+        angular = (0.0, 0.0, 0.0)
+        linear = (0.0, 0.0, 0.0)
+        gravity = np.asarray(self.model.opt.gravity, dtype=np.float64)
+        position = np.asarray(position, dtype=np.float64)
+        rotation = np.asarray(rotation, dtype=np.float64)
+        velocity = np.zeros(3, dtype=np.float64)
+        if state is not None:
+            dt = now_sec - state["stamp"]
+            if dt > 1.0e-6:
+                velocity = (position - state["position"]) / dt
+                if state["samples"] >= 2:
+                    acceleration_world = (velocity - state["velocity"]) / dt
+                    linear = tuple(float(value) for value in (acceleration_world - gravity) @ rotation)
+                    delta = state["rotation"].T @ rotation
+                    omega = np.array([delta[2, 1] - delta[1, 2], delta[0, 2] - delta[2, 0],
+                                      delta[1, 0] - delta[0, 1]]) / (2.0 * dt)
+                    angular = tuple(float(value) for value in omega)
+            else:
+                velocity = state["velocity"]
+        self._lidar_imu_state = {
+            "stamp": now_sec,
+            "position": position,
+            "velocity": velocity,
+            "rotation": rotation,
+            "samples": 1 if state is None else int(state["samples"]) + 1,
+        }
+        message = Imu()
+        message.header.stamp = deepcopy(stamp)
+        message.header.frame_id = MID360_LIDAR.frame
+        message.orientation_covariance[0] = -1.0
+        message.angular_velocity.x, message.angular_velocity.y, message.angular_velocity.z = angular
+        message.linear_acceleration.x, message.linear_acceleration.y, \
+            message.linear_acceleration.z = linear
+        self.imu_pub.publish(message)
+
+    def _lidar_loop(self) -> None:
+        rate = float(self.get_parameter("lidar_rate_hz").value)
+        if rate <= 0.0:
+            self.get_logger().error("lidar_rate_hz must be positive")
+            return
+        period = 1.0 / rate
+        try:
+            lidar_data = mujoco.MjData(self.model)
+            deadline = time.monotonic()
+            while not self.stop_event.is_set() and rclpy.ok():
+                with self.lock:
+                    qpos = self.data.qpos.copy()
+                    qvel = self.data.qvel.copy()
+                    sim_time = float(self.data.time)
+                lidar_data.qpos[:] = qpos
+                lidar_data.qvel[:] = qvel
+                lidar_data.time = sim_time
+                mujoco.mj_forward(self.model, lidar_data)
+                stamp = Time()
+                stamp.sec = int(sim_time)
+                stamp.nanosec = int((sim_time - stamp.sec) * 1.0e9)
+                self._publish_lidar(lidar_data, stamp)
+                deadline += period
+                remaining = deadline - time.monotonic()
+                if remaining > 0.0:
+                    self.stop_event.wait(remaining)
+                elif remaining < -period:
+                    deadline = time.monotonic()
+        except Exception as error:
+            if rclpy.ok():
+                self.get_logger().error(f"MuJoCo lidar simulation stopped: {error}")
+
+    def _imu_loop(self) -> None:
+        rate = float(self.get_parameter("imu_rate_hz").value)
+        if rate <= 0.0:
+            self.get_logger().error("imu_rate_hz must be positive")
+            return
+        period = 1.0 / rate
+        deadline = time.monotonic()
+        while not self.stop_event.is_set() and rclpy.ok():
+            with self.lock:
+                quaternion = tuple(float(value) for value in self.data.xquat[self.lidar_body_id])
+                position = np.asarray(self.data.xpos[self.lidar_body_id], dtype=np.float64).copy()
+                sim_time = float(self.data.time)
+            rotation = self._quaternion_to_matrix(quaternion)
+            stamp = Time()
+            stamp.sec = int(sim_time)
+            stamp.nanosec = int((sim_time - stamp.sec) * 1.0e9)
+            self._publish_imu(quaternion, position, rotation, stamp)
+            deadline += period
+            remaining = deadline - time.monotonic()
+            if remaining > 0.0:
+                self.stop_event.wait(remaining)
+            elif remaining < -period:
+                deadline = time.monotonic()
+
     def _on_control_mode(self, msg: ControlMode) -> None:
         stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
         entry = time.monotonic()
@@ -1721,6 +1956,10 @@ class MujocoBridgeNode(Node):
             self.sim_thread.join(timeout=2.0)
         if getattr(self, "camera_thread", None) is not None:
             self.camera_thread.join(timeout=5.0)
+        if getattr(self, "lidar_thread", None) is not None:
+            self.lidar_thread.join(timeout=5.0)
+        if getattr(self, "imu_thread", None) is not None:
+            self.imu_thread.join(timeout=5.0)
         if getattr(self, "viewer", None) is not None:
             self.viewer.close()
         return super().destroy_node()

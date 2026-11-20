@@ -37,6 +37,15 @@ if [[ "${OPENFLEX_ENABLE_SIM_PLACE:-0}" == "1" ]]; then
     place_topic="/thesis/place/control"
     echo 'Explicit simulation placement opt-in: guarded actual-pose release only; scene mutation remains disabled.'
 fi
+# Opt-in simulated MID-360 ray-cast lidar + IMU for the phase C2 SLAM bridge.
+# These topics are observation-only; motion endpoints stay remapped to the
+# disabled namespace regardless of this switch.
+lidar_params=()
+if [[ "${OPENFLEX_ENABLE_SIM_LIDAR:-0}" == "1" ]]; then
+    [[ "${ROS_DOMAIN_ID}" == "83" ]] || { echo "Simulation lidar requires domain 83" >&2; exit 1; }
+    lidar_params=(-p publish_lidar:=true -p lidar_rate_hz:=10.0 -p lidar_azimuth_bins:=240 -p lidar_channels:=8)
+    echo 'Explicit simulation lidar opt-in: simulated MID-360 on /livox/lidar and /livox/imu; no motion.'
+fi
 mkdir -p "${root}/local_dependencies/openflex_roboos"
 # Optional audited scene override: an explicit runtime profile replaces the legacy
 # derived scene generator. Both paths must be provided together.
@@ -74,6 +83,7 @@ exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; m
     -p enable_viewer:=false -p publish_rgbd:=true -p image_width:=320 -p image_height:=240 \
     -p use_sim_time:=false \
     "${scene_params[@]}" \
+    "${lidar_params[@]}" \
     -p derived_model_path:="${root}/local_dependencies/openflex_roboos/readonly_scene.xml" \
     -r /thesis/cmd_vel_selected:="${selected_velocity_topic}" \
     -r /thesis/place/control:="${place_topic}" \

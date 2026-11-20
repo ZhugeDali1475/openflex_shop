@@ -535,3 +535,36 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 - **立即可复用（无需硬件）**：把 `icp_registration` 的质量/守卫字段吸收进我们的 ROS-free `LocalizationQuality`（在当前真值字段旁扩展 `inlier_ratio`/`inlier_rmse`/`p50`/`p90`/`converged`/`health`/`yaw_jump`/`lio_wheel_divergence`），使 L2 层能承载真实信号，仿真侧仍如实标注为真值来源。
 
 第 22 节结论据此修正为：**数字实验栈无激光/无 SLAM；但仓库自带实机 MID-360 + 完整 SLAM 栈可直接复用或桥接到仿真。** 此项不改变任何计划条目状态。
+
+## 27. 阶段 C2 仿真 MID-360 桥接（MuJoCo 射线雷达 + IMU，2026-11-20）
+
+用户选定"方案 2：在 MuJoCo 中仿真 3D 雷达 + IMU，按 `/livox/lidar`+`/livox/imu` 重发布，再跑 `fastlio2`"，并明确 **全部在仿真中完成、不涉及真机**。本节记录本轮落地与只读在线验证；全部在隔离域 83 的只读 profile 中进行，未发运动、未接真机。
+
+### 27.1 新增/改动
+
+- 新增 ROS-free `openflex_thesis_mujoco/lidar_sim.py`：`lidar_directions`（MID-360 纵向 -7°..+52° 的规则仰角/方位射线栅格）、`cast_points`（距离→传感器系点，含 min/max 距离与可选测距噪声）、`robot_geom_groups`（按 body 子树求几何分组）、`lidar_geomgroup_mask`（生成 `mj_multiRay` 几何分组掩码，机器人/环境分组重叠即 fail-loud 抛错）、`xyzw_from_wxyz`。
+- 扩展 `camera_spec.py`：`Mid360LidarSpec`/`MID360_LIDAR`（`parent_body=mid360_link`、`frame=mid360_link`、`channels=8`、`azimuth_bins=240`、`min/max 0.5/20.0 m`、`provenance=simulation_raycast_not_physical`）。
+- `bridge_node.py`：新增 `publish_lidar`（默认 False）等参数与 `_lidar_loop`/`_imu_loop`；用 `mujoco.mj_multiRay` 发 `sensor_msgs/PointCloud2` 到 `/livox/lidar`（frame `mid360_link`，字段 x/y/z/intensity，与 `lio_node` 的 `pc2ToPCL` 兼容），并广播 `map→mid360_link` TF；以相邻位姿差分发 `sensor_msgs/Imu` 到 `/livox/imu`（比力 + 角速度；`orientation_covariance[0]=-1` 声明姿态不可用）。
+- `scripts/run_openflex_readonly_sim.sh`：新增可选 `OPENFLEX_ENABLE_SIM_LIDAR=1`（要求域 83），只透传雷达开关；运动端点仍重映射到 `/openflex_readonly_disabled/*`，与既有 opt-in 同口径。
+- 新增 ROS-free 测试 `scripts/tests/test_openflex_sim_lidar.py`（14 例），含对真实生成模型的射线集成测试。全套离线回归 `474 passed`（9 例为既有 `mcp`/`jsonschema` 缺包环境缺口）。
+
+### 27.2 发现并修复的两个缺陷（未提交版本从未真正跑过）
+
+1. **自遮挡**：`mj_multiRay` 的 `bodyexclude` 只排除该 body **自身**的几何，不含其后代（已实测）。原实现按 `openflex_robot_yaw_root` 排除，结果全部 1920 条射线都在约 2 cm 处命中 mid360 自身网格（云整体自遮挡）。改用几何分组掩码：生成场景中机器人 69 个几何全在 group 1、环境（地面/货架/物体）11 个几何在 group 0；掩码 `[1,0,1,1,1,1]` 后 670 条射线得到真实环境回波、零机器人自命中。测试 `test_robot_bodyexclude_alone_would_self_occlude` 固化该对照。
+2. **`np` 未定义**：新代码用了 `np.`，但 `bridge_node.py` 只在 `_depth_to_uint16_mm` 内局部 `import numpy as np`，模块级没有；首次运行即 `NameError` 使雷达/IMU 线程退出。已补模块级 `import numpy as np`。
+
+### 27.3 只读在线验证（隔离域 83，`OPENFLEX_ENABLE_SIM_LIDAR=1`）
+
+- `/livox/lidar`：`sensor_msgs/PointCloud2`，约 **10.0 Hz**，frame `mid360_link`，实测 width 647、测距 0.502–2.657 m（与离线射线探针 670 命中/0.48–2.66 m 一致）。
+- `/livox/imu`：`sensor_msgs/Imu`，约 **88 Hz**（目标 100，受循环开销限制），静止时 `|angular_velocity|=0`、`|linear_acceleration|=9.81 m/s²`（重力比力，符号正确）。
+- `map→mid360_link` TF 在线广播，RPY(-30°,0,-90°) 与生成模型一致。
+- 只读 profile 下 `MUJOCO_SAFETY_AUDIT` 约 130 s 无违规；发布者 1/订阅者 0；无运动指令。
+
+### 27.4 fastlio2 可消费路径与不一致项（供下一步）
+
+- `lio_node` 有 `use_pointcloud2` 开关（点注释"subscribe PointCloud2 (Gazebo)"），走 `Utils::pc2ToPCL`（`pcl::fromROSMsg` → 需要 x/y/z/intensity，正是本桥字段）；并有 `body_cloud_self_filter_*` 盒式自滤。故**仿真点云无需转 CustomMsg**，新写一份仿真 `fastlio2` 配置（`use_pointcloud2: true`）即可。
+- **IMU 尺度**：`lio_node` 对 `linear_acceleration` 乘 `imu_accel_scale`（默认 10.0，注释称实机 MID-360 加速度单位为 `g`）。本桥发布的是 **m/s²**，故仿真配置必须显式设 `imu_accel_scale: 1.0`，否则加速度被放大 10 倍导致发散。
+- **外参不一致**：生成模型/URDF 给出 `base_link→mid360_link` = xyz(0.30,0,0.12)、rpy(-30°,0,-90°)（并有同名 `livox_frame`），而仓库 `fastlio2/config/lio.yaml` 注释写 xyz(0.28,0,0.12)、rpy(0,+30°,0)。二者的**转动差 -90° yaw 与 60° pitch 不符**。仿真 `fastlio2` 配置的外参必须由 URDF/模型推导，**不得直接照抄 `lio.yaml`**。
+- 尚未做：编译 `fastlio2`（需装 `Sophus`；`pgo` 另需 `GTSAM`，本机均缺、无 sudo；可先只做 LIO 出 `odom→base_link`），以及在该仿真点云+IMU 上跑通并记录真实定位质量。
+
+此项不改变阶段 A/B/C 状态，也未勾选任何新计划条目：C2 仍缺"带运动、多帧融合的在线 L2 批次 + 真实定位质量来源"，故整阶段继续不判通过。

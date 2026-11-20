@@ -83,7 +83,7 @@
 - (✓) 分别统计 L1 与 L2，禁止合并成功率。（2026-11-20：`trial_statistics.py` 分栏统计 + 合并显式拒绝 + 失败入分母 + 按阶段归因；合成批次审计通过。真实 L1/L2 数字待在线批次，见审计第 25 节。）
 
 前置核查（2026-11-20，静态，见阶段 A 审计第 22 节）：**数字实验（仿真）栈**无激光/`/map`/点云话题，定位是构造真值（`map→odom` 近似静态、`odom`/头部 TF 均取仿真真值，无估计器/协方差），导航是预设站点基线而非探索（不得复用）。故第 1 条的"定位质量"在定下方案 (a) 接受真值定位并如实标注，或方案 (b) 给里程计加噪并引入定位估计器之前，不具备真实语义；第 2 条需另起 frontier/信息增益实现。
-补充核查（见审计第 26 节）：**同一仓库自带实机 MID-360 LiDAR + 完整 SLAM 栈**（`openflex_chassis/mapping_localization_layer`：fastlio2/pgo/hba/icp_registration，及 `navigation_layer`：Nav2/pointcloud_to_laserscan），并有真实定位质量信号（`RegistrationQuality`/低支撑守卫）。该栈未编译进仿真 `install_v2`、依赖物理 `/livox/lidar`+`/livox/imu`，仿真目前无雷达/IMU 传感器，故不能直接喂入；可选路径为实机运行、给仿真加仿真雷达+IMU 桥接、或回放实机 bag。许可证 CC BY-NC-SA 4.0（非商业），需按第 15 节口径记录。
+补充核查（见审计第 26 节）：**同一仓库自带实机 MID-360 LiDAR + 完整 SLAM 栈**（`openflex_chassis/mapping_localization_layer`：fastlio2/pgo/hba/icp_registration，及 `navigation_layer`：Nav2/pointcloud_to_laserscan），并有真实定位质量信号（`RegistrationQuality`/低支撑守卫）。该栈未编译进仿真 `install_v2`、依赖物理 `/livox/lidar`+`/livox/imu`，仿真原本无雷达/IMU 传感器，故不能直接喂入；可选路径为实机运行、给仿真加仿真雷达+IMU 桥接、或回放实机 bag。许可证 CC BY-NC-SA 4.0（非商业），需按第 15 节口径记录。**用户选定仿真桥接路线并明确"全部在 MuJoCo 中、不涉及真机"**；2026-11-20 已在 MuJoCo 桥内落地可选仿真 MID-360 射线雷达 + IMU（只读在线验证 `/livox/lidar`≈10 Hz、`/livox/imu`≈88 Hz、`map→mid360_link` TF；`fastlio2` 有 PointCloud2 仿真入口），详见审计第 27 节。
 
 ### 阶段 D：视觉抓取候选与执行
 
@@ -128,6 +128,7 @@
 - (✓) 阶段 C 通过（2026-11-20）：多视点主动搜索。观察位仅由货架几何派生（`shelf_viewpoints.py`），`active_search.py` 为可取消、fail-closed 状态机（停稳/过期帧/无效深度/歧义/超时/取消/视点用尽均具名终止，并拒绝有横向盲区的视点计划）；离线回归 16 例、审计脚本 5 例、可复现离线审计 13 场景全部符合预期，全套离线 `426 passed`。细节见阶段 A 审计第 21 节。仍未覆盖：跨帧 tracker、物体朝向、场景级随机化、多货架/遮挡与在线多视点批次，属阶段 C2 及以后。
 - (✓) 阶段 A 通过（2026-11-20）：计划阶段 A 条目全部勾选，门槛证据（在线输入无真值泄漏、纯视觉 profile 可启动、Oracle 不在进程/订阅图中）见审计第 18–19 节。该结论仅限数字仿真与规划层；感知前端、抓取后端、连续路径与执行属阶段 B–E，任何执行仍 fail-closed。
 - ( ) 阶段 C2 进行中（2026-11-20）：C2 四条条目均已完成契约与离线/只读在线验证——`mapping_contract.py`（占用栅格/地图版本/定位质量）、`exploration_contract.py`（frontier/信息增益选点 + fail-closed 状态机）、`trial_statistics.py`（L1/L2 分栏、禁止合并、失败入分母归因）；合成栅格审计 7 场景、隔离域 83 只读建图选点（零发布/零运动）、L1/L2 合成批次审计均通过。**整阶段仍不判通过**：L2 尚未做带运动、多帧融合的调查批次，L2 结论未成立；定位采方案 (a) 真值定位、无估计器，建图仍为单帧快照。见审计第 22–25 节。
+- ( ) 阶段 C2 仿真雷达桥接（2026-11-20）：MuJoCo 桥新增可选仿真 MID-360（`mujoco.mj_multiRay` 射线雷达，ROS-free `lidar_sim.py`）+ IMU，按 `/livox/lidar`+`/livox/imu` 重发布，并修复自遮挡分组掩码与 `np` 未导入两个缺陷；新增 14 例离线测试，全套离线 `474 passed`；隔离域 83 只读在线验证通过。`fastlio2` 可直接消费该点云（`use_pointcloud2`），但**尚未编译 `fastlio2`/PGO 并在仿真上跑通 LIO**，仿真定位质量来源仍为真值。见审计第 27 节。此项不改变 C2 整阶段结论（继续不判通过）。
 - ( ) 阶段 C2 及以后。
 
 ### 6.1 阶段 A 最新审计补充（2026-11-19）
