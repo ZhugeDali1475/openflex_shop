@@ -501,3 +501,37 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 计划阶段 C2 第 4 条的**统计能力**（L1/L2 分栏、禁止合并、失败入分母、按阶段归因、harness 计入）在本轮契约与合成批次审计中得到支持，条目勾选；支持 Oracle 对照分栏但尚无 oracle 试验。
 - 仍未覆盖：本轮数字来自**合成批次**（种子驱动的确定性生成器），不是物理或在线结果；真实 L1/L2 数字需要在线批次（属阶段 F）。因此阶段 C2 作为**整阶段仍不判通过**：L2 尚未做带运动、多帧融合的调查批次，L2 结论未成立。
+
+## 26. 补充核查：仓库内确有 MID-360 LiDAR + 完整 SLAM 栈（2026-11-20）
+
+第 22 节的结论"无激光/无 SLAM"只针对 `openflex_thesis` 数字实验（仿真）工作区；经用户提示后复查发现，**同一个仓库**里带有实机底盘的完整建图/定位/导航栈。以下为静态核查（未启动任何节点、未接硬件）。
+
+### 26.1 已有资产
+
+- `openflex_ws/src/openflex_chassis/hardware_sensor_layer/livox_ros_driver2`：Livox MID-360 驱动（ROS1/ROS2 双版），发布 `/livox/lidar`（`livox_interfaces2/CustomMsg`）与 `/livox/imu`。
+- `openflex_ws/src/openflex_chassis/mapping_localization_layer/`：
+  - `fastlio2`（LiDAR-inertial odometry，`lio_node`，输入 `/livox/imu`+`/livox/lidar`，`body_frame=base_link`、`world_frame=odom`，发布 `odom→base_link` 及建图模式 `map→odom`）；
+  - `pgo`（关键帧 + ScanContext + NDT/ICP + GTSAM iSAM2 回环优化）；
+  - `hba`（分层光束法平差，离线/服务触发地图精修）；
+  - `icp_registration`（PCD 地图 NDT/ICP/ScanContext 重定位，发布平滑 `map→odom` 校正）；
+  - `fast_livo`（雷达-惯性-视觉，标注"暂时未使用"）。
+- `openflex_ws/src/openflex_chassis/navigation_layer/`：`swerve_navigation`（Nav2 启动/行为树）、`nmpc_controller`（acados 舵轮 NMPC）、`pointcloud_to_laserscan`（3D→2D 供 costmap）。
+- **真实定位质量信号**：`icp_registration/include/icp_registration/registration_quality.hpp` 的 `RegistrationQuality`（`inlier_ratio`、`inlier_rmse`、`all_mse`、`p50/p90_distance`）与 `low_support_guard.hpp` 的 `LowSupportInput`（`solver_converged`/`localization_healthy`/`wheel_recent`/`lio_recent`/`lio_yaw_jump_detected`/`lio_wheel_divergence_delta`/低支撑时长/`inlier_*`）。这正是计划"记录定位质量"想要的真实量。
+- 入口：`mapping.launch.py`（robot_state_publisher + ros2_control + livox 驱动 + FAST-LIVO2 + PGO + 可选 D435/GPS）、`full_system.launch.py`；地图经 `/pgo/save_maps` 存到 `openflex_maps/3d/<map>`。
+- 许可证：`mapping_localization_layer` 与 `navigation_layer` 均为 **CC BY-NC-SA 4.0（非商业）**，需按第 15 节口径记录。
+
+### 26.2 为什么现在还不能直接用在数字实验里
+
+- 该栈是**实机栈**，未编译进本任务使用的 `openflex_ws/install_v2`（无 `fastlio2`/`pgo`/`hba`/`icp_registration`/`swerve_navigation` 安装产物）。
+- 输入依赖物理传感器：`/livox/lidar`(CustomMsg)+`/livox/imu`，来自以太网直连的 MID-360（`192.168.1.1xx`）。
+- MuJoCo 模型**没有任何 `<sensor>`**（只有 `mid360_link`/`d435_link` 网格），仿真不发布雷达点云，也不发布底盘 IMU；因此仿真链路目前喂不出这套 SLAM。
+- 全盘检索未发现可离线回放的 MID-360 rosbag（`*.db3`/`*.bag`）——若要离线回放需要用户提供 bag 路径。
+
+### 26.3 可用性与推荐（研究结论）
+
+- **实机**：可直接用（就是这套栈），能给出真实建图 + 真实定位质量（`RegistrationQuality`/低支撑守卫），正面满足 C2 第 1 条；但需要物理机器人+实机运行，超出当前计划 §1.2（不改造真实硬件/实机标定）与沙箱范围。
+- **仿真**：不能直接用；需给 MuJoCo 加**仿真 3D 雷达 + IMU**，并按 `/livox/lidar`(CustomMsg 或 PointCloud2)+`/livox/imu` 重发布，再跑 `fastlio2`(经 PGO/ICP)。MID-360 为非重复扫描，忠实仿真工作量中等；这是一条能把 L2 做成"真雷达-惯性建图 + 真实定位质量"的路径。
+- **离线回放**：若有实机 bag，用 `fastlio2`/`pgo` 回放即可得到真实地图与质量，成本最低——目前本机未见 bag。
+- **立即可复用（无需硬件）**：把 `icp_registration` 的质量/守卫字段吸收进我们的 ROS-free `LocalizationQuality`（在当前真值字段旁扩展 `inlier_ratio`/`inlier_rmse`/`p50`/`p90`/`converged`/`health`/`yaw_jump`/`lio_wheel_divergence`），使 L2 层能承载真实信号，仿真侧仍如实标注为真值来源。
+
+第 22 节结论据此修正为：**数字实验栈无激光/无 SLAM；但仓库自带实机 MID-360 + 完整 SLAM 栈可直接复用或桥接到仿真。** 此项不改变任何计划条目状态。
