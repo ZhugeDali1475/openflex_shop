@@ -53,7 +53,7 @@
 - (✓) 静态核查仓库现有 `openflex_grasp`：Qwen/SAM2 同帧 RGB-D 分割与点云、GraspNet `FitGrasp` 可作为视觉抓姿候选技术基础；其接口边界和未接通原因已记入阶段 A 审计。此项只确认代码能力，不代表模型资产可用或闭环已集成。
 - (✓) 新增 ROS-free `VisualGraspPointCloudInput` 契约：校验 `TargetObservation`、同相机帧/时间戳、商品与场景 XYZ 点云、有限值和最少点数，并序列化为不含 `object_id` 的 FitGrasp 适配载荷；该契约不调用 ROS、不执行运动。
 - (✓) 搜索观测现在显式记录拟执行手臂（本阶段固定右臂），可通过上述视觉点云契约；MuJoCo 当前头部 RGB-D 话题及 `map→head optical` TF 已静态核对，头部相机标定来源仍标记为仿真估计、非物理标定。
-- ( ) 将现有视觉点云抓姿链适配到本任务的 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口；不得把公共 `PickObject` 的注册 `object_id` 校验或另一套机器人控制入口当作视觉身份链路。
+- (✓) 将现有视觉点云抓姿链适配到本任务的 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口（见审计第 19 节）：新增 ROS-free `visual_grasp_moveit.py` 与只读探针 `probe_openflex_visual_grasp_moveit.py`，在隔离域 83 用实时头部深度 + 实测 TF + 货架场景向只规划 `move_group` 应用 7 个碰撞体并回读、对实测起始状态做 `/check_state_validity`（valid、0 接触）、写出感知/评测证据对；未执行任何运动。未借用 `PickObject` 的注册 `object_id` 校验。分割/GraspNet 前端、候选 IK、连续路径与轨迹执行仍属阶段 B/D。
 - (✓) 建立感知证据与评测真值分离的日志 schema：每次搜索尝试独立保存 `*_perception.json` 与 `*_evaluation.json`；感知层拒绝非空仿真 ID，评测层默认 `physical_verification=false`。
 - (✓) 完成静态测试和只读运行时审计（隔离域 83 只读 MuJoCo 桥；见阶段 A 审计第 18 节）：Oracle/真值/运动通道在图上无发布者，头部相机与 `map→head` TF 在线可用，运动 action 重映射失效问题已修复并复验；不发运动指令。
 
@@ -121,7 +121,7 @@
 - (✓) 已冻结目标、边界、L1/L2 分层和停止条件。
 - (✓) 已完成阶段 A 初审并确认两个阻塞：登记槽位先验、Oracle 抓取候选；并识别到可复用的 RGB-D/GraspNet 组件，但它尚未接入本任务执行链。
 - (✓) 已新增观测契约和预检 Oracle 显式开关；相关离线契约/搜索/tool 回归 90 项通过。
-- ( ) 阶段 A 尚未通过：只读运行时节点/订阅审计已完成（见 §6.1 / 审计第 18 节），剩余阻塞是把视觉观测接入真实抓取规划动作（`FitGrasp` ROS action / MoveIt transport / 评测关联）；当前任何抓取请求仍 fail-closed。
+- (✓) 阶段 A 通过（2026-11-20）：计划阶段 A 条目全部勾选，门槛证据（在线输入无真值泄漏、纯视觉 profile 可启动、Oracle 不在进程/订阅图中）见审计第 18–19 节。该结论仅限数字仿真与规划层；感知前端、抓取后端、连续路径与执行属阶段 B–E，任何执行仍 fail-closed。
 - ( ) 阶段 B 及以后。
 
 ### 6.1 阶段 A 最新审计补充（2026-11-19）
@@ -138,3 +138,4 @@
 - 已把视觉抓姿规划链接入感知/评测分离证据层 `visual_grasp_evidence.py`：规划请求写入 `PerceptionEvidence`（构造即校验、拒绝注入仿真身份），评测层默认真值无关，并新增 4 例测试；离线批次最新 `151 passed`。仍无在线运行批次，运行时 TF/订阅审计、MoveIt transport 与 GraspNet 推理运行时未就绪，计划条目继续不勾选。
 - 已完成计划第 6 节"推理运行时可用性"本机核查（经用户授权后安装）：修复迁移 venv 失效 shebang（56 个），用仓库外 `/home/wgb/.cuda/cuda-12.6-local`（nvcc 12.6.85）按兼容矩阵在目标环境重编 `pointnet2`/`knn_pytorch` CUDA 扩展（`sm_86;sm_89`），并新增只读脚本 `scripts/audit_openflex_graspnet_runtime.py`（+ 10 例测试）用 subprocess 探针验证：CUDA 算子全 PASS、checkpoint 推理 513,688 点得 `(326,17)` 全有限、perception venv 可导入 torch/transformers、`overall_ok=true`。环境产物在仓库外或已 gitignore，提交只含脚本/测试/文档；阶段 A 的"隔离域 83 只读运行时审计（节点/话题/TF/订阅图）"与在线 transport、执行后真值关联仍未做，故阶段 A 与计划第 56 行条目继续不勾选。
 - 已完成隔离域 83 只读运行时审计（见阶段 A 审计第 18 节）：先启动仓库既有 `scripts/run_openflex_readonly_sim.sh`，只观察节点/话题/服务/action/TF 再关停。证实 ≤2 节点、无 Oracle/AnyGrasp/MoveIt/Nav2/mission；`/thesis/object_memory` 在图中不存在、真值/运动通道发布者为 0；头部相机约 4 Hz 且 `map→thesis_head_color_optical_frame` TF 在线广播；约 30 s 内 `MUJOCO_SAFETY_AUDIT` 无违规。审计发现只读 profile 的运动 action 重映射在 Humble 下失效（action 图名是隐藏 `_action/*`，精确名规则不匹配），已把 `run_openflex_readonly_sim.sh` 改为展开 5 个隐藏名重映射并复验：运动 action 现为 `/openflex_readonly_disabled/*`、规范名消失。阶段 A 仍不勾选：视觉抓姿链接入 `FitGrasp` ROS action、MoveIt transport 与评测真值关联仍未做。
+- 已完成阶段 A 收尾：视觉抓姿链接入本任务在线接口（审计第 19 节）。新增 ROS-free `openflex_roboos_bridge/visual_grasp_moveit.py`（把规划请求转为只规划 MoveIt 载荷：规划帧下目标保守体积 + 货架障碍盒 + 每候选一个实测关节状态；固定 plan-only 并拒绝允许执行的参数集）与 9 例测试；新增只读探针 `scripts/probe_openflex_visual_grasp_moveit.py`。隔离域 83 组合栈（只读 MuJoCo 桥 + 只规划预检 MoveIt）两次复现：无 oracle 节点、`/thesis/object_memory` 不存在、`/thesis/anygrasp/request` 订阅者 0；探针由 320×240 `16UC1` 实时头部深度反投影得 13687 目标点，向 `/apply_planning_scene` 应用 7 个碰撞体并回读一致，`/check_state_validity` 实测起始状态 valid、0 接触，写出感知/评测证据对；全程 `trajectory_execution=false`、无运动。阶段 A 至此通过；阶段 B 起（感知前端、抓取后端、连续路径、执行）与物理验证仍未开始。

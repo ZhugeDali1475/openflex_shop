@@ -321,3 +321,25 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 已核对：纯只读桥 profile 可启动；Oracle 不在进程/订阅图中；真值/运动通道在图上无发布者；头部相机与 `map→head` TF 在线可用；运动 action 现已真正改名隔离。计划阶段 A"只读运行时审计（节点/话题/输入来源/相机帧）"条目录入证据。
 - 仍未覆盖（阶段 A 不能因此标为通过）：本轮未启动视觉抓姿 Skill 链、`FitGrasp` ROS action、MoveIt transport 与评测真值关联，故"将现有视觉点云抓姿链适配到 MuJoCo 相机/场景坐标/TF/仿真 MoveIt/评测接口"条目仍未完成；桥节点发布的 `/thesis/object_observation` 是仿真真值派生观测（noise=0，confidence=0.99），只作为仿真观测口，不是物理感知证据。
+
+## 19. 视觉抓姿链接入本任务 MuJoCo 相机与仿真 MoveIt 规划（只规划，2026-11-20）
+
+第 11–16 节把视觉抓姿链闭合为 ROS-free 契约，第 18 节确认了只读运行时可启动。本轮把该链真正接到本任务的在线接口：MuJoCo 头部相机、`map`→头部光学的实测 TF、货架静态碰撞场景、仿真 MoveIt 规划服务与感知/评测证据层。全部只规划，不执行运动。
+
+### 19.1 新增传输适配与只读探针
+
+- 新增 ROS-free `openflex_roboos_bridge/visual_grasp_moveit.py`：把 `VisualGraspPlanRequest` 转成 MoveIt 规划接口所需的两类载荷——(1) 规划帧下的世界碰撞体（独立目标保守体积 + 货架障碍盒）；(2) 每个视觉候选一个“实测关节位置”机器人状态。模块把 `plan_only` 固定为真、`trajectory_execution` 固定为假，并拒绝 `allow_trajectory_execution`/`moveit_manage_controllers` 为真的 MoveIt 参数集；不读 `ObjectMemory`、不自调 MoveIt、不发运动。
+- 新增只读探针 `scripts/probe_openflex_visual_grasp_moveit.py`（需 `ROS_DOMAIN_ID=83`）：读实时头部相机信息/深度、`/joint_states`、`/swerve_drive_controller/odom` 与 `map→thesis_head_color_optical_frame` TF；把深度反投影为目标点云并走第 12–16 节 ROS-free 链；再经 `/apply_planning_scene` 应用视觉碰撞场景、`/get_planning_scene` 回读、`/check_state_validity` 检查实测起始状态；最后写 `planning_evidence_pair()` 的感知/评测两份记录。探针不调用 `/execute_kinematic_path`、不发控制器目标、不授权抓取。
+- 新增 `scripts/tests/test_visual_grasp_moveit.py`（9 例）：碰撞体中心/尺寸换算、目标与货架盒 ID、候选状态与实测关节一致、任意载荷不含 `object_id`/`mujoco`/`oracle`、plan-only 参数守卫（拒绝允许执行）、非单位四元数与跨帧拒绝。
+
+### 19.2 在线只读运行证据（隔离域 83，两次复现）
+
+- 组合栈：仓库既有 `scripts/run_openflex_readonly_sim.sh`（MuJoCo 桥，真值/运动通道重映射为 `openflex_readonly_disabled/*`）+ `scripts/run_openflex_manipulation_preflight.sh`（`move_group` 以 `allow_trajectory_execution:=false`、`moveit_manage_controllers:=false` 只规划；另含 `anygrasp_gateway`、`moveit_evaluator`、`tc_wam_server`、`robot_state_publisher`）。
+- 进程/图事实：无 oracle 节点；`/thesis/object_memory` 话题不存在（仅有 `/openflex_readonly_disabled/object_memory`，发布者 0、订阅者 1）；`/thesis/anygrasp/request` 发布者 1（`anygrasp_gateway`）、订阅者 0。另观察到图中存在两个同名 `/move_group` 节点（MoveIt 自身），记录备查。
+- 探针结果（两次一致）：对 320×240、`16UC1`(mm)、`fx≈171.4` 的实时头部深度反投影并按货架层窗口筛选得到 13687 个目标点，目标保守体积中心落在 `map` 约 `(1.169, 0.002, 0.891)`；经 `/apply_planning_scene` 应用 1 个目标体 + 6 个货架体共 7 个碰撞体，`/get_planning_scene` 回读 7 个 ID 全部匹配；`/check_state_validity` 对实测起始状态返回 `valid=true`、接触数 0；写出感知/评测证据对；`trajectory_execution=false`、`robot_motion_executed=false`、`object_memory_used=false`。
+- 关停后域 83 图（除 `parameter_events`/`rosout`）为空，无残留仿真进程。
+
+### 19.3 结论与仍未覆盖的部分
+
+- 结论：计划阶段 A“将现有视觉点云抓姿链适配到 MuJoCo 相机、场景坐标/TF、仿真 MoveIt 规划和评测接口”条目已有在线只读证据；阶段 A 的门槛（在线输入无真值泄漏、纯视觉 profile 可启动、Oracle 不在进程/订阅图中）在在线运行层面得到支持。
+- 仍未覆盖（属阶段 B/D，不在本轮范围）：尚未有分割/GraspNet 感知前端（本轮用深度窗口 + 由观测质心构造的夹具候选位姿代替，非训练模型输出）；候选末端状态尚未经 IK 校验；未做连续路径与附着物间隙规划；未执行任何轨迹。目标体积因窗口包含货架层板而偏保守（y 向约 1.35 m）。`ManipulationSkill.execute()` 仍对视觉后端 fail-closed，且未启动。
