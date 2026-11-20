@@ -477,3 +477,27 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 计划阶段 C2 第 1 条"用 RGB-D/激光建立地图并记录地图版本、定位质量"在本轮只读在线审计中得到支持（从实时头部深度建立占用地图、记录 `map_version` 与定位质量），条目勾选。
 - 仍未覆盖：本轮只是**单帧快照**建图，没有多帧融合/SLAM 回路，也没有在移动中连续建图与避障；定位仍是仿真真值（方案 (a)，无估计器），L2 结论必须如此标注；第 4 条"L1/L2 分开统计"需要在线批次运行器，仍未做。故阶段 C2 整体不判通过。
+
+## 25. 阶段 C2 第 4 条：L1/L2 分开统计契约（离线，2026-11-20）
+
+计划要求"分别统计 L1 与 L2，禁止合并成功率"。本轮新增 ROS-free 统计契约与批次运行器，并强调：**任何合并 L1/L2（或合并纯视觉/Oracle）的请求都会被显式拒绝**。无 ROS、无运动。
+
+### 25.1 新增契约（`openflex_roboos_bridge/trial_statistics.py`）
+
+- `TrialRecord`（`trial_id`/`layer`∈{L1,L2}/`evidence_source`∈{pure_vision,oracle_control}/`condition`/`success`/`failure_stage`/`duration_sec`/`localization_error_m`/`safety_stop`）：构造即校验——**成功不得带失败阶段，失败必须具名归因阶段**（`perception/localization/mapping/exploration/grasp/navigation/placement/harness`）。
+- `slice_metrics(records, layer=, evidence_source=)` → `Metrics`（`trials/successes/failures/success_rate/failure_rate/safety_stop_rate/mean_duration/mean_localization_error/attribution/conditions`），**失败计入分母**，归因计数和等于失败数。
+- `layer_report(records)`：按 layer、再按 evidence_source 分栏输出，**只输出存在的分栏，从不跨层合并**。
+- `combine_layers(...)`/`combine_evidence_sources(...)`：永远抛 `TrialStatisticsError`——这是"禁止合并"的可执行表达。
+- `run_batch(specs, execute)`：按序运行；`execute` 抛异常或返回身份不符的记录时，保留该 spec 的身份并记为 `harness` 失败——**没有试验会被丢弃**。
+
+### 25.2 离线回归与可复现审计
+
+- `scripts/tests/test_openflex_trial_statistics.py`（6 例）：记录校验、失败入分母与归因、空分栏拒绝、L1/L2 与来源分栏且合并被拒、`run_batch` 计入 harness 错误并保身份、报告确定性。
+- `scripts/audit_openflex_experiment_stats.py`（+4 例）：确定性合成批次（种子 20261120，8 条件×2 层×8 次 + 2 次注入 harness 异常）。
+  - 结果：共 130 次试验；**L1 成功率 0.769**（65 次，归因 exploration 1/grasp 6/harness 1/perception 7），**L2 成功率 0.477**（65 次，exploration 3/grasp 8/harness 1/perception 22）；两层分栏、`combined_rate=null`，7 项检查全为真。
+- 全套离线回归本轮为 `460 passed`（新增 10 例；同一批 9 例因本机缺 `mcp` 等可选依赖在收集期报错，属既有环境缺口）。
+
+### 25.3 结论与仍未覆盖
+
+- 计划阶段 C2 第 4 条的**统计能力**（L1/L2 分栏、禁止合并、失败入分母、按阶段归因、harness 计入）在本轮契约与合成批次审计中得到支持，条目勾选；支持 Oracle 对照分栏但尚无 oracle 试验。
+- 仍未覆盖：本轮数字来自**合成批次**（种子驱动的确定性生成器），不是物理或在线结果；真实 L1/L2 数字需要在线批次（属阶段 F）。因此阶段 C2 作为**整阶段仍不判通过**：L2 尚未做带运动、多帧融合的调查批次，L2 结论未成立。
