@@ -33,9 +33,20 @@ lio_log="${log_dir}/lio_sim_node.log"
 
 sim_pid=""
 lio_pid=""
+stop_job() {
+    # A bash script launched with ``&`` from a non-interactive shell inherits
+    # SIGINT as ignored, so a plain SIGINT never reaches its trap.  Escalate to
+    # SIGTERM for robustness (the bridge itself is a python process whose rclpy
+    # handler already reacts to SIGINT).
+    local pid="$1"
+    [[ -z "${pid}" ]] && return 0
+    kill -INT "${pid}" 2>/dev/null || true
+    sleep 1
+    kill -TERM "${pid}" 2>/dev/null || true
+}
 cleanup() {
-    if [[ -n "${lio_pid}" ]]; then kill -INT "${lio_pid}" 2>/dev/null || true; fi
-    if [[ -n "${sim_pid}" ]]; then kill -INT "${sim_pid}" 2>/dev/null || true; fi
+    stop_job "${lio_pid}"
+    stop_job "${sim_pid}"
     # ``ros2 run`` (used as a fallback) forks the node, so make sure the real
     # executable is gone too before waiting on the tracked pids.
     pkill -INT -f "fastlio2/lib/fastlio2/lio_node" 2>/dev/null || true

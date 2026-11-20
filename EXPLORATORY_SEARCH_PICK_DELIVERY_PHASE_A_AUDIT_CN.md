@@ -597,3 +597,39 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 - 输入是普通 `PointCloud2`，`pc2ToPCL` 把逐点时间 `curvature` 置 0，**去畸变退化为 0 时长**；低速可接受，高速需带逐点时间的 `CustomMsg` 或等效。
 - 未做 `pgo`/`hba`（需 GTSAM）与 `map→odom` 回环；真实定位质量信号（`RegistrationQuality`）尚未接入 `LocalizationQuality`。
 - 结论：C2 的"定位来源"从真值向**估计器**推进了一大步（仿真 LIO 已在跑），但 C2 整阶段仍**不判通过**——缺带运动、多帧融合的在线 L2 批次与定位质量记录。
+
+## 29. 阶段 C2：仿真 LIO 带运动验证（底盘只动，隔离域 83，2026-11-20）
+
+接第 28 节。本节把"仿真 LIO 静止验证"推进到**带运动**：在仿真导航 profile 下驱动底盘，比较 `fastlio2` 的 `/lio_odom` 与 MuJoCo 真值里程计。全程只动底盘（经审计的速度仲裁器 NAV2 模式），不动机械臂/升降/夹爪，未接真机。
+
+### 29.1 新增资产
+
+- `scripts/audit_openflex_lio_motion.py`：只读订阅 `/lio_odom` 与 `/swerve_drive_controller/odom`（真值），经 `/thesis/nav_cmd_vel`（NAV2 模式）发一段短的低速脚本轨迹，按 10 Hz 同步采样；对齐**运动起始时刻**的位姿后比较平面位置与偏航；任何退出路径都发零 `Twist` 并把仲裁器打回 HOLD；结果写 `local_dependencies/openflex_roboos/runs/lio_motion_*/lio_motion.json`。
+- `scripts/run_openflex_lio_motion_sim.sh`：起仿真导航 profile（`OPENFLEX_ENABLE_SIM_NAV=1`+`OPENFLEX_ENABLE_SIM_LIDAR=1`）→ 等模型/`/livox/lidar`/仲裁器 → 起 `lio_node` → 跑上面的审计 → 关停；若导航日志出现 `MUJOCO_SAFETY_STOP` 则判该批次失败。
+
+### 29.2 轨迹为何是"先退—再转—再进"
+
+第一次尝试用"前进—转—前进"，底盘在 `base_xy_yaw=(0.689,0.199,0.606)` 处由 `MUJOCO_SAFETY_STOP` 判定 `openarmx_right_link4` 与 `thesis_shelf_board_0` 接触（货架板前缘约 x=0.99，机械臂在 base_link 前方约 0.30 m）而冻结仿真——**安全机制按预期生效**。据此把默认轨迹改为先**后退**离架、再原地转向、再沿新朝向小幅前进，`base_link` 始终远离该接触边界；运行器同时把"出现安全停止"作为失败条件。
+
+### 29.3 结果（两次独立运行）
+
+| 指标 | 运行 1 | 运行 2 |
+| --- | --- | --- |
+| 比较样本数 | 86 | 84 |
+| 位置 RMSE | 0.046 m | 0.037 m |
+| 位置最大误差 | 0.061 m | 0.049 m |
+| 位置末值误差 | 0.056 m | 0.043 m |
+| 偏航最大误差 | 0.042 rad | 0.059 rad |
+| 真值位移 | 0.254 m | 0.256 m |
+| 估计位移 | 0.293 m | 0.286 m |
+
+两次 `result: PASS`（阈值 RMSE ≤ 0.10 m、最大 ≤ 0.20 m、偏航 ≤ 0.15 rad），`EXIT=0`、无 `MUJOCO_SAFETY_STOP`、无残留进程。**已知偏差**：估计位移比真值大 ~12–15%，主要来自起始段的定姿/重力对齐瞬态；本轮只做低速小位移验证。
+
+### 29.4 关停 bug（已修）
+
+`run_openflex_lio_sim.sh`/`run_openflex_lio_motion_sim.sh` 用 `kill -INT` 结束后台的启动器脚本无效：**非交互 shell 用 `&` 起的 bash 会把 SIGINT 置为忽略**，`INT` 永远到不了其 trap（表现为脚本卡在 `wait`，子进程残留）。改为 `INT` 后**升级到 `SIGTERM`**（导航启动器的 TERM trap 会干净关停其子进程），复验后无残留进程。
+
+### 29.5 结论与下一步
+
+- C2 的定位来源在仿真中已从"真值"前进到"**真实 LIO 估计器**"，并完成带运动验证（低速、小位移、底盘-only）。
+- 仍未做：低速→中速/长距离与更大转向的跟踪压力测试；`pgo`/`hba` 与 `map→odom` 回环（需 GTSAM）；把 `RegistrationQuality` 吸收进 `LocalizationQuality`；逐点时间去畸变（当前 `pc2ToPCL` 的 `curvature=0`）。故 C2 整阶段仍**不判通过**。
