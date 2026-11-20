@@ -226,8 +226,15 @@ class OccupancyGridBuilder:
                    if self.integrate_ray(sensor_xy, (float(point[0]), float(point[1]))))
 
     def integrate_depth_frame(self, depth_mm, intrinsics, camera_pose, *, stride: int = 4,
-                              min_range_m: float = 0.15, max_range_m: float = 5.0) -> int:
-        """Back-project a depth frame to map points and ray-cast each into the grid."""
+                              min_range_m: float = 0.15, max_range_m: float = 5.0,
+                              min_height_m: float = 0.0,
+                              max_height_m: Optional[float] = None) -> int:
+        """Back-project a depth frame to map points and ray-cast each into the grid.
+
+        ``min_height_m``/``max_height_m`` clip map-frame z.  A downward-looking
+        camera otherwise projects the floor into the 2-D grid as obstacles; a
+        positive ``min_height_m`` keeps only above-floor structure.
+        """
 
         import numpy as np
 
@@ -240,6 +247,10 @@ class OccupancyGridBuilder:
         maximum = _finite(max_range_m, "max_range_m")
         if not 0.0 < minimum < maximum:
             raise MappingError("require 0 < min_range_m < max_range_m")
+        floor = _finite(min_height_m, "min_height_m")
+        ceiling = None if max_height_m is None else _finite(max_height_m, "max_height_m")
+        if ceiling is not None and ceiling <= floor:
+            raise MappingError("require max_height_m > min_height_m")
         sensor_xy = (camera_pose.translation_xyz[0], camera_pose.translation_xyz[1])
         hits: List[Tuple[float, float]] = []
         for v in range(0, intrinsics.height, int(stride)):
@@ -251,6 +262,9 @@ class OccupancyGridBuilder:
                                 (v - intrinsics.cy) * depth_value / intrinsics.fy,
                                 depth_value)
                 map_point = camera_to_map(camera_pose, camera_point)
+                height = float(map_point[2])
+                if height < floor or (ceiling is not None and height > ceiling):
+                    continue
                 hits.append((float(map_point[0]), float(map_point[1])))
         return self.integrate_points_2d(sensor_xy, hits)
 

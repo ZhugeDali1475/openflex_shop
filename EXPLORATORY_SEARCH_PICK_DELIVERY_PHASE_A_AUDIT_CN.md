@@ -453,3 +453,27 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 计划阶段 C2 第 2、3 条（frontier/信息增益自主选点、不读预设路线；定位丢失/地图不完整/未发现/超时 fail-closed）在本轮 ROS-free 回归与离线可复现审计中得到支持，条目勾选。
 - 仍未覆盖（C2 不通过）：第 1 条"用 RGB-D/激光**建立**地图并记录地图版本/定位质量"尚未接真实传感器——目前建图只在合成栅格与深度反投影契约层验证，未在隔离域 83 从实时头部深度建占用栅格；第 4 条 L1/L2 分开统计需要在线批次运行器。定位真实性采方案 (a)：真值定位、无估计器，L2 结论必须如实标注。下一步是隔离域 83 的**只读**建图/探索审计（从实时头部深度积占用栅格、验证 frontier 选点，不发运动），通过后再考虑带运动的探索批次与 L1/L2 统计。
+
+## 24. 阶段 C2 只读在线建图与选点审计（隔离域 83，2026-11-20）
+
+在合成栅格审计（第 23 节）之后，做真正接实时传感器的只读验证：启动仓库既有 `scripts/run_openflex_readonly_sim.sh`（域 83，真值/运动通道重映射到 `openflex_readonly_disabled/*`），只订阅、只建图、只选点，**节点不发布任何话题、不发运动**。
+
+### 24.1 做法
+
+- 新脚本 `scripts/audit_openflex_exploration_live.py`：订阅头部 `/thesis_sim/head/color|aligned_depth_to_color|color/camera_info` 与 TF，取一帧头部深度，用 `mapping_contract.OccupancyGridBuilder.integrate_depth_frame` 反投影积分成 2-D 占用栅格（0.05 m、覆盖 4.8 m 见方的地面、`map_version` 记录积分射线数），再以仿真真值 TF 构造 `LocalizationQuality`（`simulation_ground_truth_not_an_estimator`）生成 `MapSnapshot`，交给 `exploration_contract.ExplorationSearch.plan` 选出下一观察位。并发落 `head_color.png`/`head_depth.png` 和 `exploration_live.json`。
+- 采样帧确认是真实头部视图：货架三层横板 + 下层红色商品（见 `head_color.png`）。
+
+### 24.2 结果
+
+- `decision.outcome = next_position`，目标 `(0.62, 0.00)`，1 个 frontier 簇（137 格、增益 1.878，位于货架前沿的已知/未知边界）；栅格 269 个占用格、`coverage_fraction≈0.051`、`map_version=8129`（积分射线数）。
+- **占用格包围盒与货架几何一致**：x∈[1.00,1.45]、y∈[-0.65,0.65]（第 13 节货架 front_x=0.99、back 1.49、y=±0.65）。
+- 报告显式写入 `node_publishes=[]`、`robot_motion_executed=false`、`preset_route_used=false`、`next_position_source=current_map_frontier_information_gain_only`、`localization_source=simulation_ground_truth_not_an_estimator`。仿真运行期间 `MUJOCO_SAFETY_AUDIT` 无违规；审计后按 `pkill -INT` 关停。
+
+### 24.3 在线暴露并修复的问题
+
+- 首轮直接把整帧深度投影到 2-D 栅格时，**俯视相机把地面也标成障碍**：占用格包围盒一度扩到 x≤2.3、y=±1.95。修复：给 `integrate_depth_frame` 增加地图帧 z 高度裁剪（`min_height_m`/`max_height_m`，默认 `0.0`/不裁剪），在线取 `min_height_m=0.30` 后包围盒收敛到货架本体。该裁剪是 2-D 占用投影的标准地面过滤，已补单元测试（`test_depth_frame_height_clip_filters_floor_points`）。
+
+### 24.4 结论与仍未覆盖
+
+- 计划阶段 C2 第 1 条"用 RGB-D/激光建立地图并记录地图版本、定位质量"在本轮只读在线审计中得到支持（从实时头部深度建立占用地图、记录 `map_version` 与定位质量），条目勾选。
+- 仍未覆盖：本轮只是**单帧快照**建图，没有多帧融合/SLAM 回路，也没有在移动中连续建图与避障；定位仍是仿真真值（方案 (a)，无估计器），L2 结论必须如此标注；第 4 条"L1/L2 分开统计"需要在线批次运行器，仍未做。故阶段 C2 整体不判通过。

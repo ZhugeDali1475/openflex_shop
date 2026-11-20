@@ -92,6 +92,27 @@ def test_depth_frame_backprojects_to_occupied_cells():
     assert snapshot.cell(2, 1) == FREE
 
 
+def test_depth_frame_height_clip_filters_floor_points():
+    depth = np.zeros((6, 8), dtype=np.uint16)
+    depth[4, 7] = 2000  # identity camera -> map (0.6, 0.2, 2.0)
+    depth[3, 7] = 200   # map (0.06, 0.0, 0.2), below z=1.0
+    # keep only the high (z=2.0) point
+    above = grid(["?" * 20] * 20)
+    assert above.integrate_depth_frame(depth, INTRINSICS, IDENTITY_CAMERA, stride=1,
+                                       min_height_m=1.0, max_height_m=3.0) == 1
+    assert above.snapshot(localization=ground_truth_localization(),
+                          stamp_sec=0.0).cell(6, 2) == OCCUPIED
+    # keep only the low (z=0.2) point
+    below = grid(["?" * 20] * 20)
+    assert below.integrate_depth_frame(depth, INTRINSICS, IDENTITY_CAMERA, stride=1,
+                                       max_height_m=0.5) == 1
+    assert below.snapshot(localization=ground_truth_localization(),
+                          stamp_sec=0.0).cell(1, 0) == OCCUPIED
+    with pytest.raises(MappingError):
+        grid(["?" * 20] * 20).integrate_depth_frame(depth, INTRINSICS, IDENTITY_CAMERA, stride=1,
+                                                    min_height_m=2.0, max_height_m=1.0)
+
+
 def test_depth_frame_rejects_shape_mismatch():
     builder = grid(["?" * 20] * 20)
     with pytest.raises(MappingError):
