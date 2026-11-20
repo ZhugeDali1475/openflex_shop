@@ -10,6 +10,7 @@ commands motion and never writes to the TF tree.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 import time
 
@@ -18,6 +19,13 @@ import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "openflex_ws/src/openflex_thesis/openflex_roboos_bridge"))
+
+from openflex_roboos_bridge.mapping_contract import (  # noqa: E402
+    localization_from_odometry_covariance,
+)
 
 
 def main(argv=None) -> int:
@@ -30,12 +38,15 @@ def main(argv=None) -> int:
     node = Node("openflex_lio_sim_probe")
     positions = []
     clouds = []
+    covariances = []
+
+    def on_odometry(message):
+        pose = message.pose.pose
+        positions.append((pose.position.x, pose.position.y, pose.position.z))
+        covariances.append([list(row) for row in np.asarray(message.pose.covariance).reshape(6, 6)])
+
     node.create_subscription(
-        Odometry, "/lio_odom",
-        lambda msg: positions.append(
-            (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
-        ),
-        20,
+        Odometry, "/lio_odom", on_odometry, 20,
     )
     node.create_subscription(
         PointCloud2, "/world_cloud",
@@ -66,6 +77,14 @@ def main(argv=None) -> int:
     if not clouds or min(width for width, _ in clouds) <= 0:
         print("FAIL: /world_cloud is empty")
         ok = False
+
+    if covariances:
+        quality = localization_from_odometry_covariance(
+            covariances[-1], source="simulation_fastlio2_not_physical")
+        print("estimated localization quality:"
+              f" position_rmse={quality.position_rmse_m:.4f} m"
+              f" yaw_rmse={quality.yaw_rmse_rad:.4f} rad"
+              f" covariance_trace={quality.covariance_trace:.5f}")
 
     node.destroy_node()
     rclpy.shutdown()

@@ -633,3 +633,24 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - C2 的定位来源在仿真中已从"真值"前进到"**真实 LIO 估计器**"，并完成带运动验证（低速、小位移、底盘-only）。
 - 仍未做：低速→中速/长距离与更大转向的跟踪压力测试；`pgo`/`hba` 与 `map→odom` 回环（需 GTSAM）；把 `RegistrationQuality` 吸收进 `LocalizationQuality`；逐点时间去畸变（当前 `pc2ToPCL` 的 `curvature=0`）。故 C2 整阶段仍**不判通过**。
+
+## 30. 阶段 C2：定位质量契约承载真实估计器信号（ROS-free，2026-11-20）
+
+接第 28–29 节。第 26.3 节建议的"把 `icp_registration` 的质量/守卫字段吸收进 `LocalizationQuality`"本轮落地。
+
+### 30.1 改动
+
+- `openflex_roboos_bridge/mapping_contract.py` 的 `LocalizationQuality` 新增可选字段：`inlier_ratio`、`inlier_rmse_m`、`all_mse`、`p50_distance_m`、`p90_distance_m`（对应 `RegistrationQuality`）、`localization_healthy`、`yaw_jump_detected`、`lio_wheel_divergence`、`low_support_seconds`（对应低支撑守卫）。全部 `None` 表示"没有估计器信号"，与真值来源区分开。
+- 校验：`inlier_ratio ∈ [0,1]`；`inlier_rmse_m`/`all_mse`/`p50`/`p90`/`lio_wheel_divergence`/`low_support_seconds ≥ 0`；`p50 ≤ p90`；违反即 `MappingError`。
+- 新增 `with_registration_quality(**updates)`（经 `dataclasses.replace`，附带重校验）与 `localization_from_odometry_covariance(covariance, source=..., ...)`：把 6×6 位姿协方差转成 `position_rmse = sqrt(mean(var_x,var_y,var_z))`、`yaw_rmse = sqrt(var_yaw)`、`covariance_trace = trace`，并强制调用方给出**估计器名**作 `source`。
+- `to_dict()` 追加上述键（数字转 float、布尔/`None` 原样），对既有消费方是纯增量。
+
+### 30.2 验证
+
+- 新增 `scripts/tests/test_openflex_localization_quality.py`（7 例）：真值来源的估计器字段为空、协方差→RMSE/trace 数值正确、形状/负方差/超范围/`p50>p90` 均被拒、`with_registration_quality` 不改原对象、`to_dict` 类型保持、`MapSnapshot` 接受估算器来源的定位。全套离线 `481 passed`（9 例为既有 `mcp`/`jsonschema` 缺包环境缺口）。
+- 在线（隔离域 83，静止）：`scripts/probe_openflex_lio_sim.py` 现在把 `/lio_odom` 的 `pose.covariance` 实时转成质量记录并打印——`position_rmse=0.1000 m`、`yaw_rmse=0.1000 rad`、`covariance_trace=0.04200`，`RESULT: PASS`、无残留进程。
+
+### 30.3 观察与边界
+
+- **FAST-LIO2 发布的协方差看起来是固定默认值**（每次都是 0.1/0.1），不是数据驱动的、随特征退化变化的量；因此"定位质量"更强的信号仍是 `icp_registration` 的 `RegistrationQuality`（`inlier_ratio`/`inlier_rmse`/`all_mse`/`p50`/`p90`）与低支撑守卫——它们需要先编译/运行 `icp_registration` 才能产出，本任务尚未接。
+- 本轮只做**契约与适配器**，没有把 LIO/ICP 的估计实际喂进 C2 建图/探索链（后者仍用 `ground_truth_localization`）；C2 整阶段继续**不判通过**。

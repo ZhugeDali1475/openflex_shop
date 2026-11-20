@@ -39,7 +39,17 @@ def _finite(value, name: str) -> float:
 
 @dataclass(frozen=True)
 class LocalizationQuality:
-    """Localization estimate quality for one map snapshot."""
+    """Localization estimate quality for one map snapshot.
+
+    ``source`` distinguishes ground truth from a real estimator.  The optional
+    fields carry signals that a genuine pose estimator actually produces:
+    ``inlier_ratio``/``inlier_rmse_m``/``all_mse``/``p50_distance_m``/
+    ``p90_distance_m`` mirror ``icp_registration``'s ``RegistrationQuality`` and
+    ``localization_healthy``/``yaw_jump_detected``/``lio_wheel_divergence``/
+    ``low_support_seconds`` mirror its low-support guard.  They stay ``None`` for
+    the ground-truth source so a consumer can tell "no estimator ran" from
+    "estimator reported a healthy/degraded value".
+    """
 
     converged: bool
     source: str
@@ -47,6 +57,15 @@ class LocalizationQuality:
     yaw_rmse_rad: float = 0.0
     stamp_sec: float = 0.0
     covariance_trace: Optional[float] = None
+    inlier_ratio: Optional[float] = None
+    inlier_rmse_m: Optional[float] = None
+    all_mse: Optional[float] = None
+    p50_distance_m: Optional[float] = None
+    p90_distance_m: Optional[float] = None
+    localization_healthy: Optional[bool] = None
+    yaw_jump_detected: Optional[bool] = None
+    lio_wheel_divergence: Optional[float] = None
+    low_support_seconds: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not str(self.source).strip():
@@ -58,18 +77,41 @@ class LocalizationQuality:
         if self.covariance_trace is not None:
             if _finite(self.covariance_trace, "covariance_trace") < 0.0:
                 raise MappingError("covariance_trace must be non-negative")
+        if self.inlier_ratio is not None:
+            ratio = _finite(self.inlier_ratio, "inlier_ratio")
+            if not 0.0 <= ratio <= 1.0:
+                raise MappingError("inlier_ratio must be within [0, 1]")
+        for name in ("inlier_rmse_m", "all_mse", "p50_distance_m", "p90_distance_m",
+                     "lio_wheel_divergence", "low_support_seconds"):
+            value = getattr(self, name)
+            if value is not None and _finite(value, name) < 0.0:
+                raise MappingError(f"{name} must be non-negative")
+        if (self.p50_distance_m is not None and self.p90_distance_m is not None
+                and float(self.p50_distance_m) > float(self.p90_distance_m)):
+            raise MappingError("p50_distance_m must not exceed p90_distance_m")
 
     def is_usable(self, *, max_position_rmse_m: float, max_yaw_rmse_rad: float) -> bool:
         return (bool(self.converged)
                 and self.position_rmse_m <= float(max_position_rmse_m)
                 and self.yaw_rmse_rad <= float(max_yaw_rmse_rad))
 
+    def with_registration_quality(self, **updates) -> "LocalizationQuality":
+        """Return a copy carrying estimator-specific quality signals (re-validated)."""
+
+        return replace(self, **updates)
+
     def to_dict(self) -> Mapping[str, object]:
-        return {"converged": bool(self.converged), "source": self.source,
-                "position_rmse_m": float(self.position_rmse_m),
-                "yaw_rmse_rad": float(self.yaw_rmse_rad),
-                "stamp_sec": float(self.stamp_sec),
-                "covariance_trace": self.covariance_trace}
+        quality: dict = {"converged": bool(self.converged), "source": self.source,
+                         "position_rmse_m": float(self.position_rmse_m),
+                         "yaw_rmse_rad": float(self.yaw_rmse_rad),
+                         "stamp_sec": float(self.stamp_sec),
+                         "covariance_trace": self.covariance_trace}
+        for name in ("inlier_ratio", "inlier_rmse_m", "all_mse", "p50_distance_m",
+                     "p90_distance_m", "localization_healthy", "yaw_jump_detected",
+                     "lio_wheel_divergence", "low_support_seconds"):
+            value = getattr(self, name)
+            quality[name] = value if (value is None or isinstance(value, bool)) else float(value)
+        return quality
 
 
 def ground_truth_localization(*, stamp_sec: float = 0.0) -> LocalizationQuality:
@@ -77,6 +119,31 @@ def ground_truth_localization(*, stamp_sec: float = 0.0) -> LocalizationQuality:
 
     return LocalizationQuality(converged=True, source="simulation_ground_truth_not_an_estimator",
                                position_rmse_m=0.0, yaw_rmse_rad=0.0, stamp_sec=stamp_sec)
+
+
+def localization_from_odometry_covariance(covariance, *, source: str, stamp_sec: float = 0.0,
+                                          converged: bool = True,
+                                          **quality) -> LocalizationQuality:
+    """Build localization quality from a 6x6 pose covariance (row-major x,y,z,r,p,y).
+
+    Position RMSE is ``sqrt(mean(var_x, var_y, var_z))`` and yaw RMSE is
+    ``sqrt(var_yaw)``.  This turns the covariance that a real estimator (e.g. the
+    simulated FAST-LIO2 on ``/lio_odom``) publishes into the same record the
+    ground-truth source uses, without pretending the two are equivalent -- pass a
+    ``source`` that names the estimator.
+    """
+
+    rows = [list(row) for row in covariance]
+    if len(rows) != 6 or any(len(row) != 6 for row in rows):
+        raise MappingError("covariance must be a 6x6 matrix")
+    diagonal = [_finite(rows[index][index], f"covariance[{index}][{index}]") for index in range(6)]
+    if any(value < 0.0 for value in diagonal):
+        raise MappingError("covariance diagonal must be non-negative")
+    position_rmse = math.sqrt(sum(diagonal[:3]) / 3.0)
+    yaw_rmse = math.sqrt(diagonal[5])
+    return LocalizationQuality(converged=converged, source=source, position_rmse_m=position_rmse,
+                               yaw_rmse_rad=yaw_rmse, stamp_sec=stamp_sec,
+                               covariance_trace=sum(diagonal), **quality)
 
 
 @dataclass(frozen=True)
