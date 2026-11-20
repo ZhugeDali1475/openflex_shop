@@ -367,3 +367,32 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 结论：计划阶段 B 条目与门槛（可见/遮挡/空位/错类/歧义五类可复现证据、授权不读槽位坐标）在本轮在线只读审计与 ROS-free 回归中得到支持。
 - 仍未覆盖：没有跨帧持久 tracker（`perception_track_id` 是帧内 token）；`yaw` 仍是未观测默认值，不是物体朝向；遮挡/空位依赖调用方锚点，纯整帧模式只能给出 `target_absent`；“随机槽位”回归目前是图像内随机位置（只读 profile 下 `/thesis_sim/randomize` 被禁用，未做场景级随机化）；只有单一“单红”场景，未覆盖多货架/多实例。以上属阶段 C 及以后。
+
+## 21. 阶段 C：已知地图多视点主动搜索（2026-11-20）
+
+阶段 C 的目标是在已知货架地图上，仅由货架几何派生合法观察位，用可取消状态机把单视点搜索串成多视点搜索，并保证停稳、视野覆盖、过期帧与终止条件都 fail-closed。本轮全部为 ROS-free 离线实现与可复现审计；没有启动 ROS/仿真，也没有发出运动。
+
+### 21.1 新增契约（ROS-free）
+
+- `openflex_roboos_bridge/shelf_viewpoints.py`：`Viewpoint`、`shelf_front_geometry(obstacles)→(front_x,y_min,y_max)`、`visible_span_at(standoff,fov)`（含 `0<fov<π` 与正 standoff 校验）与 `generate_shelf_viewpoints(...)`。站位数量是覆盖 `[y_min,y_max]` 的最小值、步长上限为相机可见跨度；生成后断言覆盖连续、且站位不侵入货架 clearance 体积。输入只有静态 `Aabb` 障碍，**不接收任何目标槽位或 `ObjectMemory` 字段**。
+- `openflex_roboos_bridge/active_search.py`：`ActiveSearch` 状态机 + `SearchDecision`。终态为 `found/not_found/ambiguous/stale_frame/invalid_depth/not_settled/cancelled/timeout`，只有 `found` 授权下游。`submit()` 的判定顺序为：视点匹配 → 记历史 → **停稳**（`settled=False`→`not_settled`）→ **过期帧**（age>阈值→`stale_frame`）→ **深度有效率**（低于阈值→`invalid_depth`）→ **截止时间**（→`timeout`）→ 授权（`authorized`→`found`）→ 歧义（`ambiguous_candidates`→`ambiguous`）→ 视点用尽（→`not_found`），否则推进下一视点。`__post_init__` 增加**视野覆盖不变量**：若给定视点窗口之间存在横向盲区则拒绝构造（`ActiveSearchError`）。
+- 输入 `resolution` 是 `target_search_contract.SearchResolution` 同形对象（duck-typed：`outcome/reason/selection_reason/selected_perception_track_id`），因此状态机不耦合图像实现。
+
+### 21.2 离线回归
+
+- `scripts/tests/test_openflex_active_search.py`（16 例）：仅由几何生成视点、可见跨度与 FOV 一致、拒退化输入/货架内站位、唯一可见目标授权、逐视点扫描后安全 `not_found`、歧义立即停、过期帧/无效深度 fail-closed、取消与截止终态（过期帧优先于截止）、错误视点被拒、停稳失败 fail-closed、视点盲区被拒、决策可序列化、随机槽位 120 次重复（全部命中且**不改变视点计划**）。
+- `scripts/tests/test_openflex_active_search_audit.py`（5 例）：审计脚本严格离线、四元数为单位、视点仅来自几何且窗口连续、合成帧经真实契约得到授权/歧义/错类、扫描确实跨多个视点。
+
+### 21.3 离线可复现审计（`scripts/audit_openflex_active_search.py`）
+
+- 仅从真实 `sim_shelf_scene.yaml` 障碍生成 4 个视点（standoff 0.75、步长 0.30、H_FOV≈86°、clearance 0.05），再为每个视点用真实头部内参（320×240、fx≈171.38）与"相机 +z 沿 map +x"位姿合成帧，帧经**真实** `analyze_frame`+`resolve_search_target` 得到授权/拒绝，再喂给状态机。
+- 13 个场景全部符合预期（`passed: true`）：
+  - 隐藏横向位置 ±0.6/±0.2/0/0.3/0.6 均在首个能覆盖的视点授权（`found`），其中 `+0.60` 在 `shelf_view_00` 判 `target_absent`、到 `shelf_view_01` 才授权——证明搜索确实逐视点推进。
+  - 货架外（y=1.5）在 4 个视点全 `target_absent` → `not_found`；两个红目标 → `ambiguous`；只有错类 → `not_found`。
+  - 过期帧 → `stale_frame`；无效深度 → `invalid_depth`；未停稳 → `not_settled`；截止超时 → `timeout`；取消 → `cancelled`。
+- 报告显式写入 `robot_motion_executed=false`、`ros_started=false`、`viewpoint_source=static_shelf_geometry_only`、`authorization_reads_slot_coordinates=false`、`physical_verification=false`。
+
+### 21.4 结论与仍未覆盖
+
+- 结论：计划阶段 C 条目（几何派生观察位、可取消状态机、停稳/覆盖/过期帧/终止条件、随机槽位重复测试与安全失败）在本轮 ROS-free 回归与离线可复现审计中得到支持。离线套件本轮新增后为 `426 passed`（新增前为 `405 passed`）（另有 9 例因本机缺 `mcp` 等可选依赖在收集期报错，属既有环境缺口，与本任务无关）。
+- 仍未覆盖（如实记录）：无跨帧持久 tracker，`perception_track_id` 仍是帧内 token；`yaw` 仍是未观测默认值；观察位只由货架几何派生，未接入实时 MoveIt 碰撞与导航；"随机槽位"目前是合成帧内隐藏位置，不是场景级随机化（只读 profile 下 `/thesis_sim/randomize` 被禁用）；只有单一货架、单一"单红"语义，未覆盖多货架/多实例/遮挡；未做隔离域 83 在线多视点运行批次。阶段 C2（未知地图建图与探索）不得开始。
