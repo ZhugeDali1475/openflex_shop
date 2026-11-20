@@ -425,3 +425,31 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 3. 通过后才考虑带运动的探索批次与 L1/L2 统计。
 
 本轮未改变任何任务完成项状态；C2 条目继续不勾选。
+
+## 23. 阶段 C2 地基层：占用建图 + frontier 探索契约（离线，2026-11-20）
+
+按第 22 节的建议顺序，先做与定位方案解耦的 ROS-free 地基层。用户已确认采用**方案 (a)：接受仿真真值定位**，故 L2 结论须如实标注为"地图未知、定位为仿真真值（无估计器）"。本轮无 ROS/仿真、无运动。
+
+### 23.1 新增契约（ROS-free）
+
+- `openflex_roboos_bridge/mapping_contract.py`：
+  - `LocalizationQuality`（`converged`/`source`/`position_rmse_m`/`yaw_rmse_rad`/`stamp_sec`/`covariance_trace`，构造即校验）与 `ground_truth_localization()`（`source=simulation_ground_truth_not_an_estimator`，误差 0）；`is_usable(max_position_rmse_m, max_yaw_rmse_rad)`。
+  - `MapSnapshot`（帧、分辨率、原点、宽高、占用元组、`map_version`、定位质量、时间戳）与 `OccupancyGridBuilder`：`integrate_ray` 沿射线标空闲、命中标占用并单调递增版本；`integrate_points_2d`；`integrate_depth_frame` 用 `target_search_contract.camera_to_map` 把深度反投影为地图点后逐条射线积分。
+- `openflex_roboos_bridge/exploration_contract.py`：
+  - `find_frontier_clusters`（空闲↔未知的 frontier 聚类）+ `information_gain`（质心邻域未知格面积）+ `select_frontier`（按信息增益取最优、距离近者破平、可选 `max_reach_m`）。
+  - `ExplorationSearch.plan(snapshot, robot_xy, now_sec, target_observed)` 状态机，终态 `target_found/target_not_found/map_incomplete/localization_lost/timeout/steps_exhausted/cancelled`，非终态 `next_position`。判定顺序：帧一致 → 定位质量（不可用→`localization_lost`）→ 目标观测（→`target_found`）→ 截止时间（→`timeout`）→ 步数预算（→`steps_exhausted`）→ 选 frontier：无 frontier 且覆盖率低于阈值→`map_incomplete`；无 frontier 且地图完整→`target_not_found`；否则给出 `next_position` 目标（含朝向、增益、`map_version`）。**下一位置只来自当前地图快照，不读任何预设站点/路线。**
+
+### 23.2 离线回归与可复现审计
+
+- `scripts/tests/test_openflex_mapping_contract.py`（8 例）与 `scripts/tests/test_openflex_exploration_contract.py`（9 例）：射线/深度积分、版本、覆盖、快照校验、frontier 聚类与信息增益、距离破平、reach 排除、定位质量门、`map_incomplete` 与 `target_not_found` 区分、超时/步数/取消终态、帧不匹配与复用拒绝、确定性。
+- `scripts/audit_openflex_exploration.py`（+ `test_openflex_exploration_audit.py` 6 例）：合成真值栅格世界 + 带遮挡的射线传感器模型（经 `mapping_contract`），由 `ExplorationSearch` 逐视点驱动。7 个场景全部符合预期（`passed: true`）：
+  - `room_target_absent`：4 步扫完房间（覆盖率 0.70→0.95→0.99→1.00）→ `target_not_found`；
+  - `room_target_present`：3 步在 (7,3) 观测到目标格 → `target_found`（覆盖率 0.97）；
+  - `sealed_pocket_map_incomplete` → `map_incomplete`；`localization_lost`、`deadline_timeout`、`steps_exhausted`、`cancelled` 各归其位。
+  - 报告显式写入 `robot_motion_executed=false`、`ros_started=false`、`preset_route_used=false`、`next_position_source=current_map_frontier_information_gain_only`、`localization_source=simulation_ground_truth_not_an_estimator`。
+- 全套离线回归本轮为 `449 passed`（新增 23 例；同一批 9 例因本机缺 `mcp` 等可选依赖在收集期报错，属既有环境缺口）。
+
+### 23.3 结论与仍未覆盖
+
+- 计划阶段 C2 第 2、3 条（frontier/信息增益自主选点、不读预设路线；定位丢失/地图不完整/未发现/超时 fail-closed）在本轮 ROS-free 回归与离线可复现审计中得到支持，条目勾选。
+- 仍未覆盖（C2 不通过）：第 1 条"用 RGB-D/激光**建立**地图并记录地图版本/定位质量"尚未接真实传感器——目前建图只在合成栅格与深度反投影契约层验证，未在隔离域 83 从实时头部深度建占用栅格；第 4 条 L1/L2 分开统计需要在线批次运行器。定位真实性采方案 (a)：真值定位、无估计器，L2 结论必须如实标注。下一步是隔离域 83 的**只读**建图/探索审计（从实时头部深度积占用栅格、验证 frontier 选点，不发运动），通过后再考虑带运动的探索批次与 L1/L2 统计。
