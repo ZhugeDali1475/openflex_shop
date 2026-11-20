@@ -396,3 +396,32 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - 结论：计划阶段 C 条目（几何派生观察位、可取消状态机、停稳/覆盖/过期帧/终止条件、随机槽位重复测试与安全失败）在本轮 ROS-free 回归与离线可复现审计中得到支持。离线套件本轮新增后为 `426 passed`（新增前为 `405 passed`）（另有 9 例因本机缺 `mcp` 等可选依赖在收集期报错，属既有环境缺口，与本任务无关）。
 - 仍未覆盖（如实记录）：无跨帧持久 tracker，`perception_track_id` 仍是帧内 token；`yaw` 仍是未观测默认值；观察位只由货架几何派生，未接入实时 MoveIt 碰撞与导航；"随机槽位"目前是合成帧内隐藏位置，不是场景级随机化（只读 profile 下 `/thesis_sim/randomize` 被禁用）；只有单一货架、单一"单红"语义，未覆盖多货架/多实例/遮挡；未做隔离域 83 在线多视点运行批次。阶段 C2（未知地图建图与探索）不得开始。
+
+## 22. 阶段 C2 前置能力盘点：建图/定位/导航（静态，2026-11-20）
+
+阶段 C2 要求"用 RGB-D/激光建立地图并记录地图版本、定位质量"，再用 frontier/信息增益自主选点。开始写代码前先只读盘点仿真栈到底提供了什么。本轮纯静态源码/配置检查，**未启动 ROS/仿真**。
+
+### 22.1 结论速览
+
+- **没有激光、没有地图、没有点云话题**：全仓库（`openflex_thesis` 各级 `*.py/*.yaml/*.xml` 与 `scripts/`）无 `LaserScan`、`/map`、`OccupancyGrid` 发布者，也没有深度转点云的节点。在线几何只有头部（以及双手）RGB-D 相机话题。
+- **定位是"构造真值"、不是估计器**：`bridge_node.py` 把 `map→odom` 作为近似静态变换广播（只带 `base_link_height≈0.17` 的 z），`odom→base_link` 直接取仿真里 `base_x/base_y/base_yaw` 的真值，`map→thesis_head_color_optical_frame` 也由真值直接广播；`/swerve_drive_controller/odom` 同样是真值里程计。⇒ 仿真里**没有漂移、没有协方差、没有定位估计**，"定位质量"无法作为真实估计器输出被测量。
+- **导航是预设站点、不是探索**：`sim_navigation_node.py` 自述"collision-unaware navigation baseline; not Nav2"，只做比例控制；更高层 MCP 提供 `navigate_to_target(target_id=...)`，目标名是 `pickup_zone`/`delivery_zone` 这类**预设站点路线**——正是 C2 第 2 条"不得读取预设货架路线"要避免的东西。
+- **中间件不启 Nav2/SLAM**：`thesis_system.launch.py` 明确注释"localization and Nav2 are intentionally external"；`run_openflex_readonly_sim.sh` 也声明"No Nav2"。不过系统侧 `/opt/ros/humble` **已安装** `nav2_*`、`slam_toolbox`、`amcl`、`octomap`、`pcl_*`、`tf2` 等，工具链可用但未接入本栈。
+- **世界是一个开放地面**：上游 MJCF 只有一张 `floor` 平面（半边 2.4 m，约 4.8 m×4.8 m），加派生的货架（x≈1.24，y∈±0.65）与交付台（≈(-0.85,-0.80)）；**没有墙壁/房间**。底座是 3 自由度平面关节（`base_x/base_y/base_yaw`），由 `/thesis/cmd_vel_selected` 驱动。
+
+### 22.2 对 C2 的含义（需要用户决策的点）
+
+- 第 1 条"建图并记录地图版本/定位质量"：地图可以从头部深度（配合同步 TF）投影成占用栅格来建；但由于定位是真值，**"定位质量"只能是仿真真值衍生的量**，除非给里程计注入噪声/漂移并引入真正的定位估计器（AMCL/slam_toolbox 或小型 EKF）。这是一个必须先定的范围选择：
+  - 方案 (a)：接受真值定位，L2 结论如实标注为"地图未知、但定位为仿真真值（无估计器）"；
+  - 方案 (b)：给 `odom` 加噪并在本栈内跑定位估计器，使"定位质量"有真实含义（改动更大，需设计并复核 MoveIt/抓取链对 `odom` 的依赖）。
+- 第 2 条"frontier/信息增益选点"：可实现且与仿真解耦，但**必须另起实现，不能复用 MCP 站点导航**。
+- 第 3 条"定位丢失/地图不完整/未发现/超时"：可在契约与状态机里 fail-closed 实现；但"定位丢失"在真值定位下不会自然发生，需要方案 (b) 或仅在契约层模拟触发。
+- 第 4 条"L1/L2 分开统计"：需要额外批次运行器，属在线阶段。
+
+### 22.3 建议顺序
+
+1. 先做与两方案解耦的 ROS-free 地基层：占用栅格/地图快照与定位质量契约 + frontier/信息增益选点 + fail-closed 探索状态机（合成都市栅格测试 + 离线可复现审计），不启动 ROS。
+2. 方案 (a)/(b) 定下后，再做隔离域 83 的**只读**建图/探索审计（先从头部深度建占用栅格、验证 frontier 选点、不发运动）。
+3. 通过后才考虑带运动的探索批次与 L1/L2 统计。
+
+本轮未改变任何任务完成项状态；C2 条目继续不勾选。
