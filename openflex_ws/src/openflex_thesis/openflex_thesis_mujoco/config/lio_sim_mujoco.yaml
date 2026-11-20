@@ -1,0 +1,67 @@
+# Simulation-only FAST-LIO2 configuration paired with the MuJoCo MID-360 bridge.
+#
+# Inputs come from the simulated sensor bridge
+# (openflex_thesis_mujoco publish_lidar:=true):
+#   * /livox/lidar is a sensor_msgs/PointCloud2 (so use_pointcloud2 must be true;
+#     no livox CustomMsg is produced by the simulation).
+#   * /livox/imu is a sensor_msgs/Imu whose linear_acceleration is already in
+#     m/s^2 (the simulation reports true specific force), NOT the Livox "g" unit,
+#     so imu_accel_scale must be 1.0 or every acceleration is scaled by 10.
+imu_topic: /livox/imu
+lidar_topic: /livox/lidar
+use_pointcloud2: true
+body_frame: base_link
+world_frame: odom
+print_time_cost: false
+
+# The MuJoCo bridge already owns the ground-truth map -> odom -> base_link TF
+# tree, so LIO must not publish a competing odom -> base_link transform.  It
+# still exposes its estimate on the /lio_odom topic for comparison.
+publish_tf: false
+
+imu_accel_scale: 1.0
+
+# The simulated cloud is a sparse ~650-point ray grid, so keep every point.
+lidar_filter_num: 1
+lidar_min_range: 0.5
+lidar_max_range: 20.0
+scan_resolution: 0.10
+map_resolution: 0.2
+
+cube_len: 200
+det_range: 30
+move_thresh: 0.5
+
+na: 0.01
+ng: 0.01
+nba: 0.0001
+nbg: 0.0001
+
+imu_init_num: 20
+near_search_num: 5
+ieskf_max_iter: 3
+gravity_align: true
+esti_il: false
+
+# In the simulation the ray-cast lidar and the IMU are published in the same
+# mid360_link frame, so the LiDAR -> IMU extrinsic is identity.
+r_il: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+t_il: [0.0, 0.0, 0.0]
+lidar_cov_inv: 1000.0
+
+# IMU(mid360_link) -> base_link, i.e. the inverse of the derived-model
+# base_link -> mid360_link (rpy = -30 deg, 0, -90 deg; xyz = 0.30, 0, 0.12).
+# Derive this from the model / URDF; fastlio2/config/lio.yaml documents a
+# *different* URDF (0, +30 deg, 0) and must not be copied.
+r_ib: [0.0, -1.0, 0.0, 0.8660254, 0.0, -0.5, 0.5, 0.0, 0.8660254]
+t_ib: [0.0, -0.1998076, -0.2539230]
+
+# The ray-cast lidar already excludes the whole robot body tree by geom group,
+# so the body self-filter only needs to drop residual near-field returns.
+body_cloud_self_filter_enabled: true
+body_cloud_self_filter_min_x: -0.45
+body_cloud_self_filter_max_x: 0.45
+body_cloud_self_filter_min_y: -0.35
+body_cloud_self_filter_max_y: 0.35
+body_cloud_self_filter_min_z: -0.25
+body_cloud_self_filter_max_z: 0.35

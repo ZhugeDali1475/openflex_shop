@@ -568,3 +568,32 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 - **编译前置排查（本机静态）**：`Sophus` 由 ROS Humble 提供（`/opt/ros/humble/share/sophus/cmake/SophusConfig.cmake`），PCL/Eigen/Ceres/yaml-cpp 均在位，故 `find_package(Sophus)` 在 source ROS 后可用。但 `livox_ros_driver2` 编译有两个硬阻塞：(1) 其 CMake 以 `REQUIRED` 查找 `liblivox_lidar_sdk_shared.so` 与 `livox_lidar_api.h`（Livox-SDK2），本机与仓库 `3rdparty`（仅 rapidjson）都没有，需联网装 Livox-SDK2 到 `/usr/local`（需 sudo）或自定义前缀；(2) 该包用 `rosidl_generate_interfaces(livox_interfaces2 ...)` 把消息生成到 `livox_interfaces2`，而 `fastlio2`/`fast_livo` 一律 `#include <livox_ros_driver2/msg/custom_msg.hpp>`——命名空间不一致，即便装上 SDK 也不能直接编译。`pgo` 另需 `GTSAM`（本机缺）。据此判断：本工作区的 LIO 栈此前**从未在此编译过**，仿真上跑通 LIO 需要先解决 SDK 安装与消息命名两处，再逐包编译并记录真实定位质量。
 
 此项不改变阶段 A/B/C 状态，也未勾选任何新计划条目：C2 仍缺"带运动、多帧融合的在线 L2 批次 + 真实定位质量来源"，故整阶段继续不判通过。
+
+## 28. 阶段 C2：仿真 MID-360 上跑通 FAST-LIO2（隔离域 83 只读，2026-11-20）
+
+接第 27 节。用户同意按"本地前缀装 Livox-SDK2 + 编译 fastlio2，先只跑 LIO"推进；全部在仿真中进行，未接真机、未发运动。
+
+### 28.1 构建
+
+- Livox-SDK2 装到**仓库外**本地前缀 `/home/wgb/livox_sdk2`（`cmake -DCMAKE_INSTALL_PREFIX`，不需 sudo），产物 `lib/liblivox_lidar_sdk_shared.so` + `include/livox_lidar_api.h`。
+- `colcon build --packages-select livox_ros_driver2 fastlio2 --build-base build_lio --install-base install_lio --cmake-args -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/home/wgb/livox_sdk2` 一次通过；`install_lio/fastlio2/lib/fastlio2/lio_node` 生成。`Sophus` 由 ROS Humble 提供，PCL/Eigen/yaml-cpp 均在位。
+- **更正第 27.4 节的一处误判**：消息命名空间**不是**阻塞。实测 `rosidl_generate_interfaces` 按 `PROJECT_NAME` 生成，头文件落在 `include/livox_ros_driver2/livox_ros_driver2/msg/custom_msg.hpp`，与 `fastlio2` 的 `#include <livox_ros_driver2/msg/custom_msg.hpp>` 一致。我曾把接口目标名改为 `${PROJECT_NAME}` 并与库目标撞名（CMake 报错），已**回退，未改动任何上游文件**。
+
+### 28.2 新增仿真配置与可复现脚本
+
+- `openflex_thesis_mujoco/config/lio_sim_mujoco.yaml`：`use_pointcloud2: true`（仿真发 PointCloud2）、`imu_accel_scale: 1.0`（仿真发 m/s² 而非实机 `g`）、`publish_tf: false`（真值 TF 树 `map→odom→base_link` 由桥独占，避免双父）、`r_il/t_il` 取单位（仿真雷达与 IMU 同在 `mid360_link`）、`r_ib/t_ib` 由**模型/URDF** 推导（`base_link→mid360_link` rpy(-30°,0,-90°)、xyz(0.30,0,0.12) 的逆），并写注释说明**不可照抄** `fastlio2/config/lio.yaml`。
+- `scripts/run_openflex_lio_sim.sh`：先起只读桥（`OPENFLEX_ENABLE_SIM_LIDAR=1`），等桥日志确认模型加载、再等 `/livox/lidar`，随后直接启动 `lio_node`（可执行文件，便于精确 kill），探针跑完即 INT 两个进程。日志落 `local_dependencies/openflex_roboos/runs/`。
+- `scripts/probe_openflex_lio_sim.py`：只读订阅 `/lio_odom`、`/world_cloud`，报告速率、静止位姿跨度、点云点数，跨度超阈值或点云为空即 FAIL。
+
+### 28.3 只读在线结果
+
+- `/livox/lidar` 10 Hz（≈647 点，`mid360_link`）→ lio_node → `/lio_odom` **10.1 Hz**、`/world_cloud` 647 点（`odom`）。
+- 静止 12 s：位置跨度 x/y ≈ 0.004–0.013 m、z ≈ 0.08–0.11 m（起步重力对齐瞬态）；末位姿 `|(-0.001,-0.31,-0.12)|≈0.34 m`，与几何 |base→mid| = |(0.3,0,0.12)| = 0.323 m 相符，说明 IMU→base 外参方向正确。
+- 探针 `RESULT: PASS`；脚本一次退出、两进程干净关停；`MUJOCO_SAFETY_AUDIT` 无违规，全程无运动。
+
+### 28.4 限制与下一步
+
+- 仅**静止**验证；带运动跟踪（LIO 位姿 vs 真值误差）未做，需要导航版仿真 + `scripts/run_openflex_exploration_motion.py`。
+- 输入是普通 `PointCloud2`，`pc2ToPCL` 把逐点时间 `curvature` 置 0，**去畸变退化为 0 时长**；低速可接受，高速需带逐点时间的 `CustomMsg` 或等效。
+- 未做 `pgo`/`hba`（需 GTSAM）与 `map→odom` 回环；真实定位质量信号（`RegistrationQuality`）尚未接入 `LocalizationQuality`。
+- 结论：C2 的"定位来源"从真值向**估计器**推进了一大步（仿真 LIO 已在跑），但 C2 整阶段仍**不判通过**——缺带运动、多帧融合的在线 L2 批次与定位质量记录。
