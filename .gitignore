@@ -54,3 +54,10 @@ supermarket_scene/data/
 supermarket_scene/vision/output/
 supermarket_scene/vision/models/
 supermarket_scene/vision/config.local.yaml
+
+# Local migration backup archives (see BACKUP_RESTORE_CN.md)
+/*.zip
+/*.zst
+/*.tar
+/*.baiduyun.uploading.cfg
+/BACKUP_ARCHIVES/
