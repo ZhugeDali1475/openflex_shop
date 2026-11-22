@@ -522,6 +522,8 @@ IcpNode::IcpNode(const rclcpp::NodeOptions &options)
   localization_state_qos.transient_local();
   localization_state_pub_ = this->create_publisher<std_msgs::msg::Bool>(
       localization_state_topic, localization_state_qos);
+  localization_quality_pub_ = this->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+      "/localization_quality", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
   publishLocalizationState(false, "startup", true);
 
   // Wheel odometry subscription for LIO yaw jump detection
@@ -697,6 +699,41 @@ IcpNode::IcpNode(const rclcpp::NodeOptions &options)
   });
 
   RCLCPP_INFO(this->get_logger(), "icp_registration initialized");
+}
+
+void IcpNode::publishContinuousQuality(bool solver_converged, bool accepted,
+                                       bool low_support_accepted)
+{
+  if (localization_quality_pub_ == nullptr) {
+    return;
+  }
+  diagnostic_msgs::msg::DiagnosticArray array;
+  array.header.stamp = this->now();
+  array.header.frame_id = map_frame_id_;
+  diagnostic_msgs::msg::DiagnosticStatus status;
+  status.name = "icp_registration";
+  status.hardware_id = "icp_registration";
+  status.level = accepted ? diagnostic_msgs::msg::DiagnosticStatus::OK
+                          : diagnostic_msgs::msg::DiagnosticStatus::WARN;
+  status.message = accepted ? "accepted" : "rejected";
+  auto add = [&status](const std::string &key, const std::string &value) {
+      diagnostic_msgs::msg::KeyValue pair;
+      pair.key = key;
+      pair.value = value;
+      status.values.push_back(pair);
+    };
+  add("source", "icp_registration");
+  add("solver_converged", solver_converged ? "true" : "false");
+  add("accepted", accepted ? "true" : "false");
+  add("localization_healthy", localization_healthy_.load() ? "true" : "false");
+  add("low_support_accepted", low_support_accepted ? "true" : "false");
+  add("inlier_ratio", std::to_string(continuous_quality_.inlier_ratio));
+  add("inlier_rmse_m", std::to_string(continuous_quality_.inlier_rmse));
+  add("all_mse", std::to_string(continuous_quality_.all_mse));
+  add("p50_distance_m", std::to_string(continuous_quality_.p50_distance));
+  add("p90_distance_m", std::to_string(continuous_quality_.p90_distance));
+  array.status.push_back(status);
+  localization_quality_pub_->publish(array);
 }
 
 IcpNode::~IcpNode() {
@@ -3192,6 +3229,7 @@ fallback:
         RCLCPP_WARN(this->get_logger(),
                     "Continuous ICP robust quality rejected the alignment, "
                     "keeping last good pose");
+        publishContinuousQuality(icp_refine_.hasConverged(), false, false);
         registerAlignmentFailure(
             icp_refine_.hasConverged() ?
             "continuous_icp_quality_reject" :
@@ -3199,6 +3237,8 @@ fallback:
         return;
       }
     }
+    publishContinuousQuality(icp_refine_.hasConverged(), success_,
+                             low_support_accepted);
     if (!low_support_accepted) {
       continuous_low_support_active_ = false;
       refreshFineAlignmentCompletedLease();

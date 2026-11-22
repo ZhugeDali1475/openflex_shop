@@ -14,6 +14,7 @@ export OPENFLEX_MODEL_ROOT="${root}/openflex_models"
 export OPENFLEX_MUJOCO_MODEL="${root}/openflex_mujoco-1.0_basic/openflex_mujoco.xml"
 export PYTHONPATH="${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco:${PYTHONPATH:-}"
 export PYTHONUNBUFFERED=1
+publish_ground_truth_tf="${OPENFLEX_PUBLISH_GROUND_TRUTH_TF:-true}"
 selected_velocity_topic="/openflex_readonly_disabled/cmd_vel"
 lift_action="/openflex_readonly_disabled/lift"
 right_arm_action="/openflex_readonly_disabled/right_arm"
@@ -82,6 +83,7 @@ exec /usr/bin/python3 -c 'from openflex_thesis_mujoco.bridge_node import main; m
     --params-file "${root}/openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/config/mujoco.yaml" \
     -p enable_viewer:=false -p publish_rgbd:=true -p image_width:=320 -p image_height:=240 \
     -p use_sim_time:=false \
+    -p publish_ground_truth_tf:="${publish_ground_truth_tf}" \
     "${scene_params[@]}" \
     "${lidar_params[@]}" \
     -p derived_model_path:="${root}/local_dependencies/openflex_roboos/readonly_scene.xml" \

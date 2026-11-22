@@ -3,6 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -25,6 +26,12 @@ def generate_launch_description():
             DeclareLaunchArgument("experiment_config", default_value=os.path.join(share, "config", "mujoco.yaml")),
             DeclareLaunchArgument("enable_viewer", default_value="false"),
             DeclareLaunchArgument("publish_rgbd", default_value="true"),
+            DeclareLaunchArgument("publish_lidar", default_value="false"),
+            DeclareLaunchArgument("lidar_rate_hz", default_value="10.0"),
+            DeclareLaunchArgument("lidar_azimuth_bins", default_value="240"),
+            DeclareLaunchArgument("lidar_channels", default_value="8"),
+            DeclareLaunchArgument("publish_ground_truth_tf", default_value="true"),
+            DeclareLaunchArgument("start_lio_odom_tf_bridge", default_value="false"),
             Node(
                 package="openflex_thesis_mujoco",
                 executable="mujoco_bridge",
@@ -32,6 +39,7 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     os.path.join(share, "config", "mujoco.yaml"),
+                    LaunchConfiguration("experiment_config"),
                     {
                         "upstream_model_path": LaunchConfiguration("upstream_model_path"),
                         "scene_model_path": LaunchConfiguration("scene_model_path"),
@@ -41,9 +49,23 @@ def generate_launch_description():
                         "publish_rgbd": ParameterValue(
                             LaunchConfiguration("publish_rgbd"), value_type=bool
                         ),
+                        "publish_lidar": ParameterValue(
+                            LaunchConfiguration("publish_lidar"), value_type=bool
+                        ),
+                        "lidar_rate_hz": ParameterValue(
+                            LaunchConfiguration("lidar_rate_hz"), value_type=float
+                        ),
+                        "lidar_azimuth_bins": ParameterValue(
+                            LaunchConfiguration("lidar_azimuth_bins"), value_type=int
+                        ),
+                        "lidar_channels": ParameterValue(
+                            LaunchConfiguration("lidar_channels"), value_type=int
+                        ),
+                        "publish_ground_truth_tf": ParameterValue(
+                            LaunchConfiguration("publish_ground_truth_tf"), value_type=bool
+                        ),
                         "use_sim_time": False,
                     },
-                    LaunchConfiguration("experiment_config"),
                 ],
             ),
             Node(
@@ -52,6 +74,14 @@ def generate_launch_description():
                 name="thesis_mujoco_robot_state_publisher",
                 output="screen",
                 parameters=[{"robot_description": robot_description, "use_sim_time": True}],
+            ),
+            Node(
+                package="openflex_thesis_mujoco",
+                executable="lio_odom_tf_bridge",
+                name="lio_odom_tf_bridge",
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("start_lio_odom_tf_bridge")),
+                parameters=[{"use_sim_time": True}],
             ),
         ]
     )

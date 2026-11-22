@@ -20,6 +20,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/u_int8.hpp>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/buffer.h>
@@ -63,6 +64,8 @@ public:
 private:
   void pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
   void continuousRealignTimerCallback();
+  void publishContinuousQuality(bool solver_converged, bool accepted,
+                                bool low_support_accepted);
   void initialPoseCallback(
       const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg,
       bool skip_sc = false);
@@ -310,6 +313,8 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr lio_odom_sub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr localization_hold_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr localization_state_pub_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr
+      localization_quality_pub_;
   rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr
       fine_alignment_guard_state_sub_;
   std::mutex wheel_odom_mutex_;

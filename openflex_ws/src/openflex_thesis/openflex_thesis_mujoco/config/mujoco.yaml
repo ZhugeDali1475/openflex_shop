@@ -5,6 +5,7 @@ openflex_thesis_mujoco_bridge:
     timestep_sec: 0.002
     real_time_factor: 1.0
     enable_viewer: false
+    publish_ground_truth_tf: true
     publish_rate_hz: 50.0
     command_timeout_sec: 0.25
     base_velocity_tau_sec: 0.08

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "openflex_ws/src/openflex_thesis/openflex_roboos_b
 from openflex_roboos_bridge.mapping_contract import (  # noqa: E402
     LocalizationQuality, MappingError, OccupancyGridBuilder,
     ground_truth_localization, localization_from_odometry_covariance,
+    localization_from_registration_diagnostic,
 )
 
 
@@ -89,3 +90,51 @@ def test_snapshot_accepts_an_estimated_localization():
     snapshot = builder.snapshot(localization=quality, stamp_sec=2.0)
     assert snapshot.localization.source == "simulation_fastlio2_not_physical"
     assert snapshot.localization.is_usable(max_position_rmse_m=0.1, max_yaw_rmse_rad=0.1)
+
+
+def test_registration_diagnostic_enriches_lio_estimate_without_faking_covariance():
+    base = localization_from_odometry_covariance(
+        diagonal_covariance([0.04, 0.04, 0.09, 0.01, 0.01, 0.01]),
+        source="fastlio2", stamp_sec=3.0)
+    quality = localization_from_registration_diagnostic(base, {
+        "source": "icp_registration", "solver_converged": "true",
+        "accepted": "true", "localization_healthy": "true",
+        "low_support_accepted": "false", "inlier_ratio": "0.92",
+        "inlier_rmse_m": "0.03", "all_mse": "0.002",
+        "p50_distance_m": "0.02", "p90_distance_m": "0.07",
+    })
+    assert quality.converged
+    assert quality.source == "fastlio2+icp_registration"
+    assert math.isclose(quality.position_rmse_m, math.sqrt(0.17 / 3.0))
+    assert math.isclose(quality.yaw_rmse_rad, 0.1)
+    assert math.isclose(quality.inlier_ratio, 0.92)
+
+
+def test_rejected_or_unhealthy_registration_fails_closed():
+    base = localization_from_odometry_covariance(
+        diagonal_covariance([0.01] * 6), source="fastlio2")
+    diagnostic = {
+        "source": "icp_registration", "solver_converged": "true",
+        "accepted": "true", "localization_healthy": "false",
+        "inlier_ratio": "0.9", "inlier_rmse_m": "0.03", "all_mse": "0.002",
+        "p50_distance_m": "0.02", "p90_distance_m": "0.07",
+    }
+    quality = localization_from_registration_diagnostic(base, diagnostic)
+    assert not quality.converged
+    assert quality.localization_healthy is False
+    diagnostic["accepted"] = "false"
+    quality = localization_from_registration_diagnostic(base, diagnostic)
+    assert not quality.converged
+
+
+def test_registration_diagnostic_rejects_missing_or_invalid_signals():
+    base = ground_truth_localization()
+    with pytest.raises(MappingError):
+        localization_from_registration_diagnostic(base, {"source": "fastlio2"})
+    with pytest.raises(MappingError):
+        localization_from_registration_diagnostic(base, {
+            "source": "icp_registration", "solver_converged": "maybe",
+            "accepted": "true", "localization_healthy": "true",
+            "inlier_ratio": "0.9", "inlier_rmse_m": "0.03", "all_mse": "0.002",
+            "p50_distance_m": "0.02", "p90_distance_m": "0.07",
+        })

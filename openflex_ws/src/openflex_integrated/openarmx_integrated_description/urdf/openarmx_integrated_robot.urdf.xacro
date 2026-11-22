@@ -263,6 +263,17 @@
       </visual>
     </link>
 
+    <!-- Simulation head-camera optical frame.  The MuJoCo bridge uses the
+         same fixed mount (xyz 0 0.087 0.055, rpy -pi/2 0 0).  Keeping this
+         frame in the robot description lets robot_state_publisher provide
+         base_link -> camera when simulator ground-truth TF is disabled. -->
+    <link name="thesis_head_color_optical_frame"/>
+    <joint name="thesis_head_yaw_to_color_optical" type="fixed">
+      <parent link="head_yaw_link"/>
+      <child link="thesis_head_color_optical_frame"/>
+      <origin xyz="0 0.087 0.055" rpy="${-pi/2} 0 0"/>
+    </joint>
+
     <!-- Yaw joint (偏航/左右摇头, upper motor RS00-1) -->
     <joint name="openarmx_head_yaw_joint" type="revolute">
       <parent link="head_pitch_link"/>

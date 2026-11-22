@@ -10,7 +10,7 @@ import pytest
 from sensor_msgs.msg import CameraInfo
 
 from openflex_thesis_mujoco.bridge_node import CAMERAS, MujocoBridgeNode
-from openflex_thesis_mujoco.camera_spec import HEAD_CAMERA
+from openflex_thesis_mujoco.camera_spec import HEAD_CAMERA, MID360_LIDAR
 from openflex_thesis_mujoco.model_builder import build_thesis_model
 
 
@@ -103,3 +103,69 @@ def test_camera_publication_uses_render_snapshot_tf_and_identical_stamps(camera_
     assert transform.header.stamp == published[("head", "color")].header.stamp == Time(sec=7)
     body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, HEAD_CAMERA.optical_frame)
     assert transform.transform.translation.z == pytest.approx(data.xpos[body, 2])
+
+
+def test_camera_publication_can_disable_ground_truth_tf(camera_scene):
+    _, model, data = camera_scene
+    transforms = []
+
+    class Renderer:
+        depth = False
+        def disable_depth_rendering(self): self.depth = False
+        def enable_depth_rendering(self): self.depth = True
+        def update_scene(self, sample, camera): pass
+        def render(self):
+            return np.ones((2, 3), dtype=np.float32) if self.depth else np.zeros((2, 3, 3), dtype=np.uint8)
+
+    bridge = SimpleNamespace(
+        model=model, _id=lambda kind, name: mujoco.mj_name2id(model, kind, name),
+        _mujoco_body_pose=MujocoBridgeNode._mujoco_body_pose,
+        get_parameter=lambda name: SimpleNamespace(value=False)
+        if name == "publish_ground_truth_tf" else SimpleNamespace(value={"image_width": 320, "image_height": 240}[name]),
+        tf_broadcaster=SimpleNamespace(sendTransform=transforms.append),
+        renderers={key: Renderer() for key in CAMERAS},
+        _camera_info=lambda stamp, frame, name: CameraInfo(),
+        camera_publishers={key: {kind: SimpleNamespace(publish=lambda message: None)
+                            for kind in ("color", "depth", "info")} for key in CAMERAS},
+    )
+    import rclpy
+    from unittest.mock import patch
+    with patch.object(rclpy, "ok", return_value=True):
+        MujocoBridgeNode._publish_cameras(bridge, data, Time(sec=8))
+    assert transforms == []
+
+
+def test_simulated_lidar_does_not_publish_ground_truth_sensor_pose(camera_scene):
+    _, model, data = camera_scene
+    lidar_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "mid360_link")
+    directions = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64)
+    published, transforms = [], []
+
+    def raycast(_model, _data, _point, _vectors, _groups, _mode, _exclude,
+                _geom_ids, distances, _rays, _max_range):
+        distances[:] = 1.0
+
+    bridge = SimpleNamespace(
+        lidar_pub=SimpleNamespace(publish=published.append),
+        lidar_body_id=lidar_body,
+        model=model,
+        _lidar_dirs=directions,
+        _lidar_geomgroup=np.ones(6, dtype=np.int32),
+        _quaternion_to_matrix=MujocoBridgeNode._quaternion_to_matrix,
+        get_parameter=lambda name: SimpleNamespace(value={
+            "lidar_max_range_m": 20.0,
+            "lidar_min_range_m": 0.1,
+            "lidar_noise_std_m": 0.0,
+        }[name]),
+        tf_broadcaster=SimpleNamespace(sendTransform=transforms.append),
+    )
+
+    from unittest.mock import patch
+
+    with patch.object(mujoco, "mj_multiRay", side_effect=raycast):
+        MujocoBridgeNode._publish_lidar(bridge, data, Time(sec=9))
+
+    assert len(published) == 1
+    assert published[0].header.frame_id == MID360_LIDAR.frame
+    assert published[0].header.stamp == Time(sec=9)
+    assert transforms == []

@@ -146,6 +146,67 @@ def localization_from_odometry_covariance(covariance, *, source: str, stamp_sec:
                                covariance_trace=sum(diagonal), **quality)
 
 
+def localization_from_registration_diagnostic(base: LocalizationQuality,
+                                              diagnostic: Mapping[str, object]) -> LocalizationQuality:
+    """Attach an ``icp_registration`` diagnostic sample to an estimate.
+
+    The ICP diagnostic has no pose covariance, so this function deliberately
+    requires a base estimate (normally built from LIO odometry covariance)
+    instead of inventing position/yaw RMSE values.  A rejected ICP sample
+    makes the returned estimate non-converged and unhealthy, which lets the
+    exploration contract fail closed.
+    """
+
+    if not isinstance(base, LocalizationQuality):
+        raise MappingError("base must be a LocalizationQuality")
+    if not isinstance(diagnostic, Mapping):
+        raise MappingError("diagnostic must be a mapping")
+
+    def required_float(name: str) -> float:
+        if name not in diagnostic:
+            raise MappingError(f"registration diagnostic missing {name}")
+        return _finite(diagnostic[name], name)
+
+    def parse_bool(name: str, default: Optional[bool] = None) -> Optional[bool]:
+        if name not in diagnostic:
+            return default
+        value = diagnostic[name]
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in {"true", "1", "yes"}:
+            return True
+        if text in {"false", "0", "no"}:
+            return False
+        raise MappingError(f"{name} must be boolean")
+
+    source = str(diagnostic.get("source", "icp_registration")).strip()
+    if source != "icp_registration":
+        raise MappingError("registration diagnostic source must be icp_registration")
+    accepted = parse_bool("accepted")
+    solver_converged = parse_bool("solver_converged", accepted)
+    healthy = parse_bool("localization_healthy", accepted)
+    low_support = parse_bool("low_support_accepted")
+    updates = {
+        "converged": bool(base.converged and accepted and solver_converged and healthy),
+        "source": f"{base.source}+icp_registration",
+        "localization_healthy": healthy,
+        "inlier_ratio": required_float("inlier_ratio"),
+        "inlier_rmse_m": required_float("inlier_rmse_m"),
+        "all_mse": required_float("all_mse"),
+        "p50_distance_m": required_float("p50_distance_m"),
+        "p90_distance_m": required_float("p90_distance_m"),
+    }
+    if low_support is not None:
+        updates["low_support_seconds"] = required_float("low_support_seconds") \
+            if "low_support_seconds" in diagnostic else 0.0
+    if "lio_wheel_divergence" in diagnostic:
+        updates["lio_wheel_divergence"] = required_float("lio_wheel_divergence")
+    if "yaw_jump_detected" in diagnostic:
+        updates["yaw_jump_detected"] = parse_bool("yaw_jump_detected")
+    return replace(base, **updates)
+
+
 @dataclass(frozen=True)
 class MapSnapshot:
     """An immutable, versioned 2-D occupancy grid in a single frame."""

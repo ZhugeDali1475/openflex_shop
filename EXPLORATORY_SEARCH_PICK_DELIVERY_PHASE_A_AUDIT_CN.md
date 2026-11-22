@@ -654,3 +654,108 @@ MuJoCo bridge 静态发布 `/thesis_sim/head/{color/image_raw,aligned_depth_to_c
 
 - **FAST-LIO2 发布的协方差看起来是固定默认值**（每次都是 0.1/0.1），不是数据驱动的、随特征退化变化的量；因此"定位质量"更强的信号仍是 `icp_registration` 的 `RegistrationQuality`（`inlier_ratio`/`inlier_rmse`/`all_mse`/`p50`/`p90`）与低支撑守卫——它们需要先编译/运行 `icp_registration` 才能产出，本任务尚未接。
 - 本轮只做**契约与适配器**，没有把 LIO/ICP 的估计实际喂进 C2 建图/探索链（后者仍用 `ground_truth_localization`）；C2 整阶段继续**不判通过**。
+
+## 31. 阶段 C2：`icp_registration` 编译与真实配准质量冒烟（隔离域 83，只读，2026-11-20）
+
+接第 30 节。本轮按“先拿到真实 `RegistrationQuality`，再接入 C2 链”的顺序推进，没有运行未跟踪的探索运动脚本。
+
+### 31.1 编译与离线测试
+
+- 在隔离临时前缀 `/tmp/openflex-icp-registration.hf958S` 编译 `icp_registration`，使用 ROS 2 Humble、系统 PCL/Eigen 与已存在的 `install_lio` overlay；没有覆盖 `install_v2`、`install_lio`，也没有修改上游源码。
+- 包内 5 组 GTest 全部通过：`recovery_guard_test`、`registration_quality_test`、`pure_rotation_guard_test`、`low_support_guard_test`、`fine_alignment_guard_test`，CTest 功能测试通过率 100%。完整 `colcon test` 的两个失败来自既有源码树被 `lint_cmake` 扫到的生成文件和既有 `uncrustify` 格式差异，不是功能或编译失败。
+
+### 31.2 只读仿真冒烟
+
+- 隔离域 83 启动 MuJoCo 只读桥、仿真 MID-360、FAST-LIO2，取 `/body_cloud` 生成 640 点的临时静态 PCD，再启动 `icp_registration_node` 对同一坐标系地图做初始和连续配准；全程无运动、无 `MUJOCO_SAFETY_STOP`、退出后无残留进程。
+- 仿真节点必须显式使用 `use_sim_time:=true`。若沿用实机配置的 `false`，云时间戳（仿真约 10 s）会被系统时钟判为过期，连续配准会进入 `continuous_cloud_stale`；这不是 ICP 算法失败，而是时钟配置不匹配。
+- 修正时钟后日志实际产出真实质量值：
+  `solver=1 accepted=1 all_mse=0.0000 inliers=280/280 (1.000/0.680) inlier_rmse=0.003m/0.150m p50=0.000m/0.100m p90=0.000m`。
+  这些数值来自 PCL 对应关系统计，不是 MuJoCo 真值或协方差常数，说明 `RegistrationQuality` 的计算路径已在仿真中跑通。
+
+### 31.3 结论与边界
+
+- 本轮把 C2 从“`icp_registration` 未编译/未运行”推进到“已编译、单元测试通过、静态只读仿真能产出真实配准质量”。
+- 该冒烟使用同一静态帧构造 PCD，不能证明移动扫描、退化场景、长距离漂移或回环；当前质量仍只写 ROS 日志，没有独立质量话题，也没有喂入 `LocalizationQuality`、建图或探索链。
+- 因此 C2 整阶段继续**不判通过**。下一步是让 ICP 质量/低支撑守卫进入在线质量适配器，并在带运动的多帧链路中用估计位姿建图；PGO/`map→odom`（需 GTSAM）和逐点时间去畸变仍是后续门槛。
+
+## 32. 阶段 C2：ICP 质量话题与 fail-closed 适配器（2026-11-20）
+
+接第 31 节。本轮把“日志中的质量值”推进为可被其他节点读取的 ROS 诊断话题，并在 ROS-free 契约层完成解析适配；没有改变现有定位安全门 `/localization_ok` 的判定逻辑。
+
+### 32.1 接口改动
+
+- `icp_registration` 新增 `/localization_quality`（`diagnostic_msgs/msg/DiagnosticArray`），每次连续 ICP 质量评估发布 `solver_converged`、`accepted`、`localization_healthy`、`low_support_accepted`、`inlier_ratio`、`inlier_rmse_m`、`all_mse`、`p50_distance_m`、`p90_distance_m`，并保留 `source=icp_registration`。原有 `/localization_ok`、`/localization_hold` 与 `map→odom` 发布路径不变。
+- `mapping_contract.py` 新增 `localization_from_registration_diagnostic(base, diagnostic)`：要求调用方先提供 LIO/其他估计器的基础质量（通常含协方差），再叠加 ICP 指标；不会用 ICP 残差伪造位置/偏航 RMSE。`accepted`、求解收敛或健康状态任一为假时，返回 `converged=False`，供探索状态机 fail-closed。
+- 新增 3 个契约测试：健康 ICP 样本继承基础估计器误差、拒绝/未健康样本转为不收敛、缺失或非法字段拒绝。该文件测试共 10 例通过。
+
+### 32.2 在线只读验证
+
+- 使用新编译的临时前缀启动隔离域 83 的 MuJoCo 仿真、FAST-LIO2 与 `icp_registration`（`use_sim_time:=true`），`ros2 topic echo /localization_quality` 成功读到：`accepted=true`、`solver_converged=true`、`inlier_ratio=1.000000`、`inlier_rmse_m=0.000128`、`p50≈0.000005`、`p90≈0.000006`。
+- 同一消息中的 `localization_healthy=false` 也被原样保留；适配器因此不会把“单帧配准接受但定位稳定窗口尚未建立”误报为可用定位。这验证了质量传输与安全语义，而非只验证字段存在。
+
+### 32.3 边界与下一步
+
+- 当前话题是诊断数据，不是标准化自定义消息；C2 在线建图脚本尚未订阅它，地图快照仍使用真值 TF，故不能宣称估计定位已经驱动建图。
+- 下一步是让 C2 建图节点同时订阅 LIO 里程计和该质量话题，以估计位姿/质量生成 `MapSnapshot`；随后做带运动、多帧融合批次。PGO、真实 `map→odom` 回环和逐点去畸变仍未完成，C2 整阶段继续**不判通过**。
+
+## 33. C2 估计 TF 链路门禁（2026-11-21）
+
+本轮先处理“估计器是否真的驱动建图”的结构性风险，没有运行探索运动脚本。源码检查确认：MuJoCo 桥此前无条件发布真值 `map→odom→base_link`，并在 RGB-D 发布时直接发布 `map→thesis_head_color_optical_frame`；FAST-LIO2 配置为 `publish_tf: false`。因此仅把实时审计脚本的 TF 查询替换成 `/lio_odom` 会形成真值泄漏或坐标链断裂，不能作为 C2 通过证据。
+
+已完成的隔离基础设施：
+
+- 桥新增 `publish_ground_truth_tf` 参数（默认保持兼容为 `true`），关闭时同时停止真值底盘 TF 与真值头相机 TF；launch 可用同名参数显式关闭。
+- 新增 `scripts/lio_odom_tf_bridge.py`，严格校验 `odom→base_link` frame 后只转发 FAST-LIO `/fastlio2/lio_odom`，不发布 `map→odom`，供 ICP 作为唯一全局定位输出的上游估计链使用。
+- 头相机回归新增“关闭真值 TF 时不发布 TF”测试；现有 ROS-free 质量契约 10 例通过（系统 pytest 自动插件缺口已隔离）。
+
+当前仍未宣称 C2 通过：尚未在关闭真值 TF 的 profile 中完成 `map→odom` ICP + LIO `odom→base_link` + 传感器静态外参的在线多帧建图；`audit_openflex_exploration_live.py` 仍明确标注真值定位，不能计入 L2 成绩。下一步应先做点云/雷达估计位姿建图审计与 TF authority 检查，再做低速带运动批次。
+
+## 34. C2 估计审计门控补强（2026-11-21）
+
+本轮没有启动探索运动脚本，也没有把 C2 判为通过。完成的是估计链审计器和启动入口的安全补强：
+
+- `thesis_mujoco.launch.py` 现在把 `start_lio_odom_tf_bridge` 完整转发到 core launch；core launch 条件启动包内 `lio_odom_tf_bridge`，安装入口已由 `setup.py` 注册。
+- `scripts/lio_odom_tf_bridge.py` 保留为兼容入口，实际实现唯一位于包内；桥严格接受 `odom→base_link` frame，只转发 FAST-LIO `/fastlio2/lio_odom`，不产生 `map→odom`。
+- `run_openflex_readonly_sim.sh` 增加 `OPENFLEX_PUBLISH_GROUND_TRUTH_TF` 显式开关（默认 `true` 保持原有只读基线）；设为 `false` 才允许后续估计器 profile 启动，避免通过环境隐式改变基线行为。
+- `audit_openflex_exploration_live.py --estimator` 先经参数服务确认 MuJoCo `publish_ground_truth_tf` 确实为 `false`，再要求 FAST-LIO 与 `/localization_quality` 的 `icp_registration` 样本同时存在；对深度帧、里程计和诊断时间做新鲜度门控，并按深度帧时间查询 `map→camera/base` TF。定位质量不满足阈值时 fail-closed。
+
+验证：受影响的 `openflex_thesis_mujoco` 包已在 `openflex_ws/install_v2` 成功构建，确认 `lio_odom_tf_bridge` console entrypoint 与 launch 文件安装；Python 编译和 `git diff --check` 通过；定位质量契约测试 10/10 通过（使用 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`，系统外部 pytest 插件与当前 pytest 版本不兼容）。
+
+尚未完成：在 `publish_ground_truth_tf:=false` profile 中同时启动 LIO `odom→base_link`、ICP `map→odom`、传感器静态外参与真实质量话题，并实际运行估计 TF 下的多帧建图审计。估计审计器现在会在真值 TF 参数未关闭或不可核实时拒绝运行；但这仍不能替代 L2 带运动证据。
+
+## 35. C2 估计 TF 实测：单帧建图审计首次通过（隔离域 98，只读，2026-11-21）
+
+接第 33–34 节。本轮把"估计器驱动建图/选点"的整条链在 `publish_ground_truth_tf:=false` 的 profile 中真正跑通，并暴露、修复了三个此前被遮蔽的结构性缺陷。**C2 整阶段继续不判通过**：批次仍是静止单帧、地图是临时自扫描件、无带运动多帧融合。
+
+### 35.1 已定位并修复的缺陷
+
+- **真值 `map→mid360_link` 泄漏（第 33 节遗留，本轮实测复现）**：桥在雷达发布回调 `_publish_lidar` 中无条件广播真值传感器位姿，使 `mid360_link` 有两个父节点，与 `robot_state_publisher` 的静态 `base_link→mid360_link` 形成断树（`Cannot transform ... not part of the same tree. Tf has two or more unconnected trees`）；关闭真值 TF 后仍会泄漏真值，并与参数门禁冲突。已删除该广播，并新增回归测试 `test_simulated_lidar_does_not_publish_ground_truth_sensor_pose`（断言 `_publish_lidar` 不再向 `/tf` 发送）。实测修复后 `base_link→mid360_link` 稳定解析为 `[0.300, 0, 0.120]`（rpy `-30°, 0, -90°`），`/clock` 只有 1 个发布者。
+- **节点重名（本轮新发现，是第 34 节审计门始终失败的直接原因）**：`ros2 launch` 注入的 `-r __node:=openflex_thesis_mujoco_bridge` 是**全局**参数重映射，rclpy 会把它应用到进程内**所有**节点，于是辅助节点 `ControlModeReceiver` 也被改名 → 图中出现两个同名 `/openflex_thesis_mujoco_bridge` → 其参数/`get_parameters` 服务二义，`publish_ground_truth_tf` 读不出（`ros2 param get` 报 `Parameter not set`），`audit_openflex_exploration_live.py --estimator` 因此在 `require_ground_truth_tf_disabled` 处 fail-closed。最小复现：`rclpy.init(args=['--ros-args','-r','__node:=primary'])` 后 `Node('control_mode_receiver').get_name()` 会返回 `primary`。已改为 `ControlModeReceiver(..., use_global_arguments=False)`；修复后 `ros2 param get /openflex_thesis_mujoco_bridge publish_ground_truth_tf` 返回 `False`，节点列表恢复为 4 个不同名节点（`/openflex_thesis_mujoco_bridge`、`/mujoco_control_mode_receiver`、`/thesis_mujoco_robot_state_publisher`、`/lio_odom_tf_bridge`）。
+- **轮式里程计话题不一致（本轮新发现，是定位永远无法 HEALTHY 的直接原因）**：MuJoCo 桥发布 `/swerve_drive_controller/odom`，而 `icp_registration` 配置 `wheel_odom_topic: /odom`，ICP 从未收到轮式里程计 → `wheel_odom_valid_=false` → recovery wheel gate 恒为 `valid=0 pos_delta=inf` → 每个候选都被 `recovery_candidate_gate_reject` 否决 → 连续 ICP 即使完美匹配（`inliers=279/279`、`inlier_rmse=0.000m`、`all_mse=0.0000`）也无法提交，永远停在 `Localization LOST`。仿真运行时传 ICP `-p wheel_odom_topic:=/swerve_drive_controller/odom` 后立即达到 `Localization HEALTHY: continuous_icp_staged_candidate_committed`（wheel gate `valid=1 pos_delta≈0.001m/0.200`、`yaw_delta≈0.00deg/17.19deg`）。这也解释了第 31–32 节为何长期只有单帧 `accepted=true` 而 `localization_healthy` 恒为 `false`。
+- **审计脚本时效性竞态（本轮新发现）**：`estimated_localization` 先把某一帧深度时间戳取好后不再刷新，却与**持续推进**的最新 LIO/ICP 时间戳比较；一旦中间的真值 TF 参数服务调用把延迟推过 0.15 s 窗口，就再也取不到"新鲜"样本而必然超时。已改为每轮迭代重读最新深度帧时间戳，并返回实际使用的时间戳；`run()` 改为先过估计器门、再抓取深度帧，避免参考时间戳过期。
+- **探索门限不一致（本轮新发现）**：审计已按 `0.25 m / 0.25 rad` 判定定位可用，却用 `ExplorationSearch` 默认的 `0.05 m / 0.05 rad` 构建规划器，导致估计定位（FAST-LIO2 协方差恒为 0.1 m）被误判 `localization_lost`。已让两处使用同一预算常量 `MAX_POSITION_RMSE_M = 0.25` / `MAX_YAW_RMSE_RAD = 0.25`。
+
+### 35.2 在线实测（隔离域 98，只读、无运动）
+
+- 组合：`ros2 launch openflex_thesis_mujoco mujoco_core.launch.py publish_ground_truth_tf:=false publish_lidar:=true enable_viewer:=false start_lio_odom_tf_bridge:=true` + `lio_node`（`-r __ns:=/fastlio2`，故话题为 `/fastlio2/lio_odom`、`/fastlio2/body_cloud`）+ `icp_registration`（`use_sim_time:=true`、`pointcloud_topic:=/fastlio2/body_cloud`、`wheel_odom_topic:=/swerve_drive_controller/odom`、`pcd_path=<临时地图>`），随后向 `/initialpose` 发一次 `map` 单位位姿种子。
+- 结果：`/clock` 仅 1 个发布者；`map→odom`（ICP）与 `odom→base_link`（LIO 桥，静止漂移 mm 级）成立；`map→thesis_head_color_optical_frame` 由 RSP 静态外参（URDF 新增固定光学帧）提供；`/localization_quality` 实测 `accepted=true`、`solver_converged=true`、`localization_healthy=true`、`inlier_ratio=1.000`、`inlier_rmse≈0.00013 m`。
+- `scripts/audit_openflex_exploration_live.py --estimator` 端到端返回 `outcome=next_position`、`occupied_cells=272`、`frontier_clusters=1`、`goal_xy≈[0.599, 0]`，退出码 0。这是"估计 TF 驱动的单帧建图 + frontier 选点"首次在真值 TF 关闭的 profile 下通过。
+
+### 35.3 结论与仍未完成
+
+- 结论：估计链（LIO `odom→base_link` + ICP `map→odom` + 传感器静态外参 + 真实质量话题）已能共同驱动一次建图审计通过；上述五个缺陷均为结构性，且修复后 fail-closed 语义仍然正确。
+- **C2 整阶段继续不判通过**，下一步（按优先级）：
+  1. 本批次是**静止单帧**，地图是 `/tmp` 下的**临时自扫描 PCD**（不可复现），并非正常先验地图；需固化"生成/加载地图 → 定位 → 多帧建图"的可复现入口。
+  2. 尚无**带运动、多帧融合**批次与**长距离/大转向**压力批次。
+  3. 未做 PGO/回环（`map→odom` 回环修正）与逐点时间去畸变。
+  4. "节点重名"缺陷尚无回归测试；整套编排尚未固化为仓库脚本（拟增 `scripts/run_openflex_estimator_mapping_sim.sh`）。
+  5. 既有 `scripts/run_openflex_lio_sim.sh` / `scripts/run_openflex_lio_motion_sim.sh` 以**无命名空间**方式运行 `lio_node`（话题 `/lio_odom`），与生产及本轮采用的 `/fastlio2/lio_odom` 不一致，需统一（或让桥/审计按参数适配）。
+- 本轮全部改动仍在**未提交工作区**，未 `git commit`。
+
+### 35.4 未提交改动清单（供接手）
+
+- 本轮（第 35 节）新增/修改：
+  - `openflex_ws/src/openflex_thesis/openflex_thesis_mujoco/openflex_thesis_mujoco/bridge_node.py`：删除 `_publish_lidar` 中真值 `map→mid360_link` 广播；`_publish_tf`/`_publish_cameras` 受 `publish_ground_truth_tf` 门控；`ControlModeReceiver` 改 `use_global_arguments=False`。
+  - `scripts/audit_openflex_exploration_live.py`：`--estimator` 门控、时效性竞态修复、探索门限常量对齐。
+- 第 33–34 节遗留、同样未提交：`config/mujoco.yaml`（新增 `publish_ground_truth_tf`）、`launch/mujoco_core.launch.py` 与 `launch/thesis_mujoco.launch.py`（透传参数、条件启动 TF 桥）、`setup.py`、`openflex_thesis_mujoco/lio_odom_tf_bridge.py`（新文件，未跟踪）、`scripts/lio_odom_tf_bridge.py`（新文件，未跟踪）、`test/test_head_camera.py`（真值 TF 关闭回归测试）、`openarmx_integrated_description/urdf/openarmx_integrated_robot.urdf.xacro`（头部光学帧）、`scripts/run_openflex_readonly_sim.sh`、`OPENFLEX_PUBLISH_GROUND_TRUTH_TF` 开关、`mapping_contract.py`（定位质量字段）、`icp_registration`（`/localization_quality` 发布：`.hpp`/`.cpp`/`package.xml`）、`scripts/tests/test_openflex_localization_quality.py`。
+- 说明：`openflex_ws/` 下若干 `.md`/`QUICK_REFERENCE.txt`/`frames_2026-08-12_*` 的删除、以及仓库根 `frames_2026-11-21_*.gv/pdf`（`view_frames` 调试转储）为既有杂项，非本任务产物。

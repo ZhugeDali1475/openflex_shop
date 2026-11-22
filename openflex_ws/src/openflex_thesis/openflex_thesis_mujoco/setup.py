@@ -26,6 +26,7 @@ setup(
         "console_scripts": [
             "build_thesis_scene = openflex_thesis_mujoco.model_builder:main",
             "mujoco_bridge = openflex_thesis_mujoco.bridge_node:main",
+            "lio_odom_tf_bridge = openflex_thesis_mujoco.lio_odom_tf_bridge:main",
             "oracle_anygrasp = openflex_thesis_mujoco.oracle_anygrasp_node:main",
             "scripted_local_policy = openflex_thesis_mujoco.scripted_local_policy_node:main",
             "sim_navigation = openflex_thesis_mujoco.sim_navigation_node:main",

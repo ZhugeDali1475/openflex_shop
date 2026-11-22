@@ -45,7 +45,6 @@ from .lidar_sim import (
     lidar_directions,
     lidar_geomgroup_mask,
     robot_geom_groups,
-    xyzw_from_wxyz,
 )
 from .trajectory import TrajectoryPoint, TrajectorySampler, duration_to_seconds, measured_goal_reached
 from .contact_audit import forbidden_environment_contact, forbidden_payload_contact
@@ -244,6 +243,9 @@ class MujocoBridgeNode(Node):
             "enable_viewer": False,
             "publish_rate_hz": 50.0,
             "publish_rgbd": True,
+            # Oracle/debug profiles may publish simulator TF.  Estimator
+            # profiles must disable it so no ground-truth pose reaches /tf.
+            "publish_ground_truth_tf": True,
             "camera_rate_hz": 5.0,
             "publish_lidar": False,
             "lidar_rate_hz": 10.0,
@@ -1249,17 +1251,29 @@ class MujocoBridgeNode(Node):
         return message
 
     def _publish_cameras(self, render_data, stamp: Time) -> None:
-        optical_id = self._id(mujoco.mjtObj.mjOBJ_BODY, HEAD_CAMERA.optical_frame)
-        position, orientation = self._mujoco_body_pose(render_data, optical_id)
-        transform = TransformStamped()
-        transform.header.stamp = deepcopy(stamp)
-        transform.header.frame_id = "map"
-        transform.child_frame_id = HEAD_CAMERA.optical_frame
-        transform.transform.translation.x, transform.transform.translation.y, \
-            transform.transform.translation.z = position
-        transform.transform.rotation.x, transform.transform.rotation.y, \
-            transform.transform.rotation.z, transform.transform.rotation.w = orientation
-        self.tf_broadcaster.sendTransform(transform)
+        # Camera TF is normally owned by robot_state_publisher via the fixed
+        # mount below head_yaw_link.  Keep the legacy map->camera oracle only
+        # when explicitly enabled for compatibility/debug profiles.
+        checker = getattr(self, "_publish_ground_truth_tf_enabled", None)
+        if checker is not None:
+            publish_truth_tf = checker()
+        else:
+            try:
+                publish_truth_tf = bool(self.get_parameter("publish_ground_truth_tf").value)
+            except (AttributeError, KeyError):
+                publish_truth_tf = True
+        if publish_truth_tf:
+            optical_id = self._id(mujoco.mjtObj.mjOBJ_BODY, HEAD_CAMERA.optical_frame)
+            position, orientation = self._mujoco_body_pose(render_data, optical_id)
+            transform = TransformStamped()
+            transform.header.stamp = deepcopy(stamp)
+            transform.header.frame_id = "map"
+            transform.child_frame_id = HEAD_CAMERA.optical_frame
+            transform.transform.translation.x, transform.transform.translation.y, \
+                transform.transform.translation.z = position
+            transform.transform.rotation.x, transform.transform.rotation.y, \
+                transform.transform.rotation.z, transform.transform.rotation.w = orientation
+            self.tf_broadcaster.sendTransform(transform)
         messages = []
         for key, (camera_name, _topic_prefix, frame_id) in CAMERAS.items():
             renderer = self.renderers[key]
@@ -1382,17 +1396,12 @@ class MujocoBridgeNode(Node):
                            geomid, distances, rays,
                            float(self.get_parameter("lidar_max_range_m").value))
         hit = distances >= 0.0
-        # frame the cloud with map -> mid360_link TF (the bridge owns the tree)
-        transform = TransformStamped()
-        transform.header.stamp = deepcopy(stamp)
-        transform.header.frame_id = "map"
-        transform.child_frame_id = MID360_LIDAR.frame
-        transform.transform.translation.x, transform.transform.translation.y, \
-            transform.transform.translation.z = (float(value) for value in point)
-        quaternion = xyzw_from_wxyz(data.xquat[body_id])
-        transform.transform.rotation.x, transform.transform.rotation.y, \
-            transform.transform.rotation.z, transform.transform.rotation.w = quaternion
-        self.tf_broadcaster.sendTransform(transform)
+        # The sensor's mount is owned by robot_state_publisher (base_link ->
+        # mid360_link), while its moving pose must come from the selected
+        # localization source (odom -> base_link).  Publishing the simulator's
+        # map -> mid360_link pose here would both leak ground truth when
+        # publish_ground_truth_tf=False and create a second parent for this
+        # frame, disconnecting it from the estimated base frame.
         if not hit.any():
             return
         sensor_points, _ = cast_points(
@@ -1920,6 +1929,8 @@ class MujocoBridgeNode(Node):
         return message
 
     def _publish_tf(self, stamp, base_pose) -> None:
+        if not self._publish_ground_truth_tf_enabled():
+            return
         # The SRDF declares the chassis as
         #   <virtual_joint name="base_planar_joint" type="planar"
         #                  parent_frame="odom" child_link="base_link"/>
@@ -1950,6 +1961,17 @@ class MujocoBridgeNode(Node):
             odom_to_base.transform.rotation.z, odom_to_base.transform.rotation.w = q
         self.tf_broadcaster.sendTransform([map_to_odom, odom_to_base])
 
+    def _publish_ground_truth_tf_enabled(self) -> bool:
+        """Return whether simulator pose is allowed onto /tf.
+
+        The fallback keeps ROS-free unit tests that use a small SimpleNamespace
+        fixture working; real bridge nodes always declare this parameter.
+        """
+        try:
+            return bool(self.get_parameter("publish_ground_truth_tf").value)
+        except (AttributeError, KeyError):
+            return True
+
     def destroy_node(self):
         self.stop_event.set()
         if hasattr(self, "sim_thread"):
@@ -1979,7 +2001,14 @@ class ControlModeReceiver(Node):
     """
 
     def __init__(self, bridge: "MujocoBridgeNode") -> None:
-        super().__init__("mujoco_control_mode_receiver")
+        # ``ros2 launch`` injects ``-r __node:=<bridge name>`` as a *global*
+        # argument, which rclpy applies to every node created in the process.
+        # Left enabled it renames this helper to the bridge's name, so two nodes
+        # share one name and the bridge's parameter/``get_parameters`` services
+        # become ambiguous (fail-closed audits then cannot read parameters).
+        # Ignoring global arguments keeps this node's own name and its own
+        # private args while still inheriting the context/domain.
+        super().__init__("mujoco_control_mode_receiver", use_global_arguments=False)
         self._bridge = bridge
         self.create_subscription(
             ControlMode, "/thesis/control_mode", self._forward, bridge._latched_qos()
