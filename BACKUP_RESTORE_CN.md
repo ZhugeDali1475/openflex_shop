@@ -24,12 +24,26 @@ git clone --recurse-submodules https://github.com/ZhugeDali1475/openflex_shop.gi
 
 ## 二、关键备份包（必须自己留一份）
 
-| 项 | 值 |
-| --- | --- |
-| 文件 | `openflex_critical.tar.zst` |
-| 压缩后大小 | 398 MB |
-| 解压后大小 | 1.72 GB（5191 个文件） |
-| SHA256 | `d9f89707463ed4c4d943359ea8c1017c356fde59e75a9258a07235dc6df5a943` |
+备份目录内容（`openflex_backup/`，共 414 MB）：
+
+| 文件 | 大小 | 说明 |
+| --- | --- | --- |
+| `openflex_critical.tar.zst` | 398 MB | 主包，解压后 1.72 GB（5191 个文件） |
+| `reinstall-manifests.tar` | 16 MB | 重装清单：各模型 `deployment.json`、ModelScope 文件清单、`scripts/patches/`，在仓库根目录 `tar -xf` 还原 |
+| `RoboOS-local-changes.diff` | 13 KB | `local_dependencies/RoboOS` 未提交的本地改动 |
+| `RoboOS-base-commit.txt` | 192 B | 上述 diff 的基线提交 |
+| `openflex_drivers-local-changes.diff` | 63 B | `openflex_drivers` 的改动（仅文件权限位） |
+| `SHA256SUMS.txt` | 465 B | 以上所有文件的校验值 |
+
+各文件 SHA256：
+
+```
+d9f89707463ed4c4d943359ea8c1017c356fde59e75a9258a07235dc6df5a943  openflex_critical.tar.zst
+edd677680b30e39e3a1650b6e2012cfcfc7a1aecd19cc8701444d1e17cd050cc  reinstall-manifests.tar
+2a1815902154fa5470b31de213d03224e839a174ec6871452b03ecef96d2fc0b  RoboOS-local-changes.diff
+56faae30aa768853a50e4b34d7b1d33595c8a2257b17af8f3ec2557fc70368f0  openflex_drivers-local-changes.diff
+178e0489414de10dc889af288728194a10cfeda72f4e663ceef2862375091be4  RoboOS-base-commit.txt
+```
 
 包内内容（都是无法重新生成的）：
 
@@ -68,6 +82,24 @@ tar -I 'zstd -3 -T0' -cf /path/to/openflex_critical.tar.zst \
 > `openflex_drivers/` 压成 `openflex_drivers.zip`（33 MB）。两者内容完整，可一并保存。
 
 ---
+
+### 本地未提交的改动（重要）
+
+`local_dependencies/RoboOS/` 检出在 `1c39b85ef5c9dcb9d5da235665c19af21824e545`（`roboos_revision`），
+并对 5 个文件做了本地修改（`master/config.yaml`、`slaver/config.yaml`、`slaver/run.py`、
+`slaver/agents/models.py`、`slaver/agents/slaver_agent.py`，共 +66/-48），与
+`scripts/patches/roboos-standalone-gguf.patch`、`scripts/patches/roboos-verified-worker.patch` 对应。
+
+换机后恢复：
+
+```bash
+git clone https://github.com/FlagOpen/RoboOS.git local_dependencies/RoboOS
+cd local_dependencies/RoboOS && git checkout 1c39b85ef5c9dcb9d5da235665c19af21824e545
+patch -p1 < ~/openflex_backup/RoboOS-local-changes.diff
+# 或直接：git apply ~/openflex_backup/RoboOS-local-changes.diff
+```
+
+`openflex_drivers/` 只有 `LICENSE` 的权限位变化（755 → 644），可忽略。
 
 ## 三、可以重新下载的（约 22 GB，不必备份）
 
